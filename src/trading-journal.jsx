@@ -613,22 +613,32 @@ ${raw.slice(0, 12000)}`;
     timeoutMs: 60000,
     messages: [{ role: 'user', content: prompt }],
   });
-  // Strip any markdown fences or leading/trailing text the model may have added
+  // ── JSON repair pipeline ──
   let jsonStr = clean.trim();
-  // Remove ```json or ``` fences
+  // 1. Strip markdown fences
   jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
-  // Find the first [ and last ] to extract just the array
+  // 2. Extract just the array
   const arrStart = jsonStr.indexOf('[');
   const arrEnd = jsonStr.lastIndexOf(']');
-  if (arrStart === -1 || arrEnd === -1 || arrEnd <= arrStart) throw new Error("No JSON array found in response");
+  if (arrStart === -1 || arrEnd === -1 || arrEnd <= arrStart) throw new Error("No JSON array found in AI response");
   jsonStr = jsonStr.slice(arrStart, arrEnd + 1);
-  // Attempt to fix truncated JSON — if last trade object is incomplete, remove it
+  // 3. Fix common AI JSON mistakes
+  jsonStr = jsonStr
+    .replace(/,\s*([}\]])/g, '$1')          // trailing commas before } or ]
+    .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // unquoted keys → quoted
+    .replace(/:\s*'([^']*)'/g, ': "$1"')      // single-quoted values → double-quoted
+    .replace(/[\u0000-\u001F]/g, ' ');        // strip control chars that break JSON
+  // 4. If still broken, recover by trimming to last complete object
   try {
     JSON.parse(jsonStr);
   } catch {
-    // Find last complete object ending with } before the closing ]
-    const lastComplete = jsonStr.lastIndexOf('},');
-    if (lastComplete > 0) jsonStr = jsonStr.slice(0, lastComplete + 1) + '\n]';
+    const lastClose = jsonStr.lastIndexOf('}');
+    if (lastClose > 0) {
+      jsonStr = jsonStr.slice(0, lastClose + 1);
+      // Remove trailing comma if present
+      jsonStr = jsonStr.replace(/,\s*$/, '');
+      jsonStr = '[' + jsonStr.slice(jsonStr.indexOf('{')) + ']';
+    }
   }
   const trades = JSON.parse(jsonStr);
   if (!Array.isArray(trades)) throw new Error("Expected array");
