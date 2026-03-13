@@ -564,6 +564,117 @@ const parseTrades = (raw) => {
 };
 
 // AI-powered universal broker parser
+// ── Deterministic IBKR Flex Query CSV parser ─────────────────────────────────
+// Handles the exact IBKR format: FifoPnlRealized + AssetClass + TradePrice + Buy/Sell
+// Returns array of trades or null if format not recognised
+const parseIbkrCsv = (raw) => {
+  try {
+    const lines = raw.trim().split(/\r?\n/).filter(l => l.trim());
+    if (lines.length < 2) return null;
+
+    // Parse CSV header — handle quoted fields
+    const parseRow = (line) => {
+      const result = []; let cur = ''; let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+        else { cur += ch; }
+      }
+      result.push(cur.trim());
+      return result;
+    };
+
+    const headers = parseRow(lines[0]).map(h => h.replace(/"/g,'').trim());
+
+    // Check this is IBKR format
+    const hasIbkr = headers.includes('FifoPnlRealized') && headers.includes('AssetClass') && headers.includes('Buy/Sell');
+    if (!hasIbkr) return null;
+
+    const idx = (name) => headers.indexOf(name);
+    const iAsset  = idx('AssetClass');
+    const iSym    = idx('Symbol');
+    const iQty    = idx('Quantity');
+    const iPnl    = idx('FifoPnlRealized');
+    const iComm   = idx('IBCommission');
+    const iDt     = idx('DateTime');
+    const iOt     = idx('OrderType');
+    const iPrice  = idx('TradePrice');
+    const iMult   = idx('Multiplier');
+
+    // Parse all futures rows
+    const futures = [];
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseRow(lines[i]).map(c => c.replace(/"/g,'').trim());
+      if (cols[iAsset] !== 'FUT') continue;
+      futures.push({
+        sym:   cols[iSym]   || '',
+        qty:   parseInt(cols[iQty])   || 0,
+        pnl:   parseFloat(cols[iPnl]) || 0,
+        comm:  parseFloat(cols[iComm])|| 0,
+        dt:    cols[iDt]    || '',
+        ot:    cols[iOt]    || 'MKT',
+        price: parseFloat(cols[iPrice]) || 0,
+        mult:  parseFloat(cols[iMult])  || 5,
+      });
+    }
+
+    if (futures.length === 0) return null;
+
+    // FIFO round-trip matching
+    // BUY  qty>0 pnl=0  → long entry
+    // SELL qty<0 pnl≠0  → long exit  → completed long trade
+    // SELL qty<0 pnl=0  → short entry
+    // BUY  qty>0 pnl≠0  → short exit → completed short trade
+    const openLongs = [], openShorts = [], trades = [];
+
+    const getDuration = (dtA, dtB) => {
+      try {
+        const parse = (s) => {
+          const d = s.replace(/[^0-9]/g,' ').trim().split(/\s+/).map(Number);
+          return new Date(d[0], d[1]-1, d[2], d[3]||0, d[4]||0, d[5]||0);
+        };
+        const secs = Math.abs(Math.round((parse(dtB) - parse(dtA)) / 1000));
+        const m = Math.floor(secs/60), s = secs%60;
+        return { secs, str: m > 0 ? m+'m'+s+'s' : s+'s' };
+      } catch { return { secs: 0, str: '0s' }; }
+    };
+
+    for (const r of futures) {
+      if (r.qty > 0 && r.pnl === 0) {
+        openLongs.push(r);
+      } else if (r.qty < 0 && r.pnl !== 0) {
+        const entry = openLongs.shift();
+        const dur = getDuration(entry ? entry.dt : r.dt, r.dt);
+        trades.push({
+          symbol: r.sym, qty: Math.abs(r.qty), direction: 'long',
+          buyPrice: entry ? entry.price : 0, buyTime: entry ? entry.dt : r.dt,
+          sellPrice: r.price, sellTime: r.dt,
+          pnl: r.pnl, commission: Math.round((Math.abs(r.comm) + Math.abs(entry ? entry.comm : 0)) * 100) / 100,
+          orderType: r.ot === 'LMT' || r.ot === 'LIMIT' ? 'LMT' : r.ot === 'STP' || r.ot === 'STOP' ? 'STP' : 'MKT',
+          multiplier: r.mult, notes: '', duration: dur.str, durationSecs: dur.secs,
+        });
+      } else if (r.qty < 0 && r.pnl === 0) {
+        openShorts.push(r);
+      } else if (r.qty > 0 && r.pnl !== 0) {
+        const entry = openShorts.shift();
+        const dur = getDuration(entry ? entry.dt : r.dt, r.dt);
+        trades.push({
+          symbol: r.sym, qty: Math.abs(r.qty), direction: 'short',
+          buyPrice: r.price, buyTime: r.dt,
+          sellPrice: entry ? entry.price : 0, sellTime: entry ? entry.dt : r.dt,
+          pnl: r.pnl, commission: Math.round((Math.abs(r.comm) + Math.abs(entry ? entry.comm : 0)) * 100) / 100,
+          orderType: r.ot === 'LMT' || r.ot === 'LIMIT' ? 'LMT' : r.ot === 'STP' || r.ot === 'STOP' ? 'STP' : 'MKT',
+          multiplier: r.mult, notes: '', duration: dur.str, durationSecs: dur.secs,
+        });
+      }
+      // qty>0 pnl=0 already handled; qty<0 pnl=0 = short entry; rows with pnl=0 and no match = skip (open overnight)
+    }
+
+    return trades.length > 0 ? trades : null;
+  } catch { return null; }
+};
+
 const parseTradesWithAI = async (raw, ai) => {
   const brokerHint = BROKER_PRESETS[ai?.brokerPreset || 'none']?.hint || '';
   const prompt = `You are a futures trade parser. Given raw broker export data, extract all COMPLETED round-trip trades.
@@ -7136,6 +7247,27 @@ export default function TradingJournal() {
 
     setAiParsing(true);
     try {
+      // Try deterministic IBKR parser first — faster and more accurate than AI for known format
+      const ibkrResult = parseIbkrCsv(importRaw);
+      if (ibkrResult) {
+        const tnorm = normalizeTrades(ibkrResult);
+        if (tnorm.changed) setDataHealthReport({ changed: true, summary: `Data health update: ${tnorm.changes.join(", ")}.`, details: tnorm.changes });
+        const trades = tnorm.trades;
+        if (trades && trades.length > 0) {
+          const { accepted: hardAccepted, rejected: hardRejected } = validateTradesHard(trades, false);
+          const { clean, flagged } = validateTradesSoft(hardAccepted);
+          const detectedFmt = "Interactive Brokers";
+          setDetectedFormat(detectedFmt);
+          if (hardRejected.length === 0 && flagged.length === 0) {
+            applyParsedTrades(clean, detectedFmt, { hardRejected: 0, softFlagged: 0, userRejected: 0, accepted: clean.length });
+          } else {
+            setParseReviewData({ hardRejected, flagged, clean, allowOvernight: false, detectedFmt });
+          }
+          setAiParsing(false);
+          return;
+        }
+      }
+      // Fall back to AI parser for unknown formats
       const tradesRaw = await parseTradesWithAI(importRaw, aiCfg);
       const tnorm = normalizeTrades(tradesRaw);
       if (tnorm.changed) setDataHealthReport({ changed: true, summary: `Data health update: ${tnorm.changes.join(", ")}.`, details: tnorm.changes });
