@@ -6759,15 +6759,25 @@ const validateTradesSoft = (trades) => {
 // Feature 2: Parse Review Modal
 // ─────────────────────────────────────────────────────────────────────────────
 function ParseReviewModal({ data, onConfirm, onCancel }) {
-  const { hardRejected, flagged, clean } = data;
+  const { flagged, clean } = data;
   const [checked, setChecked] = useState(() => Object.fromEntries(flagged.map((_, i) => [i, true])));
   const [allowOvernight, setAllowOvernight] = useState(false);
-  const [showRejected, setShowRejected] = useState(true); // auto-expanded so user sees rejection reason
+  const [showRejected, setShowRejected] = useState(true);
   const [showClean, setShowClean] = useState(false);
+  const [forceAccepted, setForceAccepted] = useState({}); // hard-rejected trades the user overrides
+
+  // Re-run hard validation when overnight toggle changes
+  const allTrades = [...clean, ...flagged.map(f => f.trade), ...data.hardRejected.map(r => r.trade)];
+  const revalidated = validateTradesHard(allTrades, allowOvernight);
+  const hardRejected = revalidated.rejected;
+  const revalidatedClean = revalidated.accepted.filter(t =>
+    !flagged.some(f => f.trade === t)
+  );
 
   const acceptedFlagged = flagged.filter((_, i) => checked[i]).map(f => f.trade);
   const rejectedCount   = flagged.filter((_, i) => !checked[i]).length;
-  const finalTrades     = [...clean, ...acceptedFlagged];
+  const forcedTrades    = hardRejected.filter((_, i) => forceAccepted[i]).map(r => r.trade);
+  const finalTrades     = [...clean, ...acceptedFlagged, ...forcedTrades];
 
   const fmtD = (s) => !s ? "—" : s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s/60)}m${s%60}s` : `${(s/3600).toFixed(1)}h`;
   const fmtP = (n) => `${n >= 0 ? "+" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -6852,12 +6862,19 @@ function ParseReviewModal({ data, onConfirm, onCancel }) {
               {showRejected && (
                 <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
                   {hardRejected.map((item, i) => (
-                    <div key={i} style={{ background: "#0a0e1a", border: "1px solid #450a0a", borderRadius: 6, padding: "10px 14px" }}>
+                    <div key={i} style={{ background: "#0a0e1a", border: `1px solid ${forceAccepted[i] ? "#166534" : "#450a0a"}`, borderRadius: 6, padding: "10px 14px" }}>
                       <TRow t={item.trade} />
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6, alignItems: "center" }}>
                         {item.reasons.map((r, ri) => (
                           <span key={ri} style={{ fontSize: 9, color: "#f87171", background: "rgba(248,113,113,0.07)", border: "1px solid #450a0a", padding: "2px 8px", borderRadius: 3 }}>{r}</span>
                         ))}
+                        <button onClick={() => setForceAccepted(p => ({ ...p, [i]: !p[i] }))}
+                          style={{ marginLeft: "auto", fontSize: 9, padding: "2px 10px", borderRadius: 3, fontFamily: "inherit", cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s",
+                            background: forceAccepted[i] ? "#052e16" : "transparent",
+                            border: `1px solid ${forceAccepted[i] ? "#166534" : "#7f1d1d"}`,
+                            color: forceAccepted[i] ? "#4ade80" : "#f87171" }}>
+                          {forceAccepted[i] ? "✓ FORCE ACCEPTED" : "FORCE ACCEPT"}
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -6912,7 +6929,7 @@ function ParseReviewModal({ data, onConfirm, onCancel }) {
             <button
               disabled={finalTrades.length === 0}
               onClick={() => onConfirm(finalTrades, allowOvernight, {
-                hardRejected: hardRejected.length,
+                hardRejected: hardRejected.length - forcedTrades.length,
                 softFlagged: flagged.length,
                 userRejected: rejectedCount,
                 accepted: finalTrades.length,
