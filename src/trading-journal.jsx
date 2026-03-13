@@ -577,15 +577,18 @@ The key insight for IBKR data: FifoPnlRealized is ONLY non-zero on the CLOSING f
 - A row with Quantity < 0 (SELL) and FifoPnlRealized = 0 → SHORT ENTRY (opening a short position)
 - A row with Quantity > 0 (BUY) and FifoPnlRealized ≠ 0 → SHORT EXIT (closing a short, completing a short trade)
 Match each CLOSING fill to its most recent ENTRY fill of the same symbol using FIFO order.
-Skip rows where AssetClass is not FUT (ignore CASH/forex hedges like USD.CAD).
+Skip ALL rows where AssetClass is not FUT — ignore CASH, forex hedges (e.g. USD.CAD), STK, OPT rows entirely.
 Skip rows where FifoPnlRealized = 0 AND there is no matching close — these are open positions.
 
 GENERAL RULES:
 1. Only include completed round-trip trades — entry + exit both present
 2. Use FifoPnlRealized directly as pnl when available — do not recalculate
-3. TradePrice on the entry row = buyPrice for longs, sellPrice for shorts
-4. TradePrice on the exit row = sellPrice for longs, buyPrice for shorts
+3. TradePrice on the entry row = buyPrice for longs OR sellPrice for shorts
+4. TradePrice on the exit row = sellPrice for longs OR buyPrice for shorts
+   Example long: entry BUY TradePrice=6778.5 → buyPrice=6778.5, exit SELL TradePrice=6780.5 → sellPrice=6780.5
+   Example short: entry SELL TradePrice=6755.0 → sellPrice=6755.0, exit BUY TradePrice=6753.5 → buyPrice=6753.5
 5. If TradePrice is missing or 0, use 0 for that price field — the P&L from FifoPnlRealized is still correct
+6. The last open position (no matching close) must be SKIPPED — it is an overnight hold, not a completed trade
 6. IBCommission is negative in IBKR data — use absolute value, sum both legs for commission field
 7. Duration = seconds between entry DateTime and exit DateTime
 8. Use these multipliers: MES=$5/pt, ES=$50/pt, MNQ=$2/pt, NQ=$20/pt, MYM=$0.50/pt, YM=$5/pt, MGC=$10/pt, GC=$100/pt, MCL=$100/pt, CL=$1000/pt, RTY=$10/pt, M2K=$10/pt
@@ -593,19 +596,19 @@ GENERAL RULES:
 
 CRITICAL OUTPUT RULE: Return ONLY a raw JSON array. No markdown. No code fences. No backticks of any kind. No explanation before or after. No trailing commas. All property names and string values must use double quotes only. Your response must begin with [ and end with ]. Anything other than a valid JSON array will break the parser. Each trade object must have exactly these fields:
 {
-  "symbol": "MNQH6",
-  "qty": 5,
+  "symbol": "MESH6",
+  "qty": 1,
   "direction": "long",
-  "buyPrice": 24904.00,
-  "buyTime": "03/05/2026 15:16:35",
-  "sellTime": "03/05/2026 15:16:56",
-  "sellPrice": 24918.00,
-  "pnl": 140.00,
-  "duration": "21s",
-  "durationSecs": 21,
+  "buyPrice": 6778.50,
+  "buyTime": "20260311 132635",
+  "sellTime": "20260311 132808",
+  "sellPrice": 6780.50,
+  "pnl": 8.76,
+  "duration": "1m33s",
+  "durationSecs": 93,
   "orderType": "LMT",
   "commission": 1.24,
-  "multiplier": 2,
+  "multiplier": 5,
   "notes": ""
 }
 
