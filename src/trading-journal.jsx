@@ -613,34 +613,56 @@ ${raw.slice(0, 12000)}`;
     timeoutMs: 60000,
     messages: [{ role: 'user', content: prompt }],
   });
-  // ── JSON repair pipeline ──
-  let jsonStr = clean.trim();
-  // 1. Strip markdown fences
-  jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
-  // 2. Extract just the array
-  const arrStart = jsonStr.indexOf('[');
-  const arrEnd = jsonStr.lastIndexOf(']');
-  if (arrStart === -1 || arrEnd === -1 || arrEnd <= arrStart) throw new Error("No JSON array found in AI response");
-  jsonStr = jsonStr.slice(arrStart, arrEnd + 1);
-  // 3. Fix common AI JSON mistakes
-  jsonStr = jsonStr
-    .replace(/,\s*([}\]])/g, '$1')          // trailing commas before } or ]
-    .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":') // unquoted keys → quoted
-    .replace(/:\s*'([^']*)'/g, ': "$1"')      // single-quoted values → double-quoted
-    .replace(/[\u0000-\u001F]/g, ' ');        // strip control chars that break JSON
-  // 4. If still broken, recover by trimming to last complete object
-  try {
-    JSON.parse(jsonStr);
-  } catch {
-    const lastClose = jsonStr.lastIndexOf('}');
-    if (lastClose > 0) {
-      jsonStr = jsonStr.slice(0, lastClose + 1);
-      // Remove trailing comma if present
-      jsonStr = jsonStr.replace(/,\s*$/, '');
-      jsonStr = '[' + jsonStr.slice(jsonStr.indexOf('{')) + ']';
+  // ── Robust JSON repair pipeline — handles all known AI output failure modes ──
+  const robustParseJson = (text) => {
+    let s = text.trim();
+    // 1. Strip markdown fences
+    s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+    // 2. Find array start — required. End optional (truncation recovery).
+    let aStart = s.indexOf('[');
+    if (aStart === -1) { const ob = s.indexOf('{'); if (ob === -1) throw new Error("No JSON content in AI response"); s = '[' + s.slice(ob); aStart = 0; }
+    else { s = s.slice(aStart); }
+    const aEnd = s.lastIndexOf(']');
+    if (aEnd !== -1) s = s.slice(0, aEnd + 1);
+    // 3. Direct parse — fastest path
+    try { const r = JSON.parse(s); if (Array.isArray(r)) return r; } catch {}
+    // 4. Clean control chars — string-aware (never touch chars inside quoted strings)
+    const cleanCtrl = (t) => {
+      let out = '', inStr = false, esc = false;
+      for (const ch of t) {
+        if (esc) { out += ch; esc = false; continue; }
+        if (inStr && ch === '\\') { out += ch; esc = true; continue; }
+        if (ch === '"') { inStr = !inStr; out += ch; continue; }
+        if (inStr && ch.charCodeAt(0) < 32) { out += (ch === '\t' ? ' ' : ch === '\r' ? '' : ' '); continue; }
+        out += ch;
+      }
+      return out;
+    };
+    s = cleanCtrl(s);
+    // 5. Fix trailing commas before } or ]
+    s = s.replace(/,([\s\n\r]*[}\]])/g, '$1');
+    // 6. Try again after cleaning
+    try { const r = JSON.parse(s); if (Array.isArray(r)) return r; } catch {}
+    // 7. Object-by-object extraction (last resort — recovers partial truncated responses)
+    const objects = [];
+    let depth = 0, si = null;
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === '{') { if (depth === 0) si = i; depth++; }
+      else if (s[i] === '}') {
+        depth--;
+        if (depth === 0 && si !== null) {
+          const obj = s.slice(si, i + 1);
+          for (const attempt of [obj, obj.replace(/,([\s\n\r]*})/g, '$1')]) {
+            try { const o = JSON.parse(attempt); if (o && typeof o === 'object' && o.symbol) { objects.push(o); break; } } catch {}
+          }
+          si = null;
+        }
+      }
     }
-  }
-  const trades = JSON.parse(jsonStr);
+    if (objects.length > 0) return objects;
+    throw new Error("Could not parse trade data from AI response — try again");
+  };
+  const trades = robustParseJson(clean);
   if (!Array.isArray(trades)) throw new Error("Expected array");
   return trades.map(t => ({
     symbol: t.symbol || "",
@@ -862,7 +884,7 @@ const emptyEntry = () => ({
   commissions: "", chartScreenshots: [],
   marketNotes: "", lessonsLearned: "", mistakes: "", improvements: "",
   bestTrade: "", worstTrade: "", rules: "", tomorrow: "", reinforceRule: "", sessionMistakes: [],
-  rawTradeData: "", parsedTrades: [], cashDeposit: "",
+  rawTradeData: "", parsedTrades: [], cashDeposit: "", rawCsvFile: null,
   // AI persisted fields (included in backups)
   aiRewrites: {}, // { fieldKey: rewrittenText }
   aiRewritesMeta: {}, // { fieldKey: { srcHash, ts } }
@@ -1686,6 +1708,22 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
               onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#475569"; }}>
               ↓ CSV
             </button>
+            {entry?.rawCsvFile?.content && (
+              <button
+                onClick={() => {
+                  const blob = new Blob([entry.rawCsvFile.content], { type: "text/csv" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url; a.download = entry.rawCsvFile.name || `trades-original.csv`; a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                style={{ background: "transparent", border: "1px solid #1e293b", color: "#64748b", padding: "3px 10px", borderRadius: 3, fontSize: 9, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.06em", whiteSpace: "nowrap", marginLeft: 4, flexShrink: 0, transition: "all .15s" }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = "#4ade80"; e.currentTarget.style.color = "#4ade80"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#475569"; }}
+                title={`Download original: ${entry?.rawCsvFile?.name}`}>
+                ↓ ORIGINAL CSV
+              </button>
+            )}
           </div>
           <div style={{ maxHeight: 360, overflowY: "auto" }}>
             {trades.map((t, i) => (
@@ -7044,6 +7082,8 @@ export default function TradingJournal() {
   const [aiParsing, setAiParsing] = useState(false);
   const [aiParseError, setAiParseError] = useState("");
   const [detectedFormat, setDetectedFormat] = useState("");
+  const [csvFileName, setCsvFileName] = useState("");
+  const [csvConfirmPending, setCsvConfirmPending] = useState(null); // { text, name } waiting for confirm
   // Feature 2: Trade review modal state
   const [parseReviewData, setParseReviewData] = useState(null);
 
@@ -7083,6 +7123,34 @@ export default function TradingJournal() {
     setAiParsing(false);
   };
 
+  const handleCsvUpload = (file) => {
+    if (!file) return;
+    if (!file.name.match(/\.csv$/i) && !file.name.match(/\.txt$/i) && !file.name.match(/\.tsv$/i)) {
+      setImportError("Please upload a CSV, TSV, or TXT file."); return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      // If trades already exist, ask for confirmation
+      if (form.parsedTrades?.length > 0) {
+        setCsvConfirmPending({ text, name: file.name });
+      } else {
+        setCsvFileName(file.name);
+        setImportRaw(text);
+        setImportError(""); setImportSuccess(false); setDetectedFormat(""); setAiParseError("");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const confirmCsvReplace = () => {
+    if (!csvConfirmPending) return;
+    setCsvFileName(csvConfirmPending.name);
+    setImportRaw(csvConfirmPending.text);
+    setImportError(""); setImportSuccess(false); setDetectedFormat(""); setAiParseError("");
+    setCsvConfirmPending(null);
+  };
+
   const applyParsedTrades = (trades, fmt, logEntry) => {
     const totalPnL = trades.reduce((s, t) => s + t.pnl, 0);
     const syms = [...new Set(trades.map(t => t.symbol))];
@@ -7096,6 +7164,7 @@ export default function TradingJournal() {
     setForm(prev => ({
       ...prev,
       rawTradeData: importRaw,
+      rawCsvFile: csvFileName ? { name: csvFileName, content: importRaw, savedAt: new Date().toISOString() } : (prev.rawCsvFile || null),
       parsedTrades: trades,
       pnl: totalPnL.toFixed(2),
       instruments: prev.instruments?.length ? prev.instruments : autoInstrs,
@@ -7139,8 +7208,8 @@ export default function TradingJournal() {
     return prior ? { plan: prior.tomorrow, reinforceRule: prior.reinforceRule, date: prior.date } : null;
   };
 
-  const openNew = () => { setForm(emptyEntry()); setActiveEntry(null); setTab("session"); setImportRaw(""); setImportError(""); setImportSuccess(false); setAnalyticsTab("overview"); setView("new"); };
-  const openEdit = (entry) => { setForm({ ...entry }); setActiveEntry(entry); setTab("session"); setImportRaw(entry.rawTradeData || ""); setImportError(""); setImportSuccess(false); setAnalyticsTab("overview"); setView("new"); };
+  const openNew = () => { setForm(emptyEntry()); setActiveEntry(null); setTab("session"); setImportRaw(""); setImportError(""); setImportSuccess(false); setCsvFileName(""); setCsvConfirmPending(null); setAnalyticsTab("overview"); setView("new"); };
+  const openEdit = (entry) => { setForm({ ...entry }); setActiveEntry(entry); setTab("session"); setImportRaw(entry.rawTradeData || ""); setImportError(""); setImportSuccess(false); setCsvFileName(entry.rawCsvFile?.name || ""); setCsvConfirmPending(null); setAnalyticsTab("overview"); setView("new"); };
   const viewDetail = (entry) => { setActiveEntry(entry); setView("detail"); };
 
   const f = (field, val) => setForm(p => ({ ...p, [field]: val }));
@@ -8612,14 +8681,62 @@ export default function TradingJournal() {
                   </div>
                 </div>
 
-                {/* Textarea */}
+                {/* CSV Upload */}
+                <div>
+                  <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>UPLOAD CSV FILE</label>
+                  <div
+                    style={{ border: "2px dashed #1e3a5f", borderRadius: 6, padding: "20px 24px", textAlign: "center", cursor: "pointer", background: csvFileName ? "rgba(59,130,246,0.05)" : "transparent", transition: "all .15s" }}
+                    onClick={() => document.getElementById("csv-file-input").click()}
+                    onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.background = "rgba(59,130,246,0.08)"; }}
+                    onDragLeave={e => { e.currentTarget.style.borderColor = "#1e3a5f"; e.currentTarget.style.background = csvFileName ? "rgba(59,130,246,0.05)" : "transparent"; }}
+                    onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = "#1e3a5f"; e.currentTarget.style.background = "transparent"; const f = e.dataTransfer.files[0]; if (f) handleCsvUpload(f); }}>
+                    <input id="csv-file-input" type="file" accept=".csv,.txt,.tsv" style={{ display: "none" }} onChange={e => { handleCsvUpload(e.target.files[0]); e.target.value = ""; }} />
+                    {csvFileName ? (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                        <span style={{ fontSize: 16 }}>📄</span>
+                        <div style={{ textAlign: "left" }}>
+                          <div style={{ fontSize: 12, color: "#93c5fd", fontWeight: 500 }}>{csvFileName}</div>
+                          <div style={{ fontSize: 10, color: "#4ade80", marginTop: 2 }}>✓ File loaded — ready to parse</div>
+                        </div>
+                        <button onClick={e => { e.stopPropagation(); setCsvFileName(""); setImportRaw(""); setImportSuccess(false); }}
+                          style={{ background: "transparent", border: "none", color: "#475569", cursor: "pointer", fontSize: 13, padding: "2px 6px", marginLeft: 8 }}>✕</button>
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 22, marginBottom: 8, opacity: 0.5 }}>📂</div>
+                        <div style={{ fontSize: 12, color: "#64748b" }}>Click to upload or drag & drop your CSV</div>
+                        <div style={{ fontSize: 10, color: "#334155", marginTop: 4 }}>Supports .csv · .txt · .tsv from any broker</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* OR divider */}
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ flex: 1, height: 1, background: "#1e293b" }} />
+                  <span style={{ fontSize: 10, color: "#334155", letterSpacing: "0.12em" }}>OR PASTE BELOW</span>
+                  <div style={{ flex: 1, height: 1, background: "#1e293b" }} />
+                </div>
+
+                {/* Paste textarea */}
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                     <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase" }}>PASTE BROKER DATA</label>
                     {detectedFormat && <span style={{ fontSize: 9, color: "#3b82f6", background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)", padding: "2px 8px", borderRadius: 12 }}>✓ {detectedFormat}</span>}
                   </div>
-                  <textarea rows={14} placeholder={"Paste your broker export here — any format works:\n\n• Tradovate Orders CSV\n• Interactive Brokers Flex Query\n• Questrade Activity Export\n• NinjaTrader Trade Log\n• Any tab or comma separated fills data\n\nJust paste and hit the button — AI handles the rest."} value={importRaw} onChange={e => { setImportRaw(e.target.value); setDetectedFormat(""); setImportSuccess(false); setAiParseError(""); }} style={{ fontFamily: "monospace", fontSize: 11 }} />
+                  <textarea rows={10} placeholder={"Paste your broker export here — any format works:\n\n• Tradovate Orders CSV\n• Interactive Brokers Flex Query\n• Questrade Activity Export\n• NinjaTrader Trade Log\n• Any tab or comma separated fills data\n\nJust paste and hit the button — AI handles the rest."} value={importRaw} onChange={e => { setImportRaw(e.target.value); setCsvFileName(""); setDetectedFormat(""); setImportSuccess(false); setAiParseError(""); }} style={{ fontFamily: "monospace", fontSize: 11 }} />
                 </div>
+
+                {/* CSV confirm replace dialog */}
+                {csvConfirmPending && (
+                  <div style={{ background: "#0a0e1a", border: "1px solid #92400e", borderRadius: 6, padding: "14px 16px" }}>
+                    <div style={{ fontSize: 12, color: "#fbbf24", marginBottom: 10 }}>⚠ Trades already parsed for this entry. Replace with <strong>{csvConfirmPending.name}</strong>?</div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={confirmCsvReplace} style={{ background: "#1d4ed8", color: "white", border: "none", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em" }}>YES, REPLACE</button>
+                      <button onClick={() => setCsvConfirmPending(null)} style={{ background: "transparent", border: "1px solid #334155", color: "#94a3b8", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em" }}>CANCEL</button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Errors */}
                 {(importError || aiParseError) && (
