@@ -4911,7 +4911,7 @@ function QuotesView() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
             {spotlightsByCat.slice(0, 2).map(({ cat, q, accent, icon, bg }, i) => (
               <div key={cat} className="q-feat-card"
-                style={{ background: "#060b18", border: `1px solid ${accent}28`, borderRadius: 10, padding: "26px 26px 20px", position: "relative", overflow: "hidden", animation: `qCardIn 0.35s ease ${i*0.08}s both` }}>
+                style={{ background: "#060b18", border: `1px solid ${accent}28`, borderRadius: 10, padding: "40px 36px 34px", position: "relative", overflow: "hidden", animation: `qCardIn 0.35s ease ${i*0.08}s both` }}>
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${accent}cc, transparent)` }} />
                 <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 20% 0%, ${bg} 0%, transparent 60%)`, pointerEvents: "none" }} />
                 <div style={{ position: "absolute", right: 16, top: 10, fontSize: 42, opacity: 0.12, userSelect: "none", lineHeight: 1 }}>{icon}</div>
@@ -4920,7 +4920,7 @@ function QuotesView() {
                   <span style={{ fontSize: 14 }}>{icon}</span>
                   <span style={{ fontSize: 9, color: accent, letterSpacing: "0.18em", fontFamily: "'DM Mono',monospace" }}>{cat.toUpperCase()}</span>
                 </div>
-                <div style={{ fontFamily: "Georgia,'Times New Roman',serif", fontStyle: "italic", fontSize: 15, color: "#dbeafe", lineHeight: 1.78, marginBottom: 18, position: "relative", zIndex: 1 }}>
+                <div style={{ fontFamily: "Georgia,'Times New Roman',serif", fontStyle: "italic", fontSize: 17, color: "#dbeafe", lineHeight: 1.85, marginBottom: 22, position: "relative", zIndex: 1 }}>
                   "{q.text}"
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -4941,7 +4941,7 @@ function QuotesView() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
             {spotlightsByCat.slice(2, 5).map(({ cat, q, accent, icon, bg }, i) => (
               <div key={cat} className="q-feat-card"
-                style={{ background: "#060b18", border: `1px solid ${accent}22`, borderRadius: 8, padding: "18px 18px 15px", position: "relative", overflow: "hidden", animation: `qCardIn 0.35s ease ${(i+2)*0.07}s both` }}>
+                style={{ background: "#060b18", border: `1px solid ${accent}22`, borderRadius: 8, padding: "30px 26px 26px", position: "relative", overflow: "hidden", animation: `qCardIn 0.35s ease ${(i+2)*0.07}s both` }}>
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1.5, background: `linear-gradient(90deg, transparent, ${accent}aa, transparent)` }} />
                 <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 50% 0%, ${bg} 0%, transparent 55%)`, pointerEvents: "none" }} />
                 <div style={{ position: "absolute", right: 10, bottom: -2, fontFamily: "Georgia,serif", fontSize: 72, color: accent, opacity: 0.04, lineHeight: 1, userSelect: "none" }}>"</div>
@@ -4949,7 +4949,7 @@ function QuotesView() {
                   <span style={{ fontSize: 11 }}>{icon}</span>
                   <span style={{ fontSize: 8, color: accent, letterSpacing: "0.16em", fontFamily: "'DM Mono',monospace" }}>{cat.toUpperCase()}</span>
                 </div>
-                <div style={{ fontFamily: "Georgia,'Times New Roman',serif", fontStyle: "italic", fontSize: 12, color: "#c8d8f0", lineHeight: 1.72, marginBottom: 14, position: "relative", zIndex: 1 }}>
+                <div style={{ fontFamily: "Georgia,'Times New Roman',serif", fontStyle: "italic", fontSize: 14, color: "#c8d8f0", lineHeight: 1.82, marginBottom: 18, position: "relative", zIndex: 1 }}>
                   "{q.text.length > 120 ? q.text.slice(0,120)+"…" : q.text}"
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -4970,7 +4970,7 @@ function QuotesView() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
             {spotlightsByCat.slice(5).map(({ cat, q, accent, icon, bg }, i) => (
               <div key={cat} className="q-feat-card"
-                style={{ background: "#060b18", border: `1px solid ${accent}1a`, borderRadius: 7, padding: "14px 16px 12px", position: "relative", overflow: "hidden", animation: `qCardIn 0.35s ease ${(i+5)*0.06}s both` }}>
+                style={{ background: "#060b18", border: `1px solid ${accent}1a`, borderRadius: 7, padding: "24px 22px 20px", position: "relative", overflow: "hidden", animation: `qCardIn 0.35s ease ${(i+5)*0.06}s both` }}>
                 <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, transparent, ${accent}88, transparent)` }} />
                 <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                   <span style={{ fontSize: 10 }}>{icon}</span>
@@ -5015,7 +5015,7 @@ function QuotesView() {
               const accent = palette.accent;
               return (
                 <div key={q.id} className="q-feat-card"
-                  style={{ background:"#060b18", border:`1px solid ${accent}28`, borderRadius:8, padding:"24px 22px 20px", position:"relative", overflow:"hidden", animation:`qCardIn 0.3s ease ${i*0.07}s both` }}>
+                  style={{ background:"#060b18", border:`1px solid ${accent}28`, borderRadius:8, padding:"34px 28px 28px", position:"relative", overflow:"hidden", animation:`qCardIn 0.3s ease ${i*0.07}s both` }}>
                   <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:`linear-gradient(90deg, transparent, ${accent}, transparent)`, opacity:0.7 }}/>
                   <div style={{ position:"absolute", top:-4, right:12, fontFamily:"Georgia,serif", fontSize:80, color:accent, opacity:0.05, lineHeight:1, userSelect:"none", pointerEvents:"none" }}>"</div>
                   <div style={{ fontSize:8, color:accent, letterSpacing:"0.16em", marginBottom:14, opacity:0.8 }}>{palette.icon} {q.category.toUpperCase()}</div>
@@ -7378,7 +7378,7 @@ export default function TradingJournal() {
         textarea::placeholder,input::placeholder{color:#1e3a5f}
         select option{background:#0f1729}
         .entry-card{transition:all .15s;cursor:pointer}
-        .quote-row-fullbleed{width:calc(100% + 80px);margin-left:-40px;margin-right:-40px;padding-left:40px;padding-right:40px;box-sizing:border-box}
+        
         .entry-card:hover{background:#0f1729!important;border-color:#1e3a5f!important}
         .pill{padding:6px 14px;border-radius:3px;border:1px solid #1e293b;font-size:12px;cursor:pointer;transition:all .15s;color:#94a3b8;background:transparent;letter-spacing:.05em;font-family:'DM Mono',monospace}
         .pill.sel{border-color:#3b82f6;background:#1e3a5f;color:#93c5fd}
@@ -8067,18 +8067,15 @@ export default function TradingJournal() {
         );
       })()}
 
-      <div style={{ width: "100%", padding: "28px 40px" }}>
-
-        {/* ── QUOTE OF THE DAY ── */}
-        {headerQuotes.length > 0 && (view === "list" || view === "recap") && (() => {
-          // Per-card configs: accent color, size role, layout style
-          const CARD_STYLES = [
-            { accent: "#3b82f6", glow: "rgba(59,130,246,0.07)", label: "✦ QUOTE OF THE DAY ✦", textSize: 22, layout: "center" },
-            { accent: "#f59e0b", glow: "rgba(245,158,11,0.06)",  label: "✦ DISCIPLINE ✦",       textSize: 16, layout: "left"   },
-            { accent: "#4ade80", glow: "rgba(74,222,128,0.06)",  label: "✦ EDGE ✦",              textSize: 16, layout: "left"   },
-          ];
-          return (
-            <div className="quote-row-fullbleed" style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 20, marginBottom: 36 }}>
+      {/* ── QUOTE OF THE DAY — independent full-width section ── */}
+      {headerQuotes.length > 0 && (view === "list" || view === "recap") && (() => {
+        const CARD_STYLES = [
+          { accent: "#3b82f6", glow: "rgba(59,130,246,0.07)", label: "✦ QUOTE OF THE DAY ✦", textSize: 22, layout: "center" },
+          { accent: "#f59e0b", glow: "rgba(245,158,11,0.06)",  label: "✦ DISCIPLINE ✦",       textSize: 16, layout: "left"   },
+          { accent: "#4ade80", glow: "rgba(74,222,128,0.06)",  label: "✦ EDGE ✦",              textSize: 16, layout: "left"   },
+        ];
+        return (
+          <div style={{ width: "100%", padding: "28px 40px 0", boxSizing: "border-box", display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 20, marginBottom: 0 }}>
               {headerQuotes.map((q, i) => {
                 const cs = CARD_STYLES[i] || CARD_STYLES[2];
                 const isHero = i === 0;
@@ -8107,9 +8104,10 @@ export default function TradingJournal() {
                 );
               })}
             </div>
-          );
-        })()}
+        );
+      })()}
 
+      <div style={{ width: "100%", padding: "28px 40px" }}>
         {/* LIST */}
         {view === "list" && (<>
           {filtered.length > 0 && (
@@ -8149,12 +8147,12 @@ export default function TradingJournal() {
               {listMode === "calendar" ? (
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button onClick={() => { const [y, m] = calMonth.split("-").map(Number); const d = new Date(y, m - 2, 1); setCalMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }}
-                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "5px 12px", borderRadius: 3, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>‹</button>
-                <span style={{ fontSize: 12, color: "#e2e8f0", letterSpacing: "0.08em", minWidth: 100, textAlign: "center" }}>
+                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "11px 16px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>‹</button>
+                <span style={{ fontSize: 13, color: "#e2e8f0", letterSpacing: "0.08em", minWidth: 130, textAlign: "center", fontWeight: 500 }}>
                   {(() => { const [y, m] = calMonth.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase(); })()}
                 </span>
                 <button onClick={() => { const [y, m] = calMonth.split("-").map(Number); const d = new Date(y, m, 1); setCalMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }}
-                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "5px 12px", borderRadius: 3, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>›</button>
+                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "11px 16px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>›</button>
               </div>
             ) : listMode === "performance" || listMode === "weekly" ? null : (
               months.length > 1 && (
