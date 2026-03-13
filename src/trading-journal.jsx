@@ -7371,7 +7371,7 @@ export default function TradingJournal() {
     <div style={{ fontFamily: "'DM Mono','Courier New',monospace", background: "#0a0e1a", minHeight: "100vh", color: "#e2e8f0" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap');
-        *{box-sizing:border-box;margin:0;padding:0}
+        html,body{width:100%;margin:0;padding:0}*{box-sizing:border-box;margin:0;padding:0}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0a0e1a}::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px}
         textarea,input,select{background:#0f1729!important;color:#e2e8f0!important;border:1px solid #1e3a5f!important;border-radius:4px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:13px;width:100%;outline:none;transition:border-color .2s;resize:vertical}
         textarea:focus,input:focus,select:focus{border-color:#3b82f6!important}
@@ -7391,7 +7391,7 @@ export default function TradingJournal() {
 
         {/* LEFT: Title + backup menu */}
         <div style={{ display: "flex", alignItems: "baseline", gap: 12, position: "relative", flexShrink: 0 }}>
-          <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: "#3b82f6", letterSpacing: "0.15em" }}>TRADING JOURNAL</span>
+          <span onClick={() => { setView("list"); setActiveEntry(null); }} style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: "#3b82f6", letterSpacing: "0.15em", cursor: "pointer", transition: "color .15s" }} onMouseEnter={e => e.currentTarget.style.color="#60a5fa"} onMouseLeave={e => e.currentTarget.style.color="#3b82f6"}>TRADING JOURNAL</span>
           <span style={{ fontSize: 10, color: "#1e3a5f", letterSpacing: "0.12em" }}>FUTURES</span>
           {/* Settings trigger */}
           <button
@@ -7863,7 +7863,7 @@ export default function TradingJournal() {
       )}
 
       {/* Journal tab strip */}
-      <div style={{ borderBottom: "1px solid #0f1729", background: "#060810", padding: "0 24px", display: "flex", alignItems: "stretch", gap: 2, overflowX: "auto", position: "sticky", top: 57, zIndex: 9 }}>
+      <div style={{ borderBottom: "1px solid #0f1729", background: "#060810", padding: "0 32px", display: "flex", alignItems: "stretch", gap: 2, overflowX: "auto", position: "sticky", top: 57, zIndex: 9 }}>
         {journals.map(j => {
           const isActive = j.id === activeJournalId;
           const isRenaming = renamingId === j.id;
@@ -8066,7 +8066,7 @@ export default function TradingJournal() {
         );
       })()}
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px" }}>
+      <div style={{ width: "100%", padding: "24px 32px" }}>
 
         {/* ── QUOTE OF THE DAY ── */}
         {headerQuotes.length > 0 && (view === "list" || view === "recap") && (() => {
