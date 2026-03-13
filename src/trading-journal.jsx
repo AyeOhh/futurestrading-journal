@@ -8127,8 +8127,8 @@ export default function TradingJournal() {
           )}
 
           {/* View toggle + month nav */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
               {[["calendar","📅 MONTHLY PERFORMANCE"],["list","📋 TRADE LIST"],["weekly","📈 WEEKLY PERFORMANCE"],["performance","📊 ANNUAL/QUARTERLY PERFORMANCE"]].map(([m, label]) => (
                 <button key={m} onClick={() => setListMode(m)}
                   style={{ padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: listMode === m ? "#1e3a5f" : "transparent", border: `1px solid ${listMode === m ? "#3b82f6" : "#1e293b"}`, color: listMode === m ? "#93c5fd" : "#94a3b8", whiteSpace: "nowrap" }}>
