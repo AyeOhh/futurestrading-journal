@@ -2880,7 +2880,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
   const tradeWinRate = allMonthTrades.length ? Math.round(allMonthWinningTrades.length / allMonthTrades.length * 100) : null;
 
   // Full monthly analytics
-  const monthAnalytics = allMonthTrades.length > 0 ? calcAnalytics(allMonthTrades, aiCfg?.tzLock !== false) : null;
+  const monthAnalytics = allMonthTrades.length > 0 ? calcAnalytics(allMonthTrades, true) : null;
   const monthGross = monthEntries.reduce((s, e) => s + (parseFloat(e.pnl) || 0), 0);
   const monthFees = monthEntries.reduce((s, e) => s + (parseFloat(e.commissions) || 0), 0);
   // Feature 4: Aggregate mistake costs for the month
@@ -3482,7 +3482,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
   const yearWinDays = yearEntries.filter(e => netPnl(e) > 0).length;
   const yearLossDays = yearEntries.filter(e => netPnl(e) < 0).length;
   const yearTrades = yearEntries.flatMap(e => e.parsedTrades || []);
-  const yearA = calcAnalytics(yearTrades, aiCfg?.tzLock !== false);
+  const yearA = calcAnalytics(yearTrades, true);
 
   // Equity curve across weeks
   let running = 0;
@@ -3541,7 +3541,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
           const wWinDays = wEntries.filter(e => netPnl(e) > 0).length;
           const wLossDays = wEntries.filter(e => netPnl(e) < 0).length;
           const wTrades = wEntries.flatMap(e => e.parsedTrades || []);
-          const wA = calcAnalytics(wTrades, aiCfg?.tzLock !== false);
+          const wA = calcAnalytics(wTrades, true);
           const isPos = wNet >= 0;
           const weekNum = wk.split("-W")[1];
           return (
@@ -3607,7 +3607,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                   const dayNet = netPnl(e);
                   const dayGross = parseFloat(e.pnl) || 0;
                   const dayFees = parseFloat(e.commissions) || 0;
-                  const dayA = calcAnalytics(e.parsedTrades || [], aiCfg?.tzLock !== false);
+                  const dayA = calcAnalytics(e.parsedTrades || [], true);
                   const isClean = e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓");
                   const mistakeCount = e.sessionMistakes?.filter(m => m !== "No Mistakes — Executed the Plan ✓").length || 0;
                   return (
@@ -3760,7 +3760,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
     const monthStr = `${selectedYear}-${String(mi + 1).padStart(2, "0")}`;
     const monthEntries = entries.filter(e => e.date?.startsWith(monthStr));
     const trades = monthEntries.flatMap(e => e.parsedTrades || []);
-    const a = calcAnalytics(trades, aiCfg?.tzLock !== false);
+    const a = calcAnalytics(trades, true);
     const grossPnl = monthEntries.reduce((s, e) => s + (parseFloat(e.pnl) || 0), 0);
     const fees = monthEntries.reduce((s, e) => s + (parseFloat(e.commissions) || 0), 0);
     const netTotal = monthEntries.reduce((s, e) => s + netPnl(e), 0);
@@ -3776,7 +3776,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
     return yr === selectedYear && activeMonths.includes(mo);
   });
   const periodTrades = periodEntries.flatMap(e => e.parsedTrades || []);
-  const periodA = calcAnalytics(periodTrades, aiCfg?.tzLock !== false);
+  const periodA = calcAnalytics(periodTrades, true);
   const periodNet = periodEntries.reduce((s, e) => s + netPnl(e), 0);
   const periodGross = periodEntries.reduce((s, e) => s + (parseFloat(e.pnl) || 0), 0);
   const periodFees = periodEntries.reduce((s, e) => s + (parseFloat(e.commissions) || 0), 0);
@@ -7517,7 +7517,7 @@ export default function TradingJournal() {
   // Memoize per-entry analytics for trade list — avoids recalculating on every render
   const entryAnalyticsMap = useMemo(() => {
     const map = {};
-    for (const e of entries) { map[e.id] = calcAnalytics(e.parsedTrades || [], aiCfg?.tzLock !== false); }
+    for (const e of entries) { map[e.id] = calcAnalytics(e.parsedTrades || [], true); }
     return map;
   }, [entries]);
 
