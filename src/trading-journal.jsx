@@ -630,11 +630,16 @@ const parseIbkrCsv = (raw) => {
 
     const getDuration = (dtA, dtB) => {
       try {
-        const parse = (s) => {
-          const d = s.replace(/[^0-9]/g,' ').trim().split(/\s+/).map(Number);
-          return new Date(d[0], d[1]-1, d[2], d[3]||0, d[4]||0, d[5]||0);
+        // Parse "YYYYMMDD HHMMSS" format
+        const p = (s) => {
+          const clean = s.replace(/[^0-9]/g, '');
+          if (clean.length < 8) return NaN;
+          const yr=+clean.slice(0,4), mo=+clean.slice(4,6)-1, dy=+clean.slice(6,8);
+          const hr=+clean.slice(8,10)||0, mn=+clean.slice(10,12)||0, sc=+clean.slice(12,14)||0;
+          return Date.UTC(yr, mo, dy, hr, mn, sc);
         };
-        const secs = Math.abs(Math.round((parse(dtB) - parse(dtA)) / 1000));
+        const secs = Math.abs(Math.round((p(dtB) - p(dtA)) / 1000));
+        if (!secs || isNaN(secs)) return { secs: 0, str: '0s' };
         const m = Math.floor(secs/60), s = secs%60;
         return { secs, str: m > 0 ? m+'m'+s+'s' : s+'s' };
       } catch { return { secs: 0, str: '0s' }; }
