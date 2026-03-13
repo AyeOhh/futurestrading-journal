@@ -570,14 +570,26 @@ const parseTradesWithAI = async (raw, ai) => {
 ${brokerHint ? `
 BROKER CONTEXT: ${brokerHint}
 ` : ''}
-RULES:
-1. Skip cancelled, rejected, or open orders — only include fully filled round-trip trades
-2. Match buys to sells by symbol and time proximity (FIFO). A round-trip = one entry + one exit
-3. For futures, calculate P&L as: (exitPrice - entryPrice) × qty × multiplier for longs, reversed for shorts
-4. Use these multipliers: MES=$5/pt, ES=$50/pt, MNQ=$2/pt, NQ=$20/pt, MYM=$0.50/pt, YM=$5/pt, MGC=$10/pt, GC=$100/pt, MCL=$100/pt, CL=$1000/pt, RTY=$10/pt, M2K=$10/pt
-5. If the data already has P&L calculated, use it directly
-6. For partial fills on the same order, combine them into one trade
-7. For "Exit Market" orders, these are closing trades — match to the most recent open position in that symbol
+IBKR FLEX QUERY SPECIFIC RULES (apply when data has FifoPnlRealized column):
+The key insight for IBKR data: FifoPnlRealized is ONLY non-zero on the CLOSING fill of a round-trip.
+- A row with Quantity > 0 (BUY) and FifoPnlRealized = 0 → LONG ENTRY (opening a long position)
+- A row with Quantity < 0 (SELL) and FifoPnlRealized ≠ 0 → LONG EXIT (closing a long, completing a long trade)
+- A row with Quantity < 0 (SELL) and FifoPnlRealized = 0 → SHORT ENTRY (opening a short position)
+- A row with Quantity > 0 (BUY) and FifoPnlRealized ≠ 0 → SHORT EXIT (closing a short, completing a short trade)
+Match each CLOSING fill to its most recent ENTRY fill of the same symbol using FIFO order.
+Skip rows where AssetClass is not FUT (ignore CASH/forex hedges like USD.CAD).
+Skip rows where FifoPnlRealized = 0 AND there is no matching close — these are open positions.
+
+GENERAL RULES:
+1. Only include completed round-trip trades — entry + exit both present
+2. Use FifoPnlRealized directly as pnl when available — do not recalculate
+3. TradePrice on the entry row = buyPrice for longs, sellPrice for shorts
+4. TradePrice on the exit row = sellPrice for longs, buyPrice for shorts
+5. If TradePrice is missing or 0, use 0 for that price field — the P&L from FifoPnlRealized is still correct
+6. IBCommission is negative in IBKR data — use absolute value, sum both legs for commission field
+7. Duration = seconds between entry DateTime and exit DateTime
+8. Use these multipliers: MES=$5/pt, ES=$50/pt, MNQ=$2/pt, NQ=$20/pt, MYM=$0.50/pt, YM=$5/pt, MGC=$10/pt, GC=$100/pt, MCL=$100/pt, CL=$1000/pt, RTY=$10/pt, M2K=$10/pt
+9. For partial fills on the same order, combine into one trade
 
 CRITICAL OUTPUT RULE: Return ONLY a raw JSON array. No markdown. No code fences. No backticks of any kind. No explanation before or after. No trailing commas. All property names and string values must use double quotes only. Your response must begin with [ and end with ]. Anything other than a valid JSON array will break the parser. Each trade object must have exactly these fields:
 {
