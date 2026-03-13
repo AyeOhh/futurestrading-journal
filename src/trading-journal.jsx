@@ -8066,7 +8066,7 @@ export default function TradingJournal() {
         );
       })()}
 
-      <div style={{ width: "100%", maxWidth: 1600, margin: "0 auto", padding: "28px 40px" }}>
+      <div style={{ width: "100%", padding: "28px 40px" }}>
 
         {/* ── QUOTE OF THE DAY ── */}
         {headerQuotes.length > 0 && (view === "list" || view === "recap") && (() => {
@@ -8077,12 +8077,12 @@ export default function TradingJournal() {
             { accent: "#4ade80", glow: "rgba(74,222,128,0.06)",  label: "✦ EDGE ✦",              textSize: 14, layout: "left"   },
           ];
           return (
-            <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 20, marginBottom: 36 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 20, marginBottom: 36, marginLeft: -40, marginRight: -40, paddingLeft: 40, paddingRight: 40 }}>
               {headerQuotes.map((q, i) => {
                 const cs = CARD_STYLES[i] || CARD_STYLES[2];
                 const isHero = i === 0;
                 return (
-                  <div key={q.id} style={{ borderRadius: 8, border: `1px solid ${cs.accent}28`, background: "#070d1a", padding: isHero ? "36px 40px 32px" : "30px 28px 26px", position: "relative", overflow: "hidden", textAlign: cs.layout }}>
+                  <div key={q.id} onClick={() => setView("quotes")} style={{ borderRadius: 8, border: `1px solid ${cs.accent}28`, background: "#070d1a", padding: isHero ? "36px 40px 32px" : "30px 28px 26px", position: "relative", overflow: "hidden", textAlign: cs.layout, cursor: "pointer", transition: "border-color .15s" }} onMouseEnter={e => e.currentTarget.style.borderColor=`${cs.accent}55`} onMouseLeave={e => e.currentTarget.style.borderColor=`${cs.accent}28`}>
                     {/* Top accent line */}
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${cs.accent}, transparent)`, opacity: 0.7 }} />
                     {/* Glow */}
