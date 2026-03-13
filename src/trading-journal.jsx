@@ -7418,9 +7418,17 @@ export default function TradingJournal() {
   const handleSave = async () => {
     setSaving(true);
     const entry = { ...form };
-    let updated = activeEntry ? entries.map(e => e.id === form.id ? entry : e) : [{ ...entry, id: Date.now() }, ...entries];
-    await saveEntries(updated);
-    setSaving(false); setSaved(true);
+    const entryWithId = { ...entry, id: entry.id || Date.now() };
+    let updated = activeEntry ? entries.map(e => e.id === form.id ? entryWithId : e) : [entryWithId, ...entries];
+    // Update state immediately so calendar renders right away
+    setEntries(updated);
+    // Persist to storage
+    try {
+      await storage.set(`journal-entries-${activeJournalId}`, JSON.stringify(updated));
+    } catch (e) {
+      console.warn("Save error:", e);
+    }
+    setSaved(true);
     // Auto-backup: download JSON snapshot on save if enabled
     if (aiCfg?.autoBackup) {
       try {
@@ -7432,9 +7440,17 @@ export default function TradingJournal() {
         URL.revokeObjectURL(url);
       } catch {}
     }
-    // Navigate immediately — don't wait for the saved flash
-    setView("list"); setActiveEntry(null); setForm(emptyEntry()); setTab("session");
-    setImportRaw(""); setImportError(""); setImportSuccess(false); setCsvFileName(""); setCsvConfirmPending(null);
+    // Navigate to list — set calendar to the saved entry's month so it appears immediately
+    const savedMonth = entry.date ? entry.date.slice(0, 7) : calMonth; // "2026-03"
+    setCalMonth(savedMonth);
+    setListMode("calendar");
+    setView("list");
+    setActiveEntry(null);
+    setForm(emptyEntry());
+    setTab("session");
+    setImportRaw(""); setImportError(""); setImportSuccess(false);
+    setCsvFileName(""); setCsvConfirmPending(null);
+    setSaving(false);
     setTimeout(() => setSaved(false), 1500);
   };
 
