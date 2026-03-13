@@ -7378,6 +7378,7 @@ export default function TradingJournal() {
         textarea::placeholder,input::placeholder{color:#1e3a5f}
         select option{background:#0f1729}
         .entry-card{transition:all .15s;cursor:pointer}
+        .quote-row-fullbleed{width:100vw;position:relative;left:50%;right:50%;margin-left:-50vw;margin-right:-50vw;padding-left:40px;padding-right:40px;box-sizing:border-box}
         .entry-card:hover{background:#0f1729!important;border-color:#1e3a5f!important}
         .pill{padding:6px 14px;border-radius:3px;border:1px solid #1e293b;font-size:12px;cursor:pointer;transition:all .15s;color:#94a3b8;background:transparent;letter-spacing:.05em;font-family:'DM Mono',monospace}
         .pill.sel{border-color:#3b82f6;background:#1e3a5f;color:#93c5fd}
@@ -8077,7 +8078,7 @@ export default function TradingJournal() {
             { accent: "#4ade80", glow: "rgba(74,222,128,0.06)",  label: "✦ EDGE ✦",              textSize: 14, layout: "left"   },
           ];
           return (
-            <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 20, marginBottom: 36, marginLeft: -40, marginRight: -40, paddingLeft: 40, paddingRight: 40 }}>
+            <div className="quote-row-fullbleed" style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 20, marginBottom: 36 }}>
               {headerQuotes.map((q, i) => {
                 const cs = CARD_STYLES[i] || CARD_STYLES[2];
                 const isHero = i === 0;
