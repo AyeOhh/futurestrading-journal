@@ -6728,7 +6728,7 @@ const validateTradesHard = (trades, allowOvernight = false) => {
     if (!t.symbol || !t.symbol.trim()) reasons.push("Missing symbol");
     if (!Number.isFinite(t.qty) || t.qty <= 0) reasons.push("Invalid qty");
     if (!Number.isFinite(t.pnl)) reasons.push("Non-finite P&L");
-    if (t.buyPrice <= 0 || t.sellPrice <= 0) reasons.push("Invalid price");
+    // Price=0 is a soft issue (IBKR may omit prices when P&L is provided directly)
     if (t.durationSecs > limit) reasons.push(`Duration ${(t.durationSecs/3600).toFixed(1)}h > ${limit/3600}h limit`);
     const h = [t.symbol, t.buyTime, t.sellTime, t.qty, t.buyPrice, t.sellPrice].join("|");
     if (seen.has(h)) reasons.push("Duplicate");
@@ -6744,6 +6744,7 @@ const validateTradesSoft = (trades) => {
   for (const t of trades) {
     const warnings = [];
     if (t.durationSecs > 0 && t.durationSecs < 2) warnings.push("⚡ Sub-2s duration — verify fill");
+    if (t.buyPrice <= 0 || t.sellPrice <= 0) warnings.push("⚠ Price missing — P&L taken from broker data");
     if (Math.abs(t.pnl) > 50000) warnings.push("💰 Very large P&L — confirm correct");
     else if (Math.abs(t.pnl) > 5000 && (t.symbol?.startsWith("M") || t.qty < 3)) warnings.push("💰 Large P&L for micro — confirm correct");
     if (t.pnl === 0) warnings.push("⚪ Zero P&L — breakeven or parse error?");
@@ -6761,7 +6762,7 @@ function ParseReviewModal({ data, onConfirm, onCancel }) {
   const { hardRejected, flagged, clean } = data;
   const [checked, setChecked] = useState(() => Object.fromEntries(flagged.map((_, i) => [i, true])));
   const [allowOvernight, setAllowOvernight] = useState(false);
-  const [showRejected, setShowRejected] = useState(false);
+  const [showRejected, setShowRejected] = useState(true); // auto-expanded so user sees rejection reason
   const [showClean, setShowClean] = useState(false);
 
   const acceptedFlagged = flagged.filter((_, i) => checked[i]).map(f => f.trade);
