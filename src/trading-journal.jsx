@@ -1,5 +1,36 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 
+// ── Storage adapter: uses window.storage in Claude.ai, localStorage elsewhere ──
+const storage = (() => {
+  const hasWindowStorage = typeof window !== 'undefined' && window.storage &&
+    typeof window.storage.get === 'function' && typeof window.storage.set === 'function';
+
+  if (hasWindowStorage) return window.storage;
+
+  // localStorage fallback for Vercel / self-hosted
+  return {
+    get: async (key) => {
+      try {
+        const val = localStorage.getItem(key);
+        return val !== null ? { key, value: val } : null;
+      } catch { return null; }
+    },
+    set: async (key, value) => {
+      try { localStorage.setItem(key, value); return { key, value }; } catch { return null; }
+    },
+    delete: async (key) => {
+      try { localStorage.removeItem(key); return { key, deleted: true }; } catch { return null; }
+    },
+    list: async (prefix) => {
+      try {
+        const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
+        return { keys };
+      } catch { return { keys: [] }; }
+    },
+  };
+})();
+
+
 const BIAS_OPTIONS = ["Bullish", "Bearish", "Neutral", "Mixed"];
 const MISTAKE_OPTIONS = [
   "Entered without my setup",
@@ -200,7 +231,7 @@ const AI_CACHE_MAX = 250; // keep it small; this is just a speed/cost cache
 
 const loadAiCache = () => {
   try {
-    const raw = window?.localStorage?.getItem(AI_CACHE_KEY);
+    const raw = localStorage.getItem(AI_CACHE_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     return (parsed && typeof parsed === 'object') ? parsed : {};
@@ -208,7 +239,7 @@ const loadAiCache = () => {
 };
 
 const saveAiCache = (cache) => {
-  try { window?.localStorage?.setItem(AI_CACHE_KEY, JSON.stringify(cache)); } catch {}
+  try { localStorage.setItem(AI_CACHE_KEY, JSON.stringify(cache)); } catch {}
 };
 
 const pruneAiCache = (cache) => {
@@ -260,7 +291,7 @@ const friendlyAiError = (err) => {
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const loadAiSettings = () => {
   try {
-    const raw = window?.localStorage?.getItem(AI_SETTINGS_KEY);
+    const raw = localStorage.getItem(AI_SETTINGS_KEY);
     if (!raw) return { ...DEFAULT_AI_SETTINGS };
     const parsed = JSON.parse(raw);
     return { ...DEFAULT_AI_SETTINGS, ...parsed };
@@ -270,7 +301,7 @@ const loadAiSettings = () => {
 };
 
 const saveAiSettings = (s) => {
-  try { window?.localStorage?.setItem(AI_SETTINGS_KEY, JSON.stringify(s)); } catch {}
+  try { localStorage.setItem(AI_SETTINGS_KEY, JSON.stringify(s)); } catch {}
 };
 
 const requireAiReady = (ai) => {
@@ -4984,9 +5015,9 @@ function QuotesView() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await window.storage.get("trader-quotes-v1");
+        const r = await storage.get("trader-quotes-v1");
         setQuotes(r?.value ? JSON.parse(r.value) : SEED_QUOTES);
-        if (!r?.value) await window.storage.set("trader-quotes-v1", JSON.stringify(SEED_QUOTES));
+        if (!r?.value) await storage.set("trader-quotes-v1", JSON.stringify(SEED_QUOTES));
       } catch { setQuotes(SEED_QUOTES); }
       setLoaded(true);
     })();
@@ -4994,7 +5025,7 @@ function QuotesView() {
 
   const persist = async (updated) => {
     setQuotes(updated);
-    try { await window.storage.set("trader-quotes-v1", JSON.stringify(updated)); } catch(e) { console.warn(e); }
+    try { await storage.set("trader-quotes-v1", JSON.stringify(updated)); } catch(e) { console.warn(e); }
   };
 
   const filtered = activeCat === "All" ? quotes : quotes.filter(q => q.category === activeCat);
@@ -5330,7 +5361,7 @@ function CertificatesTab({ certs, setCerts, certLightbox, setCertLightbox }) {
 
   const persist = (updated) => {
     setCerts(updated);
-    try { window.localStorage.setItem("tj-certs-v1", JSON.stringify(updated)); } catch {}
+    try { localStorage.setItem("tj-certs-v1", JSON.stringify(updated)); } catch {}
   };
 
   const addFromDataUrl = (src, name = "") => {
@@ -5559,7 +5590,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
         const [payoutForm, setPayoutForm] = useState({ date: new Date().toISOString().split("T")[0], amount: "", fee: "", note: "" });
         const [archiveModal, setArchiveModal] = useState(false);
         const [archiveForm, setArchiveForm] = useState({ breachType: "maxLoss", postMortem: "", evalCost: "" });
-        const [certs, setCerts] = useState(() => { try { const r = window.localStorage.getItem("tj-certs-v1"); return r ? JSON.parse(r) : []; } catch { return []; } });
+        const [certs, setCerts] = useState(() => { try { const r = localStorage.getItem("tj-certs-v1"); return r ? JSON.parse(r) : []; } catch { return []; } });
         const [certLightbox, setCertLightbox] = useState(null);
 
         const cfg = activeJournal?.config;
@@ -7124,7 +7155,7 @@ export default function TradingJournal() {
         // Load journals meta
         let loadedJournals = [{ id: DEFAULT_JOURNAL_ID, name: DEFAULT_JOURNAL_NAME, createdAt: Date.now() }];
         try {
-          const metaResult = await window.storage.get("journal-meta");
+          const metaResult = await storage.get("journal-meta");
           if (metaResult?.value) loadedJournals = JSON.parse(metaResult.value);
         } catch {}
         setJournals(loadedJournals);
@@ -7135,18 +7166,18 @@ export default function TradingJournal() {
 
         // Try new key first
         try {
-          const r = await window.storage.get(`journal-entries-${activeId}`);
+          const r = await storage.get(`journal-entries-${activeId}`);
           if (r?.value) entriesData = r.value;
         } catch {}
 
         // If not found, migrate from old journal-v3 key
         if (!entriesData) {
           try {
-            const oldResult = await window.storage.get("journal-v3");
+            const oldResult = await storage.get("journal-v3");
             if (oldResult?.value) {
               entriesData = oldResult.value;
               // Save under new key so migration only runs once
-              await window.storage.set(`journal-entries-${activeId}`, entriesData);
+              await storage.set(`journal-entries-${activeId}`, entriesData);
             }
           } catch {}
         }
@@ -7156,14 +7187,14 @@ export default function TradingJournal() {
           const norm = normalizeEntries(parsed);
           setEntries(norm.entries);
           if (norm.report?.changed) {
-            try { await window.storage.set(`journal-entries-${activeId}`, JSON.stringify(norm.entries)); } catch {}
+            try { await storage.set(`journal-entries-${activeId}`, JSON.stringify(norm.entries)); } catch {}
             setDataHealthReport(norm.report);
           }
         }
 
         // Load a random quote for the header
         try {
-          const qr = await window.storage.get("trader-quotes-v1");
+          const qr = await storage.get("trader-quotes-v1");
           const allQuotes = qr?.value ? JSON.parse(qr.value) : SEED_QUOTES;
           if (allQuotes.length > 0) { const sh=[...allQuotes].sort(()=>Math.random()-0.5); setHeaderQuotes([sh[0],sh[1],sh[2]].filter(Boolean)); }
         } catch {}
@@ -7175,12 +7206,12 @@ export default function TradingJournal() {
 
   const saveJournalsMeta = async (updated) => {
     setJournals(updated);
-    await window.storage.set("journal-meta", JSON.stringify(updated));
+    await storage.set("journal-meta", JSON.stringify(updated));
   };
 
   const saveEntries = async (updated, journalId = activeJournalId) => {
     if (journalId === activeJournalId) setEntries(updated);
-    await window.storage.set(`journal-entries-${journalId}`, JSON.stringify(updated));
+    await storage.set(`journal-entries-${journalId}`, JSON.stringify(updated));
   };
 
   const switchJournal = async (id) => {
@@ -7189,12 +7220,12 @@ export default function TradingJournal() {
     setView("list"); setActiveEntry(null); setForm(emptyEntry());
     setFilterMonth(""); setListMode("calendar");
     try {
-      const result = await window.storage.get(`journal-entries-${id}`);
+      const result = await storage.get(`journal-entries-${id}`);
       const parsed = result?.value ? JSON.parse(result.value) : [];
       const norm = normalizeEntries(parsed);
       setEntries(norm.entries);
       if (norm.report?.changed) {
-        try { await window.storage.set(`journal-entries-${id}`, JSON.stringify(norm.entries)); } catch {}
+        try { await storage.set(`journal-entries-${id}`, JSON.stringify(norm.entries)); } catch {}
         setDataHealthReport(norm.report);
       }
     } catch { setEntries([]); }
@@ -7205,7 +7236,7 @@ export default function TradingJournal() {
     const id = `journal-${Date.now()}`;
     const newJ = { id, name, createdAt: Date.now(), type: newJournalType, config: newJournalConfig };
     await saveJournalsMeta([...journals, newJ]);
-    await window.storage.set(`journal-entries-${id}`, JSON.stringify([]));
+    await storage.set(`journal-entries-${id}`, JSON.stringify([]));
     // Reset form state
     setNewJournalName("");
     setNewJournalType(JOURNAL_TYPES.PERSONAL);
@@ -7233,7 +7264,7 @@ export default function TradingJournal() {
     if (journals.length <= 1) return; // can't delete last journal
     const updated = journals.filter(j => j.id !== id);
     await saveJournalsMeta(updated);
-    await window.storage.delete(`journal-entries-${id}`);
+    await storage.delete(`journal-entries-${id}`);
     setConfirmDeleteId(null);
     if (activeJournalId === id) switchJournal(updated[0].id);
   };
@@ -7458,7 +7489,7 @@ export default function TradingJournal() {
       for (const j of propJournals) {
         if (j.id === activeJournalId) { map[j.id] = entries; continue; }
         try {
-          const r = await window.storage.get(`entries_${j.id}`);
+          const r = await storage.get(`entries_${j.id}`);
           map[j.id] = r?.value ? JSON.parse(r.value).map(normalizeEntry).map(e => e.entry || e) : [];
         } catch { map[j.id] = []; }
       }
@@ -7520,6 +7551,7 @@ export default function TradingJournal() {
   const csvInputRef = useRef(null);
 
   const [exportData, setExportData] = useState(null);
+  const [copied, setCopied] = useState(false);
   const [exportMeta, setExportMeta] = useState({ title: "EXPORT BACKUP", filename: "trading-journal-backup.json", desc: "Copy all of the text below \u2192 paste into a new file \u2192 save as", isCSV: false });
   // Single-journal export controls
   const [exportJournalId, setExportJournalId] = useState("");
@@ -7552,7 +7584,7 @@ export default function TradingJournal() {
       const allData = { version: 2, exportedAt: new Date().toISOString(), journals, entriesByJournal: {} };
       for (const j of journals) {
         try {
-          const r = await window.storage.get(`journal-entries-${j.id}`);
+          const r = await storage.get(`journal-entries-${j.id}`);
           allData.entriesByJournal[j.id] = r?.value ? JSON.parse(r.value) : [];
         } catch { allData.entriesByJournal[j.id] = []; }
       }
@@ -7572,7 +7604,7 @@ export default function TradingJournal() {
       const jId = exportJournalId || activeJournalId;
       const j = journals.find(x => x.id === jId);
       if (!j) { alert("Journal not found."); return; }
-      const r = await window.storage.get(`journal-entries-${jId}`);
+      const r = await storage.get(`journal-entries-${jId}`);
       let jEntries = r?.value ? JSON.parse(r.value) : [];
       if (exportMonth) jEntries = jEntries.filter(e => e.date?.startsWith(exportMonth));
       const data = { version: 2, exportedAt: new Date().toISOString(), journal: j, entries: jEntries };
@@ -7597,7 +7629,7 @@ export default function TradingJournal() {
       // Build date prefix filter: year only, year+month, or none
       const datePrefix = csvYear ? (csvMonth ? `${csvYear}-${csvMonth}` : csvYear) : "";
       for (const j of targetJournals) {
-        const r = await window.storage.get(`journal-entries-${j.id}`);
+        const r = await storage.get(`journal-entries-${j.id}`);
         let jEntries = r?.value ? JSON.parse(r.value) : [];
         if (datePrefix) jEntries = jEntries.filter(e => e.date?.startsWith(datePrefix));
         for (const e of jEntries) {
@@ -7655,7 +7687,7 @@ export default function TradingJournal() {
       await saveJournalsMeta(data.journals);
       for (const j of data.journals) {
         const jes = data.entriesByJournal[j.id] || [];
-        await window.storage.set(`journal-entries-${j.id}`, JSON.stringify(jes));
+        await storage.set(`journal-entries-${j.id}`, JSON.stringify(jes));
       }
       const firstId = data.journals[0]?.id || DEFAULT_JOURNAL_ID;
       setActiveJournalId(firstId);
@@ -7748,10 +7780,10 @@ export default function TradingJournal() {
             </div>
             <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e293b", display: "flex", gap: 8, alignItems: "center" }}>
               <button
-                onClick={() => { navigator.clipboard.writeText(exportData).then(() => { const b = document.getElementById("copy-btn"); if (b) { b.textContent = "✓ COPIED!"; b.style.color = "#4ade80"; setTimeout(() => { b.textContent = "COPY ALL"; b.style.color = "white"; }, 2000); } }); }}
-                id="copy-btn"
-                style={{ background: "#1d4ed8", color: "white", border: "none", padding: "8px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em" }}>
-                COPY ALL
+                onClick={() => { navigator.clipboard?.writeText(exportData).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }).catch(() => {}); }}
+                
+                style={{ background: copied ? "#166534" : "#1d4ed8", color: "white", border: "none", padding: "8px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", transition: "background .2s" }}>
+                {copied ? "✓ COPIED!" : "COPY ALL"}
               </button>
               <div style={{ fontSize: 10, color: "#64748b" }}>
                 {exportData.length.toLocaleString()} characters · save contents as <strong style={{ color: "#94a3b8" }}>{exportMeta.filename}</strong>
@@ -7977,7 +8009,7 @@ export default function TradingJournal() {
                   <div style={{ background: '#060b18', border: '1px solid #0f1729', borderRadius: 6, padding: '12px 16px' }}>
                     <div style={{ fontSize: 9, color: '#64748b', letterSpacing: '0.12em', marginBottom: 8 }}>STORAGE INFO</div>
                     <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.8 }}>
-                      {journals.length} journal{journals.length !== 1 ? 's' : ''} · Data stored in browser via <span style={{ color: '#64748b' }}>window.storage</span><br />
+                      {journals.length} journal{journals.length !== 1 ? 's' : ''} · Data stored in your browser locally<br />
                       AI settings are stored separately in <span style={{ color: '#64748b' }}>localStorage</span> and not included in exports.
                     </div>
                   </div>
