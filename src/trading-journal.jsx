@@ -7163,6 +7163,31 @@ export default function TradingJournal() {
 
   const applyParsedTrades = (trades, fmt, logEntry) => {
     const totalPnL = trades.reduce((s, t) => s + t.pnl, 0);
+    const totalComm = trades.reduce((s, t) => s + (t.commission || 0), 0);
+
+    // Auto-detect date from earliest trade timestamp
+    const autoDate = (() => {
+      const timestamps = trades.map(t => t.buyTime || t.sellTime).filter(Boolean);
+      if (!timestamps.length) return null;
+      timestamps.sort();
+      const raw = timestamps[0].trim();
+      // Try to parse various IBKR date formats: "20260311 132635", "2026/03/11 13:26:35", "03/11/2026 13:26:35"
+      const patterns = [
+        // YYYYMMDD HHMMSS  → 20260311 132635
+        { re: /^(\d{4})(\d{2})(\d{2})\s/, fn: m => `${m[1]}-${m[2]}-${m[3]}` },
+        // YYYY/MM/DD or YYYY-MM-DD
+        { re: /^(\d{4})[\/\-](\d{2})[\/\-](\d{2})/, fn: m => `${m[1]}-${m[2]}-${m[3]}` },
+        // MM/DD/YYYY
+        { re: /^(\d{2})\/(\d{2})\/(\d{4})/, fn: m => `${m[3]}-${m[1]}-${m[2]}` },
+      ];
+      for (const { re, fn } of patterns) {
+        const m = raw.match(re);
+        if (m) return fn(m);
+      }
+      return null;
+    })();
+
+    // Auto-detect instruments from symbols
     const syms = [...new Set(trades.map(t => t.symbol))];
     const autoInstrs = [...new Set(syms.map(s =>
       s.startsWith("MNQ") ? "MNQ" : s.startsWith("NQ") ? "NQ" :
@@ -7170,13 +7195,17 @@ export default function TradingJournal() {
       s.startsWith("MGC") ? "MGC" : s.startsWith("GC") ? "GC" :
       s.startsWith("MCL") ? "MCL" : s.startsWith("CL") ? "CL" : s
     ))];
+
     setDetectedFormat(fmt);
     setForm(prev => ({
       ...prev,
       rawTradeData: importRaw,
       rawCsvFile: csvFileName ? { name: csvFileName, content: importRaw, savedAt: new Date().toISOString() } : (prev.rawCsvFile || null),
       parsedTrades: trades,
-      pnl: totalPnL.toFixed(2),
+      // Auto-fill: only populate if field is currently empty
+      date:        (!prev.date || prev.date === new Date().toISOString().split("T")[0]) && autoDate ? autoDate : prev.date,
+      pnl:         !prev.pnl ? totalPnL.toFixed(2) : prev.pnl,
+      commissions: !prev.commissions && totalComm > 0 ? totalComm.toFixed(2) : prev.commissions,
       instruments: prev.instruments?.length ? prev.instruments : autoInstrs,
       parseValidationLog: [...(prev.parseValidationLog || []).slice(-4), { ts: Date.now(), ...logEntry }],
     }));
@@ -7315,6 +7344,7 @@ export default function TradingJournal() {
   const [settingsTab, setSettingsTab] = useState("backup");
   const [importMsg, setImportMsg] = useState(null);
   const importFileRef = useRef(null);
+  const csvInputRef = useRef(null);
 
   const [exportData, setExportData] = useState(null);
   const [exportMeta, setExportMeta] = useState({ title: "EXPORT BACKUP", filename: "trading-journal-backup.json", desc: "Copy all of the text below \u2192 paste into a new file \u2192 save as", isCSV: false });
@@ -8696,11 +8726,11 @@ export default function TradingJournal() {
                   <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>UPLOAD CSV FILE</label>
                   <div
                     style={{ border: "2px dashed #1e3a5f", borderRadius: 6, padding: "20px 24px", textAlign: "center", cursor: "pointer", background: csvFileName ? "rgba(59,130,246,0.05)" : "transparent", transition: "all .15s" }}
-                    onClick={() => document.getElementById("csv-file-input").click()}
+                    onClick={() => csvInputRef.current && csvInputRef.current.click()}
                     onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.background = "rgba(59,130,246,0.08)"; }}
                     onDragLeave={e => { e.currentTarget.style.borderColor = "#1e3a5f"; e.currentTarget.style.background = csvFileName ? "rgba(59,130,246,0.05)" : "transparent"; }}
                     onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = "#1e3a5f"; e.currentTarget.style.background = "transparent"; const droppedFile = e.dataTransfer.files[0]; if (droppedFile) handleCsvUpload(droppedFile); }}>
-                    <input id="csv-file-input" type="file" accept=".csv,.txt,.tsv" style={{ display: "none" }} onChange={e => { handleCsvUpload(e.target.files[0]); e.target.value = ""; }} />
+                    <input ref={csvInputRef} type="file" accept=".csv,.txt,.tsv" style={{ display: "none" }} onChange={e => { handleCsvUpload(e.target.files[0]); e.target.value = ""; }} />
                     {csvFileName ? (
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
                         <span style={{ fontSize: 16 }}>📄</span>
