@@ -7378,7 +7378,7 @@ export default function TradingJournal() {
         textarea::placeholder,input::placeholder{color:#1e3a5f}
         select option{background:#0f1729}
         .entry-card{transition:all .15s;cursor:pointer}
-        .quote-row-fullbleed{width:100vw;position:relative;left:50%;right:50%;margin-left:-50vw;margin-right:-50vw;padding-left:40px;padding-right:40px;box-sizing:border-box}
+        .quote-row-fullbleed{width:calc(100% + 80px);margin-left:-40px;margin-right:-40px;padding-left:40px;padding-right:40px;box-sizing:border-box}
         .entry-card:hover{background:#0f1729!important;border-color:#1e3a5f!important}
         .pill{padding:6px 14px;border-radius:3px;border:1px solid #1e293b;font-size:12px;cursor:pointer;transition:all .15s;color:#94a3b8;background:transparent;letter-spacing:.05em;font-family:'DM Mono',monospace}
         .pill.sel{border-color:#3b82f6;background:#1e3a5f;color:#93c5fd}
@@ -8073,9 +8073,9 @@ export default function TradingJournal() {
         {headerQuotes.length > 0 && (view === "list" || view === "recap") && (() => {
           // Per-card configs: accent color, size role, layout style
           const CARD_STYLES = [
-            { accent: "#3b82f6", glow: "rgba(59,130,246,0.07)", label: "✦ QUOTE OF THE DAY ✦", textSize: 19, layout: "center" },
-            { accent: "#f59e0b", glow: "rgba(245,158,11,0.06)",  label: "✦ DISCIPLINE ✦",       textSize: 14, layout: "left"   },
-            { accent: "#4ade80", glow: "rgba(74,222,128,0.06)",  label: "✦ EDGE ✦",              textSize: 14, layout: "left"   },
+            { accent: "#3b82f6", glow: "rgba(59,130,246,0.07)", label: "✦ QUOTE OF THE DAY ✦", textSize: 22, layout: "center" },
+            { accent: "#f59e0b", glow: "rgba(245,158,11,0.06)",  label: "✦ DISCIPLINE ✦",       textSize: 16, layout: "left"   },
+            { accent: "#4ade80", glow: "rgba(74,222,128,0.06)",  label: "✦ EDGE ✦",              textSize: 16, layout: "left"   },
           ];
           return (
             <div className="quote-row-fullbleed" style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 20, marginBottom: 36 }}>
@@ -8083,7 +8083,7 @@ export default function TradingJournal() {
                 const cs = CARD_STYLES[i] || CARD_STYLES[2];
                 const isHero = i === 0;
                 return (
-                  <div key={q.id} onClick={() => setView("quotes")} style={{ borderRadius: 8, border: `1px solid ${cs.accent}28`, background: "#070d1a", padding: isHero ? "36px 40px 32px" : "30px 28px 26px", position: "relative", overflow: "hidden", textAlign: cs.layout, cursor: "pointer", transition: "border-color .15s" }} onMouseEnter={e => e.currentTarget.style.borderColor=`${cs.accent}55`} onMouseLeave={e => e.currentTarget.style.borderColor=`${cs.accent}28`}>
+                  <div key={q.id} onClick={() => setView("quotes")} style={{ borderRadius: 8, border: `1px solid ${cs.accent}28`, background: "#070d1a", padding: isHero ? "52px 44px 48px" : "44px 32px 40px", position: "relative", overflow: "hidden", textAlign: cs.layout, cursor: "pointer", transition: "border-color .15s" }} onMouseEnter={e => e.currentTarget.style.borderColor=`${cs.accent}55`} onMouseLeave={e => e.currentTarget.style.borderColor=`${cs.accent}28`}>
                     {/* Top accent line */}
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${cs.accent}, transparent)`, opacity: 0.7 }} />
                     {/* Glow */}
