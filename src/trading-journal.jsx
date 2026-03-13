@@ -8073,34 +8073,34 @@ export default function TradingJournal() {
           // Per-card configs: accent color, size role, layout style
           const CARD_STYLES = [
             { accent: "#3b82f6", glow: "rgba(59,130,246,0.07)", label: "✦ QUOTE OF THE DAY ✦", textSize: 19, layout: "center" },
-            { accent: "#f59e0b", glow: "rgba(245,158,11,0.06)",  label: "✦ DISCIPLINE ✦",       textSize: 13, layout: "left"   },
-            { accent: "#4ade80", glow: "rgba(74,222,128,0.06)",  label: "✦ EDGE ✦",              textSize: 13, layout: "left"   },
+            { accent: "#f59e0b", glow: "rgba(245,158,11,0.06)",  label: "✦ DISCIPLINE ✦",       textSize: 14, layout: "left"   },
+            { accent: "#4ade80", glow: "rgba(74,222,128,0.06)",  label: "✦ EDGE ✦",              textSize: 14, layout: "left"   },
           ];
           return (
-            <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 16, marginBottom: 28 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 20, marginBottom: 36 }}>
               {headerQuotes.map((q, i) => {
                 const cs = CARD_STYLES[i] || CARD_STYLES[2];
                 const isHero = i === 0;
                 return (
-                  <div key={q.id} style={{ borderRadius: 8, border: `1px solid ${cs.accent}28`, background: "#070d1a", padding: isHero ? "26px 32px 22px" : "20px 20px 18px", position: "relative", overflow: "hidden", textAlign: cs.layout }}>
+                  <div key={q.id} style={{ borderRadius: 8, border: `1px solid ${cs.accent}28`, background: "#070d1a", padding: isHero ? "36px 40px 32px" : "30px 28px 26px", position: "relative", overflow: "hidden", textAlign: cs.layout }}>
                     {/* Top accent line */}
                     <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${cs.accent}, transparent)`, opacity: 0.7 }} />
                     {/* Glow */}
                     <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 50% 0%, ${cs.glow} 0%, transparent 65%)`, pointerEvents: "none" }} />
                     {/* Ghost quote mark */}
-                    <div style={{ position: "absolute", right: isHero ? 14 : 8, top: isHero ? 2 : -2, fontFamily: "Georgia,serif", fontSize: isHero ? 90 : 64, color: cs.accent, opacity: 0.05, lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>"</div>
+                    <div style={{ position: "absolute", right: isHero ? 14 : 8, top: isHero ? 2 : -2, fontFamily: "Georgia,serif", fontSize: isHero ? 140 : 100, color: cs.accent, opacity: 0.07, lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>"</div>
                     {/* Label */}
-                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 10, color: cs.accent, letterSpacing: "0.3em", marginBottom: isHero ? 16 : 12, opacity: 0.85 }}>{cs.label}</div>
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 11, color: cs.accent, letterSpacing: "0.3em", marginBottom: isHero ? 20 : 14, opacity: 0.85 }}>{cs.label}</div>
                     {/* Category pill */}
-                    <div style={{ display: "inline-block", fontSize: 8, color: cs.accent, background: `${cs.accent}18`, border: `1px solid ${cs.accent}33`, padding: "2px 9px", borderRadius: 20, letterSpacing: "0.12em", marginBottom: isHero ? 14 : 10 }}>{q.category.toUpperCase()}</div>
+                    <div style={{ display: "inline-block", fontSize: 9, color: cs.accent, background: `${cs.accent}18`, border: `1px solid ${cs.accent}33`, padding: "3px 11px", borderRadius: 20, letterSpacing: "0.12em", marginBottom: isHero ? 18 : 14 }}>{q.category.toUpperCase()}</div>
                     {/* Quote text */}
-                    <div style={{ fontFamily: "Georgia,'Times New Roman',serif", fontStyle: "italic", fontSize: cs.textSize, color: isHero ? "#e2e8f0" : "#a8c4e0", lineHeight: 1.72, marginBottom: isHero ? 18 : 14, position: "relative", zIndex: 1 }}>
+                    <div style={{ fontFamily: "Georgia,'Times New Roman',serif", fontStyle: "italic", fontSize: isHero ? cs.textSize + 2 : cs.textSize + 1, color: isHero ? "#e2e8f0" : "#c8ddf0", lineHeight: 1.85, marginBottom: isHero ? 24 : 18, position: "relative", zIndex: 1 }}>
                       "{q.text}"
                     </div>
                     {/* Divider + Author */}
                     <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: cs.layout === "center" ? "center" : "flex-start" }}>
-                      <div style={{ width: isHero ? 24 : 14, height: 1, background: `${cs.accent}55` }} />
-                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: isHero ? 10 : 9, color: cs.accent, letterSpacing: "0.16em" }}>{q.author.toUpperCase()}</span>
+                      <div style={{ width: isHero ? 32 : 18, height: 1, background: `${cs.accent}66` }} />
+                      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: isHero ? 11 : 10, color: cs.accent, letterSpacing: "0.16em" }}>{q.author.toUpperCase()}</span>
                     </div>
                   </div>
                 );
