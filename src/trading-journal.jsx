@@ -1639,7 +1639,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
       {analyticsTab === "trade log" && (
         <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, overflow: "hidden" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderBottom: "1px solid #1e293b" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "80px 36px 76px 76px 80px 44px 56px 70px", width: "100%", fontSize: 10, color: "#94a3b8", letterSpacing: "0.08em" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "100px 44px 90px 90px 96px 52px 70px 90px", width: "100%", fontSize: 10, color: "#94a3b8", letterSpacing: "0.08em" }}>
               <div>SYMBOL</div><div>QTY</div><div style={{ textAlign: "right" }}>BUY</div><div style={{ textAlign: "right" }}>SELL</div><div style={{ textAlign: "right" }}>TIME</div><div style={{ textAlign: "right" }}>TYPE</div><div style={{ textAlign: "right" }}>COMM</div><div style={{ textAlign: "right" }}>NET P&L</div>
             </div>
             <button
@@ -1662,7 +1662,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
           </div>
           <div style={{ maxHeight: 360, overflowY: "auto" }}>
             {trades.map((t, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "80px 36px 76px 76px 80px 44px 56px 70px", padding: "7px 12px", borderBottom: "1px solid #0a0e1a", fontSize: 12, background: i % 2 === 0 ? "#0f1729" : "#0d1525" }}>
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "100px 44px 90px 90px 96px 52px 70px 90px", padding: "8px 14px", borderBottom: "1px solid #0a0e1a", fontSize: 12, background: i % 2 === 0 ? "#0f1729" : "#0d1525" }}>
                 <div style={{ color: "#93c5fd" }}>{t.symbol}{t.notes ? <span style={{ fontSize: 9, color: "#f59e0b", marginLeft: 3 }} title={t.notes}>●</span> : null}</div>
                 <div style={{ color: "#94a3b8" }}>{t.qty}</div>
                 <div style={{ textAlign: "right", color: "#e2e8f0" }}>{t.buyPrice.toFixed(2)}</div>
@@ -2329,13 +2329,13 @@ Rewritten summary:` }],
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
         <div>
           <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.1em" }}>{new Date(entry.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long" }).toUpperCase()}</div>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color: "#e2e8f0", letterSpacing: "0.1em" }}>{entry.date}</div>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 34, color: "#e2e8f0", letterSpacing: "0.1em" }}>{entry.date}</div>
         </div>
         <div style={{ flex: 1 }} />
         {entry.pnl !== "" && (
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 2 }}>NET P&L</div>
-            <div style={{ fontSize: 30, color: pnlColor(netPnl(entry)), fontWeight: 500 }}>{fmtPnl(netPnl(entry))}</div>
+            <div style={{ fontSize: 36, color: pnlColor(netPnl(entry)), fontWeight: 500 }}>{fmtPnl(netPnl(entry))}</div>
             {(parseFloat(entry.commissions)) ? (
               <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 3, lineHeight: 1.6 }}>
                 <span style={{ color: "#94a3b8" }}>gross {fmtPnl(entry.pnl)}</span>
@@ -3284,7 +3284,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
       {/* Year summary bar */}
       <div style={{ background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 6, padding: "14px 18px", marginBottom: 20 }}>
         <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 12 }}>YEAR SUMMARY · {selectedYear}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: equityPoints.length > 1 ? 14 : 0 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 14, marginBottom: equityPoints.length > 1 ? 18 : 0 }}>
           {[
             { l: "NET P&L", v: fmtPnl(yearNet), c: pnlColor(yearNet), hi: true },
             { l: "WIN WEEKS", v: `${weeks.filter(wk => byWeek[wk].reduce((s,e)=>s+netPnl(e),0) > 0).length}/${weeks.length}`, c: "#e2e8f0" },
@@ -3610,7 +3610,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
       {periodEntries.length > 0 && (
         <div style={{ background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 6, padding: "14px 18px", marginBottom: 20 }}>
           <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 12 }}>{PERIOD_LABELS[period]} SUMMARY · {selectedYear}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 14 }}>
             {[
               { l: "NET P&L", v: fmtPnl(periodNet), c: pnlColor(periodNet), hi: true },
               { l: "GROSS P&L", v: fmtPnl(periodGross), c: pnlColor(periodGross) },
@@ -4440,7 +4440,7 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
       {entries.length === 0 ? (
         <div style={{ textAlign: "center", padding: "60px 20px", color: "#64748b", fontSize: 13 }}>No journal entries yet. Start logging your trading days to generate AI recaps.</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "240px 1fr", gap: 16, alignItems: "stretch" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "280px 1fr", gap: 20, alignItems: "stretch" }}>
 
           {/* Left: period selector */}
           <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 6, overflow: "hidden", display: "flex", flexDirection: "column" }}>
@@ -6726,7 +6726,7 @@ function ParseReviewModal({ data, onConfirm, onCancel }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ background: "#0f1729", border: "1px solid #1e3a5f", borderRadius: 8, width: "100%", maxWidth: 820, maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 80px rgba(0,0,0,0.8)" }}>
+      <div style={{ background: "#0f1729", border: "1px solid #1e3a5f", borderRadius: 8, width: "100%", maxWidth: 960, maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 80px rgba(0,0,0,0.8)" }}>
         {/* Header */}
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
@@ -7387,12 +7387,12 @@ export default function TradingJournal() {
       `}</style>
 
       {/* Header */}
-      <div style={{ borderBottom: "1px solid #1e293b", padding: "12px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#0a0e1a", zIndex: 10 }}>
+      <div style={{ borderBottom: "1px solid #1e293b", padding: "14px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#0a0e1a", zIndex: 10 }}>
 
         {/* LEFT: Title + backup menu */}
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12, position: "relative", flexShrink: 0 }}>
-          <span onClick={() => { setView("list"); setActiveEntry(null); }} style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: "#3b82f6", letterSpacing: "0.15em", cursor: "pointer", transition: "color .15s" }} onMouseEnter={e => e.currentTarget.style.color="#60a5fa"} onMouseLeave={e => e.currentTarget.style.color="#3b82f6"}>TRADING JOURNAL</span>
-          <span style={{ fontSize: 10, color: "#1e3a5f", letterSpacing: "0.12em" }}>FUTURES</span>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 14, position: "relative", flexShrink: 0 }}>
+          <span onClick={() => { setView("list"); setActiveEntry(null); }} style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 30, color: "#3b82f6", letterSpacing: "0.15em", cursor: "pointer", transition: "color .15s" }} onMouseEnter={e => e.currentTarget.style.color="#60a5fa"} onMouseLeave={e => e.currentTarget.style.color="#3b82f6"}>TRADING JOURNAL</span>
+          <span style={{ fontSize: 11, color: "#334155", letterSpacing: "0.12em" }}>FUTURES</span>
           {/* Settings trigger */}
           <button
             onClick={() => { setShowSettings(true); setSettingsTab("backup"); setImportMsg(null); }}
@@ -7406,21 +7406,21 @@ export default function TradingJournal() {
 
         {/* RIGHT: Nav buttons */}
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
-          {view === "list" && propJournals.length > 0 && <button onClick={() => { setPropDashTab("overview"); setView("propdash"); }} style={{ background: "transparent", color: "#f59e0b", border: "1px solid #92400e", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.05em" }}>🏆 PROP DASHBOARD</button>}
-          {(view === "list" || view === "recap") && <button onClick={() => setView("recap")} style={{ background: view === "recap" ? "#1e3a5f" : "transparent", color: view === "recap" ? "#93c5fd" : "#94a3b8", border: `1px solid ${view === "recap" ? "#3b82f6" : "#1e293b"}`, padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.05em" }}>🤖 AI RECAP</button>}
-          {view === "list" && <button onClick={openNew} style={{ background: "#1d4ed8", color: "white", border: "none", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.05em" }}>+ NEW ENTRY</button>}
-          {view === "recap" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>← BACK</button>}
-          {view === "quotes" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>← BACK</button>}
-          {view === "reference" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>← BACK</button>}
-          {view === "propdash" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#f59e0b", border: "1px solid #92400e", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>← BACK</button>}
+          {view === "list" && propJournals.length > 0 && <button onClick={() => { setPropDashTab("overview"); setView("propdash"); }} style={{ background: "transparent", color: "#f59e0b", border: "1px solid #92400e", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.05em" }}>🏆 PROP DASHBOARD</button>}
+          {(view === "list" || view === "recap") && <button onClick={() => setView("recap")} style={{ background: view === "recap" ? "#1e3a5f" : "transparent", color: view === "recap" ? "#93c5fd" : "#94a3b8", border: `1px solid ${view === "recap" ? "#3b82f6" : "#1e293b"}`, padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.05em" }}>🤖 AI RECAP</button>}
+          {view === "list" && <button onClick={openNew} style={{ background: "#1d4ed8", color: "white", border: "none", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.05em" }}>+ NEW ENTRY</button>}
+          {view === "recap" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>← BACK</button>}
+          {view === "quotes" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>← BACK</button>}
+          {view === "reference" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>← BACK</button>}
+          {view === "propdash" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#f59e0b", border: "1px solid #92400e", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>← BACK</button>}
           {view === "new" && <>
-            <button onClick={() => { setView("list"); setActiveEntry(null); }} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>CANCEL</button>
-            <button onClick={handleSave} disabled={saving} style={{ background: "#1d4ed8", color: "white", border: "none", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", textTransform: "uppercase" }}>{saving ? "SAVING..." : saved ? "✓ SAVED" : activeEntry ? "✓ UPDATE" : "+ APPLY"}</button>
+            <button onClick={() => { setView("list"); setActiveEntry(null); }} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>CANCEL</button>
+            <button onClick={handleSave} disabled={saving} style={{ background: "#1d4ed8", color: "white", border: "none", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", textTransform: "uppercase" }}>{saving ? "SAVING..." : saved ? "✓ SAVED" : activeEntry ? "✓ UPDATE" : "+ APPLY"}</button>
           </>}
           {view === "detail" && <>
             <button onClick={() => setView("list")} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>← BACK</button>
-            <button onClick={() => openEdit(activeEntry)} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>EDIT</button>
-            <button onClick={() => handleDelete(activeEntry.id)} style={{ background: "transparent", color: "#ef4444", border: "1px solid #450a0a", padding: "9px 16px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>DELETE</button>
+            <button onClick={() => openEdit(activeEntry)} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>EDIT</button>
+            <button onClick={() => handleDelete(activeEntry.id)} style={{ background: "transparent", color: "#ef4444", border: "1px solid #450a0a", padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>DELETE</button>
           </>}
         </div>
       </div>
@@ -7497,7 +7497,7 @@ export default function TradingJournal() {
       {/* ── SETTINGS MODAL ─────────────────────────────────────────── */}
       {showSettings && (
         <div onClick={() => setShowSettings(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 230, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#0a0f1e', border: '1px solid #1e3a5f', borderRadius: 10, width: '100%', maxWidth: 740, maxHeight: '88vh', display: 'flex', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#0a0f1e', border: '1px solid #1e3a5f', borderRadius: 10, width: '100%', maxWidth: 860, maxHeight: '88vh', display: 'flex', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.7)' }}>
 
             {/* ── LEFT SIDEBAR NAV ── */}
             <div style={{ width: 192, background: '#070d1a', borderRight: '1px solid #0f1729', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
@@ -7863,7 +7863,7 @@ export default function TradingJournal() {
       )}
 
       {/* Journal tab strip */}
-      <div style={{ borderBottom: "1px solid #0f1729", background: "#060810", padding: "0 32px", display: "flex", alignItems: "stretch", gap: 2, overflowX: "auto", position: "sticky", top: 57, zIndex: 9 }}>
+      <div style={{ borderBottom: "1px solid #1e293b", background: "#060810", padding: "0 32px", display: "flex", alignItems: "stretch", gap: 2, overflowX: "auto", position: "sticky", top: 58, zIndex: 9 }}>
         {journals.map(j => {
           const isActive = j.id === activeJournalId;
           const isRenaming = renamingId === j.id;
@@ -7884,10 +7884,10 @@ export default function TradingJournal() {
               ) : (
                 <div
                   onClick={() => switchJournal(j.id)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", cursor: "pointer", borderBottom: `2px solid ${isActive ? "#3b82f6" : "transparent"}`, background: "transparent", transition: "all .15s", whiteSpace: "nowrap" }}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 20px", cursor: "pointer", borderBottom: `3px solid ${isActive ? "#3b82f6" : "transparent"}`, background: "transparent", transition: "all .15s", whiteSpace: "nowrap" }}
                   onMouseEnter={e => { if (!isActive) e.currentTarget.style.borderBottomColor = "#1e3a5f"; }}
                   onMouseLeave={e => { if (!isActive) e.currentTarget.style.borderBottomColor = "transparent"; }}>
-                  <span style={{ fontSize: 11, color: isActive ? "#93c5fd" : "#475569", letterSpacing: "0.06em", fontWeight: isActive ? 500 : 400 }}>
+                  <span style={{ fontSize: 13, color: isActive ? "#93c5fd" : "#64748b", letterSpacing: "0.06em", fontWeight: isActive ? 600 : 400 }}>
                     {j.type === JOURNAL_TYPES.PROP ? "🏆" : "💼"} {j.name.toUpperCase()}
                   </span>
                   {isActive && (
@@ -8066,7 +8066,7 @@ export default function TradingJournal() {
         );
       })()}
 
-      <div style={{ width: "100%", padding: "24px 32px" }}>
+      <div style={{ width: "100%", maxWidth: 1600, margin: "0 auto", padding: "28px 40px" }}>
 
         {/* ── QUOTE OF THE DAY ── */}
         {headerQuotes.length > 0 && (view === "list" || view === "recap") && (() => {
@@ -8077,7 +8077,7 @@ export default function TradingJournal() {
             { accent: "#4ade80", glow: "rgba(74,222,128,0.06)",  label: "✦ EDGE ✦",              textSize: 13, layout: "left"   },
           ];
           return (
-            <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 12, marginBottom: 24 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 16, marginBottom: 28 }}>
               {headerQuotes.map((q, i) => {
                 const cs = CARD_STYLES[i] || CARD_STYLES[2];
                 const isHero = i === 0;
@@ -8112,7 +8112,7 @@ export default function TradingJournal() {
         {/* LIST */}
         {view === "list" && (<>
           {filtered.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,280px))", gap: 12, marginBottom: 24, justifyContent: "center" }}>
               {[
                 { l: "TOTAL P&L", v: `${totalPnL >= 0 ? "+" : ""}$${Math.abs(totalPnL).toLocaleString("en-US", { maximumFractionDigits: 0 })}`, c: pnlColor(totalPnL) },
                 { l: "WIN DAYS", v: `${winDays} / ${filtered.length}`, c: "#4ade80" },
@@ -8128,20 +8128,20 @@ export default function TradingJournal() {
           )}
 
           {/* View toggle + month nav */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {[["calendar","📅 MONTHLY PERFORMANCE"],["list","📋 TRADE LIST"],["weekly","📈 WEEKLY PERFORMANCE"],["performance","📊 ANNUAL/QUARTERLY PERFORMANCE"]].map(([m, label]) => (
                 <button key={m} onClick={() => setListMode(m)}
-                  style={{ padding: "10px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: listMode === m ? "#1e3a5f" : "transparent", border: `1px solid ${listMode === m ? "#3b82f6" : "#1e293b"}`, color: listMode === m ? "#93c5fd" : "#94a3b8", whiteSpace: "nowrap" }}>
+                  style={{ padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: listMode === m ? "#1e3a5f" : "transparent", border: `1px solid ${listMode === m ? "#3b82f6" : "#1e293b"}`, color: listMode === m ? "#93c5fd" : "#94a3b8", whiteSpace: "nowrap" }}>
                   {label}
                 </button>
               ))}
               <button onClick={() => setView("reference")}
-                style={{ padding: "10px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", whiteSpace: "nowrap" }}>
+                style={{ padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", whiteSpace: "nowrap" }}>
                 📊 REFERENCE
               </button>
               <button onClick={() => setView("quotes")}
-                style={{ padding: "10px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", whiteSpace: "nowrap" }}>
+                style={{ padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", whiteSpace: "nowrap" }}>
                 💬 QUOTES
               </button>
             </div>
@@ -8166,10 +8166,10 @@ export default function TradingJournal() {
           </div>
 
           {entries.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "80px 0" }}>
-              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 44, color: "#1e3a5f", marginBottom: 12 }}>NO ENTRIES YET</div>
-              <div style={{ fontSize: 12, color: "#64748b" }}>Start journaling today. Your future self will thank you.</div>
-              <button onClick={openNew} style={{ marginTop: 24, background: "#1d4ed8", color: "white", border: "none", padding: "10px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>+ CREATE FIRST ENTRY</button>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "60vh", textAlign: "center", padding: "60px 0" }}>
+              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 56, color: "#1e3a5f", marginBottom: 14, letterSpacing: "0.08em" }}>NO ENTRIES YET</div>
+              <div style={{ fontSize: 13, color: "#475569", marginBottom: 32, letterSpacing: "0.04em" }}>Start journaling today. Your future self will thank you.</div>
+              <button onClick={openNew} style={{ background: "#1d4ed8", color: "white", border: "none", padding: "14px 36px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.08em" }}>+ CREATE FIRST ENTRY</button>
             </div>
           ) : listMode === "calendar" ? (
             <>
@@ -8292,7 +8292,7 @@ export default function TradingJournal() {
           {/* AI Recap banner */}
           {entries.length > 0 && (
             <div style={{ marginTop: 20, background: "#0a0e1a", border: "1px solid #1e3a5f", borderRadius: 6, overflow: "hidden" }}>
-              <div style={{ padding: "14px 20px", background: "#0a1628", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ padding: "18px 24px", background: "#0a1628", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <div style={{ fontSize: 12, color: "#93c5fd", letterSpacing: "0.1em", fontWeight: 600 }}>✦ AI WEEKLY & MONTHLY RECAP</div>
                   <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>Claude analyzes your journal notes and identifies patterns, lessons & focus areas</div>
@@ -8316,7 +8316,7 @@ export default function TradingJournal() {
         {view === "new" && (
           <div>
             <div style={{ marginBottom: 18 }}>
-              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: "#94a3b8", letterSpacing: "0.1em" }}>{activeEntry ? "EDIT ENTRY" : "NEW ENTRY"}</div>
+              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: "#94a3b8", letterSpacing: "0.1em" }}>{activeEntry ? "EDIT ENTRY" : "NEW ENTRY"}</div>
             </div>
             {!activeEntry && (() => {
               const yp = getYesterdayPlan();
@@ -8344,7 +8344,7 @@ export default function TradingJournal() {
                 </div>
               );
             })()}
-            <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 14, marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 18, marginBottom: 18 }}>
               <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>DATE</label><input type="date" value={form.date} onChange={e => f("date", e.target.value)} /></div>
               <div style={{ gridColumn: "2 / -1" }}><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>{isProp ? "INSTRUMENTS TRADED" : "TICKER / SYMBOL"}</label>
                 {isProp ? (() => {
@@ -8437,7 +8437,7 @@ export default function TradingJournal() {
               {TABS.map(t => (
                 <button key={t.id} disabled={t.disabled}
                   onClick={() => !t.disabled && setTab(t.id)}
-                  style={{ flex: 1, padding: "9px 0", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: t.disabled ? "not-allowed" : "pointer", transition: "all .15s", letterSpacing: "0.06em", opacity: t.disabled ? 0.35 : 1, background: tab === t.id ? "#1e3a5f" : "transparent", border: `1px solid ${tab === t.id ? "#3b82f6" : "#1e293b"}`, color: tab === t.id ? "#93c5fd" : "#94a3b8", textAlign: "center" }}>
+                  style={{ flex: 1, padding: "11px 0", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: t.disabled ? "not-allowed" : "pointer", transition: "all .15s", letterSpacing: "0.06em", opacity: t.disabled ? 0.35 : 1, background: tab === t.id ? "#1e3a5f" : "transparent", border: `1px solid ${tab === t.id ? "#3b82f6" : "#1e293b"}`, color: tab === t.id ? "#93c5fd" : "#94a3b8", textAlign: "center" }}>
                   {t.label.toUpperCase()}
                 </button>
               ))}
