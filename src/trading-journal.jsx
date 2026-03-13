@@ -609,11 +609,28 @@ RAW BROKER DATA:
 ${raw.slice(0, 12000)}`;
 
   const clean = await aiRequestText(ai, {
-    max_tokens: 4000,
-    timeoutMs: 30000,
+    max_tokens: 8000,
+    timeoutMs: 60000,
     messages: [{ role: 'user', content: prompt }],
   });
-  const trades = JSON.parse(clean);
+  // Strip any markdown fences or leading/trailing text the model may have added
+  let jsonStr = clean.trim();
+  // Remove ```json or ``` fences
+  jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+  // Find the first [ and last ] to extract just the array
+  const arrStart = jsonStr.indexOf('[');
+  const arrEnd = jsonStr.lastIndexOf(']');
+  if (arrStart === -1 || arrEnd === -1 || arrEnd <= arrStart) throw new Error("No JSON array found in response");
+  jsonStr = jsonStr.slice(arrStart, arrEnd + 1);
+  // Attempt to fix truncated JSON — if last trade object is incomplete, remove it
+  try {
+    JSON.parse(jsonStr);
+  } catch {
+    // Find last complete object ending with } before the closing ]
+    const lastComplete = jsonStr.lastIndexOf('},');
+    if (lastComplete > 0) jsonStr = jsonStr.slice(0, lastComplete + 1) + '\n]';
+  }
+  const trades = JSON.parse(jsonStr);
   if (!Array.isArray(trades)) throw new Error("Expected array");
   return trades.map(t => ({
     symbol: t.symbol || "",
