@@ -7401,7 +7401,10 @@ export default function TradingJournal() {
         URL.revokeObjectURL(url);
       } catch {}
     }
-    setTimeout(() => { setSaved(false); setView("list"); setActiveEntry(null); setForm(emptyEntry()); setTab("session"); setImportRaw(""); setImportError(""); setImportSuccess(false); }, 900);
+    // Navigate immediately — don't wait for the saved flash
+    setView("list"); setActiveEntry(null); setForm(emptyEntry()); setTab("session");
+    setImportRaw(""); setImportError(""); setImportSuccess(false); setCsvFileName(""); setCsvConfirmPending(null);
+    setTimeout(() => setSaved(false), 1500);
   };
 
   const handleDelete = async (id) => {
@@ -7424,7 +7427,7 @@ export default function TradingJournal() {
   const f = (field, val) => setForm(p => ({ ...p, [field]: val }));
   const pnlColor = (n) => { const v = parseFloat(n); return isNaN(v) ? "#e2e8f0" : v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#e2e8f0"; };
   const gradeColor = (g) => { if (!g) return "#94a3b8"; if (g.startsWith("A")) return "#4ade80"; if (g.startsWith("B")) return "#60a5fa"; if (g.startsWith("C")) return "#facc15"; return "#f87171"; };
-  const fmtPnl = (n) => { const v = parseFloat(n); if (isNaN(v)) return "-"; return `${v >= 0 ? "+" : ""}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
+  const fmtPnl = (n) => { const v = parseFloat(n); if (isNaN(v)) return "-"; return `${v >= 0 ? "+" : "-"}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
 
   const months = [...new Set(entries.map(e => e.date?.slice(0, 7)))].sort().reverse();
   const filtered = filterMonth ? entries.filter(e => e.date?.startsWith(filterMonth)) : entries;
