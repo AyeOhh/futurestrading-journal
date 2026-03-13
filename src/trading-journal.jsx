@@ -54,7 +54,7 @@ const AI_PROVIDER_REGISTRY = [
         const data = await res.json();
         if (data?.error) throw new Error(data.error.message || 'API returned an error');
         const text = data.content?.map(b => b.text || '').join('\n') || '';
-        const clean = text.replace(/```json|```/g, '').trim();
+        const clean = text.trim();
         if (!clean) throw new Error('Empty response from API');
         return clean;
       } finally { clearTimeout(t); }
@@ -86,7 +86,7 @@ const AI_PROVIDER_REGISTRY = [
         const data = await res.json();
         if (data?.error) throw new Error(data.error.message || 'API returned an error');
         const text = data.choices?.[0]?.message?.content || '';
-        const clean = text.replace(/```json|```/g, '').trim();
+        const clean = text.trim();
         if (!clean) throw new Error('Empty response from API');
         return clean;
       } finally { clearTimeout(t); }
@@ -129,7 +129,7 @@ const AI_PROVIDER_REGISTRY = [
         const data = await res.json();
         if (data?.error) throw new Error(data.error.message || 'API returned an error');
         const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('\n') || '';
-        const clean = text.replace(/```json|```/g, '').trim();
+        const clean = text.trim();
         if (!clean) throw new Error('Empty response from API');
         return clean;
       } finally { clearTimeout(t); }
@@ -159,7 +159,7 @@ const AI_PROVIDER_REGISTRY = [
         const data = await res.json();
         if (data?.error) throw new Error(data.error.message || 'API returned an error');
         const text = data.choices?.[0]?.message?.content || '';
-        const clean = text.replace(/```json|```/g, '').trim();
+        const clean = text.trim();
         if (!clean) throw new Error('Empty response from API');
         return clean;
       } finally { clearTimeout(t); }
@@ -579,7 +579,7 @@ RULES:
 6. For partial fills on the same order, combine them into one trade
 7. For "Exit Market" orders, these are closing trades — match to the most recent open position in that symbol
 
-CRITICAL OUTPUT RULE: Return ONLY a raw JSON array. No markdown, no code fences, no \`\`\`json, no \`\`\`, no explanation before or after. Your response must begin with [ and end with ]. Any wrapper will break the parser. Each trade object must have exactly these fields:
+CRITICAL OUTPUT RULE: Return ONLY a raw JSON array. No markdown. No code fences. No backticks of any kind. No explanation before or after. No trailing commas. All property names and string values must use double quotes only. Your response must begin with [ and end with ]. Anything other than a valid JSON array will break the parser. Each trade object must have exactly these fields:
 {
   "symbol": "MNQH6",
   "qty": 5,
@@ -7057,11 +7057,21 @@ export default function TradingJournal() {
     const newJ = { id, name, createdAt: Date.now(), type: newJournalType, config: newJournalConfig };
     await saveJournalsMeta([...journals, newJ]);
     await window.storage.set(`journal-entries-${id}`, JSON.stringify([]));
+    // Reset form state
     setNewJournalName("");
     setNewJournalType(JOURNAL_TYPES.PERSONAL);
     setNewJournalConfig(defaultPersonalConfig());
+    // Close modal immediately
     setShowJournalMgr(false);
-    switchJournal(id);
+    // Navigate to new journal home — set everything directly since switchJournal
+    // guards against same-id switch which can race with state updates
+    setActiveJournalId(id);
+    setEntries([]);
+    setView("list");
+    setActiveEntry(null);
+    setForm(emptyEntry());
+    setFilterMonth("");
+    setListMode("calendar");
   };
 
   const renameJournal = async (id, name) => {
@@ -8689,7 +8699,7 @@ export default function TradingJournal() {
                     onClick={() => document.getElementById("csv-file-input").click()}
                     onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.background = "rgba(59,130,246,0.08)"; }}
                     onDragLeave={e => { e.currentTarget.style.borderColor = "#1e3a5f"; e.currentTarget.style.background = csvFileName ? "rgba(59,130,246,0.05)" : "transparent"; }}
-                    onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = "#1e3a5f"; e.currentTarget.style.background = "transparent"; const f = e.dataTransfer.files[0]; if (f) handleCsvUpload(f); }}>
+                    onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = "#1e3a5f"; e.currentTarget.style.background = "transparent"; const droppedFile = e.dataTransfer.files[0]; if (droppedFile) handleCsvUpload(droppedFile); }}>
                     <input id="csv-file-input" type="file" accept=".csv,.txt,.tsv" style={{ display: "none" }} onChange={e => { handleCsvUpload(e.target.files[0]); e.target.value = ""; }} />
                     {csvFileName ? (
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
