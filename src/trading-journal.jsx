@@ -1,46 +1,71 @@
-import { useState, useEffect, useMemo, useRef } from "react";
-
-// ... [Storage adapter and constant definitions remain unchanged] ...
-
 // ── REFERENCE SECTION COMPONENT ──
 const ReferenceSection = ({ activeSection, setActiveSection }) => {
+  
+  // ── USER EDITABLE LINKS (Add your own here!) ──
+  const USER_LINKS = [
+    { 
+      name: "TradingView Charts", 
+      url: "https://www.tradingview.com", 
+      info: "Primary charting platform for technical analysis and backtesting." 
+    },
+    { 
+      name: "Economic Calendar", 
+      url: "https://www.forexfactory.com/calendar", 
+      info: "Monitor high-impact news events (CPI, FOMC, NFP) before trading." 
+    },
+    { 
+      name: "CME Group FedWatch", 
+      url: "https://www.cmegroup.com/markets/interest-rates/fedwatch-tool.html", 
+      info: "Probability of Fed interest rate changes based on 30-Day Fed Fund futures." 
+    },
+    // Add a new link like this:
+    // { name: "Site Name", url: "https://url.com", info: "Description of the site." },
+  ];
+
   const SECTIONS = [
-    { id: "sessions", label: "📈 SESSIONS" },
-    { id: "rules", label: "📜 TRADING RULES" },
-    { id: "checklist", label: "✅ CHECKLIST" },
-    { id: "specs", label: "🔍 CONTRACT SPECS" }
+    { id: "sessions",  label: "📈 SESSION MAP" },
+    { id: "ny_times",  label: "🗽 NEW YORK" },
+    { id: "news",      label: "📰 NEWS EVENTS" },
+    { id: "links",     label: "🔗 USEFUL LINKS" }, // New Tab
+    { id: "risk",      label: "🧮 RISK CALCU" },
+    { id: "specs",     label: "🔍 CONTRACT SPECS" }
   ];
 
   return (
     <div style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }}>
+      {/* ── HEADER ── */}
       <div style={{ marginBottom: 30 }}>
         <div style={{ fontSize: 11, color: "#3b82f6", letterSpacing: "0.2em", marginBottom: 10 }}>REFERENCE</div>
-        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: "#e2e8f0", letterSpacing: "0.1em", lineHeight: 1 }}>
-          TRADING <span style={{ color: "#00ff88" }}>SESSIONS</span>
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 36, color: "#e2e8f0", letterSpacing: "0.1em", lineHeight: 1 }}>
+          TRADING <span style={{ color: "#00ff88" }}>RESOURCES</span>
         </div>
       </div>
 
-      {/* ── SECTION TABS (Sizing Fixed) ── */}
-      <div style={{ display: "flex", gap: 10, marginBottom: 30, flexWrap: "wrap" }}>
+      {/* ── NAVIGATION GRID ── */}
+      <div style={{ 
+        display: "grid", 
+        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", 
+        gap: 12, 
+        marginBottom: 40 
+      }}>
         {SECTIONS.map(s => (
           <button 
             key={s.id} 
-            className="ref-sec-btn" 
             onClick={() => setActiveSection(s.id)} 
             style={{ 
-              flex: "1 1 auto", // Allows buttons to grow and fill space
-              minWidth: "140px",
-              padding: "12px 24px", // Increased padding to match main page
-              borderRadius: 6, 
+              padding: "16px 20px",
+              borderRadius: 8, 
               fontFamily: "inherit", 
-              fontSize: 12, // Increased font size for legibility
+              fontSize: 13, 
+              fontWeight: 600,
               cursor: "pointer", 
-              letterSpacing: "0.1em", 
-              transition: "all .15s", 
-              background: activeSection === s.id ? "#0a1628" : "transparent", 
-              border: `1px solid ${activeSection === s.id ? "#1e3a5f" : "#1e293b"}`, 
+              letterSpacing: "0.08em", 
+              transition: "all .2s ease", 
+              textAlign: "center",
+              background: activeSection === s.id ? "#0f1a2e" : "#070d1a", 
+              border: `1px solid ${activeSection === s.id ? "#3b82f6" : "#1e293b"}`, 
               color: activeSection === s.id ? "#93c5fd" : "#64748b",
-              fontWeight: activeSection === s.id ? 600 : 400
+              boxShadow: activeSection === s.id ? "0 4px 12px rgba(59, 130, 246, 0.15)" : "none"
             }}
           >
             {s.label}
@@ -48,34 +73,55 @@ const ReferenceSection = ({ activeSection, setActiveSection }) => {
         ))}
       </div>
 
-      {/* ── TAB CONTENT: SESSIONS MAP (Sizing Fixed) ── */}
-      {activeSection === "sessions" && (
-        <div style={{ animation: "refFadeIn .3s ease", width: "100%" }}>
-          <div style={{ 
-            background: "#060b18", 
-            border: "1px solid #1e293b", 
-            borderRadius: 8, 
-            padding: "25px", // Increased inner padding
-            width: "100%",
-            boxSizing: "border-box" 
-          }}>
-            <div style={{ fontSize: 11, color: "#64748b", letterSpacing: "0.15em", marginBottom: 20 }}>TIME WINDOWS</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
-              <div style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.8 }}>
-                Primary window: <strong style={{ color: "#00ff88" }}>9:30 AM–12:00 PM EST</strong><br/>
-                Secondary window: <strong style={{ color: "#ff8c00" }}>3:00–4:00 PM EST</strong><br/>
-                <span style={{ color: "#f87171" }}>All Lucid Flex positions must close by 4:45 PM EST.</span>
-              </div>
+      {/* ── TAB CONTENT: LINKS TAB ── */}
+      <div style={{ 
+        background: "#060b18", 
+        border: "1px solid #1e293b", 
+        borderRadius: 10, 
+        padding: "30px", 
+        width: "100%",
+        boxSizing: "border-box" 
+      }}>
+        {activeSection === "links" && (
+          <div style={{ animation: "refFadeIn .3s ease" }}>
+            <div style={{ fontSize: 12, color: "#3b82f6", letterSpacing: "0.15em", marginBottom: 25 }}>SAVED RESOURCES</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 }}>
+              {USER_LINKS.map((link, idx) => (
+                <div key={idx} style={{ 
+                  background: "#0a0e1a", 
+                  border: "1px solid #1e3a5f", 
+                  borderRadius: 8, 
+                  padding: "18px",
+                  transition: "transform 0.2s ease, border-color 0.2s ease"
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>{link.name}</div>
+                    <a 
+                      href={link.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{ 
+                        fontSize: 11, 
+                        color: "#00ff88", 
+                        textDecoration: "none", 
+                        border: "1px solid #00ff8844", 
+                        padding: "4px 10px", 
+                        borderRadius: 4,
+                        background: "#00ff8808"
+                      }}
+                    >
+                      OPEN LINK ↗
+                    </a>
+                  </div>
+                  <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>{link.info}</div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ... [Additional tab content logic] ... */}
+        {/* ... (Keep other activeSection logic like "sessions", "news", etc.) ... */}
+      </div>
     </div>
   );
 };
-
-export default function TradingJournal() {
-  // ... [Main component logic] ...
-}
