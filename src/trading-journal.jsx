@@ -1,7 +1,7 @@
 // ── REFERENCE SECTION COMPONENT ──
 const ReferenceSection = ({ activeSection, setActiveSection }) => {
   
-  // ── USER EDITABLE LINKS (Add your own here!) ──
+  // ── USER EDITABLE LINKS ──
   const USER_LINKS = [
     { 
       name: "TradingView Charts", 
@@ -17,16 +17,14 @@ const ReferenceSection = ({ activeSection, setActiveSection }) => {
       name: "CME Group FedWatch", 
       url: "https://www.cmegroup.com/markets/interest-rates/fedwatch-tool.html", 
       info: "Probability of Fed interest rate changes based on 30-Day Fed Fund futures." 
-    },
-    // Add a new link like this:
-    // { name: "Site Name", url: "https://url.com", info: "Description of the site." },
+    }
   ];
 
   const SECTIONS = [
     { id: "sessions",  label: "📈 SESSION MAP" },
     { id: "ny_times",  label: "🗽 NEW YORK" },
     { id: "news",      label: "📰 NEWS EVENTS" },
-    { id: "links",     label: "🔗 USEFUL LINKS" }, // New Tab
+    { id: "links",     label: "🔗 USEFUL LINKS" },
     { id: "risk",      label: "🧮 RISK CALCU" },
     { id: "specs",     label: "🔍 CONTRACT SPECS" }
   ];
@@ -73,7 +71,7 @@ const ReferenceSection = ({ activeSection, setActiveSection }) => {
         ))}
       </div>
 
-      {/* ── TAB CONTENT: LINKS TAB ── */}
+      {/* ── CONTENT AREA ── */}
       <div style={{ 
         background: "#060b18", 
         border: "1px solid #1e293b", 
@@ -82,46 +80,11 @@ const ReferenceSection = ({ activeSection, setActiveSection }) => {
         width: "100%",
         boxSizing: "border-box" 
       }}>
+        
+        {/* LINKS TAB */}
         {activeSection === "links" && (
           <div style={{ animation: "refFadeIn .3s ease" }}>
             <div style={{ fontSize: 12, color: "#3b82f6", letterSpacing: "0.15em", marginBottom: 25 }}>SAVED RESOURCES</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20 }}>
               {USER_LINKS.map((link, idx) => (
-                <div key={idx} style={{ 
-                  background: "#0a0e1a", 
-                  border: "1px solid #1e3a5f", 
-                  borderRadius: 8, 
-                  padding: "18px",
-                  transition: "transform 0.2s ease, border-color 0.2s ease"
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>{link.name}</div>
-                    <a 
-                      href={link.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      style={{ 
-                        fontSize: 11, 
-                        color: "#00ff88", 
-                        textDecoration: "none", 
-                        border: "1px solid #00ff8844", 
-                        padding: "4px 10px", 
-                        borderRadius: 4,
-                        background: "#00ff8808"
-                      }}
-                    >
-                      OPEN LINK ↗
-                    </a>
-                  </div>
-                  <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>{link.info}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ... (Keep other activeSection logic like "sessions", "news", etc.) ... */}
-      </div>
-    </div>
-  );
-};
+                <div key={idx} style={{ background: "#0a0e1a", border: "1px solid #1e3a5f", borderRadius: 8, padding: "1
