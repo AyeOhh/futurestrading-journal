@@ -7122,6 +7122,7 @@ export default function TradingJournal() {
   const [renamingId, setRenamingId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [confirmDeleteEntry, setConfirmDeleteEntry] = useState(false);
 
   const [view, setView] = useState("list");
   const [propDashTab, setPropDashTab] = useState("overview"); // "overview" | "account" | "cumulative"
@@ -7776,9 +7777,19 @@ export default function TradingJournal() {
             <button onClick={handleSave} disabled={saving} style={{ background: "#1d4ed8", color: "white", border: "none", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", textTransform: "uppercase" }}>{saving ? "SAVING..." : saved ? "✓ SAVED" : activeEntry ? "✓ UPDATE" : "+ APPLY"}</button>
           </>}
           {view === "detail" && <>
-            <button onClick={() => setView("list")} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>← BACK</button>
-            <button onClick={() => openEdit(activeEntry)} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>EDIT</button>
-            <button onClick={() => handleDelete(activeEntry.id)} style={{ background: "transparent", color: "#ef4444", border: "1px solid #450a0a", padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>DELETE</button>
+            <button onClick={() => { setView("list"); setConfirmDeleteEntry(false); }} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>← BACK</button>
+            <button onClick={() => { openEdit(activeEntry); setConfirmDeleteEntry(false); }} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>EDIT</button>
+            {confirmDeleteEntry ? (
+              <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <span style={{ fontSize: 11, color: "#f87171", letterSpacing: "0.06em" }}>Delete this entry?</span>
+                <button onClick={() => { handleDelete(activeEntry.id); setConfirmDeleteEntry(false); }}
+                  style={{ background: "#450a0a", border: "1px solid #7f1d1d", color: "#f87171", padding: "11px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em" }}>YES DELETE</button>
+                <button onClick={() => setConfirmDeleteEntry(false)}
+                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "11px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em" }}>CANCEL</button>
+              </span>
+            ) : (
+              <button onClick={() => setConfirmDeleteEntry(true)} style={{ background: "transparent", color: "#ef4444", border: "1px solid #450a0a", padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>DELETE</button>
+            )}
           </>}
         </div>
       </div>
