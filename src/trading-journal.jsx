@@ -1,7 +1,7 @@
 // ── REFERENCE SECTION COMPONENT ──
 const ReferenceSection = ({ activeSection, setActiveSection }) => {
   
-  // ── USER EDITABLE LINKS (Add your own here!) ──
+  // ── USER EDITABLE LINKS ──
   const USER_LINKS = [
     { 
       name: "TradingView Charts", 
@@ -76,11 +76,5 @@ const ReferenceSection = ({ activeSection, setActiveSection }) => {
         background: "#060b18", 
         border: "1px solid #1e293b", 
         borderRadius: 10, 
-        padding: "30px", 
-        width: "100%",
-        boxSizing: "border-box" 
-      }}>
-        
-        {/* LINKS TAB */}
-        {activeSection === "links" && (
-          <div style={{ animation: "refFadeIn .3s ease" }}></div>
+        padding: "30px
+      
