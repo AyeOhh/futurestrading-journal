@@ -9735,6 +9735,36 @@ export default function TradingJournal() {
                 <div style={{ fontSize: 10, color: "#1e3a5f", lineHeight: 1.6 }}>
                   💡 <strong style={{ color: "#64748b" }}>Tip:</strong> Export the <strong style={{ color: "#64748b" }}>Orders</strong> or <strong style={{ color: "#64748b" }}>Trade History</strong> report from your broker. Cancelled and rejected orders are automatically ignored.
                 </div>
+
+                {/* ── TRADE LOG RECAP — appears after successful import ── */}
+                {form.parsedTrades?.length > 0 && (() => {
+                  const trades = form.parsedTrades;
+                  return (
+                    <div style={{ marginTop: 4 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                        <div style={{ height: 1, flex: 1, background: "linear-gradient(90deg, #1e3a5f, transparent)" }} />
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.2em" }}>✓ {trades.length} TRADES IMPORTED — REVIEW BELOW</div>
+                        <div style={{ height: 1, flex: 1, background: "linear-gradient(90deg, transparent, #1e3a5f)" }} />
+                      </div>
+                      <AnalyticsPanel
+                        a={(() => {
+                          const wins = trades.filter(t => Number.isFinite(t.pnl) && t.pnl > 0);
+                          const losses = trades.filter(t => Number.isFinite(t.pnl) && t.pnl < 0);
+                          const totalPnL = trades.reduce((s,t) => s + (Number.isFinite(t.pnl) ? t.pnl : 0), 0);
+                          const totalFees = trades.reduce((s,t) => s + (Number.isFinite(t.commission) ? t.commission : 0), 0);
+                          const bySymbol = trades.reduce((acc,t) => { if(t.symbol){ acc[t.symbol]=(acc[t.symbol]||0)+(Number.isFinite(t.pnl)?t.pnl:0); } return acc; }, {});
+                          return { totalPnL, wins: wins.length, losses: losses.length, totalFees, bySymbol, trades: trades.length };
+                        })()}
+                        trades={trades}
+                        pnlColor={pnlColor}
+                        fmtPnl={fmtPnl}
+                        analyticsTab={analyticsTab}
+                        setAnalyticsTab={setAnalyticsTab}
+                        totalFees={parseFloat(form.commissions) || 0}
+                      />
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
