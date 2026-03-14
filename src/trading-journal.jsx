@@ -1478,6 +1478,7 @@ function ChartScreenshotZone({ screenshots = [], onChange }) {
 
 function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalyticsTab, totalFees = 0, dangerLine = null }) {
   const ATABS = ["overview", "by session", "trade log"];
+  const [expandedTrade, setExpandedTrade] = useState(null);
   const netTotal = a.totalPnL - totalFees;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -1847,64 +1848,197 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
           })()}
         </div>
       )}
-      {analyticsTab === "trade log" && (
-        <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, overflow: "hidden" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", borderBottom: "1px solid #1e293b" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "100px 44px 90px 90px 96px 52px 70px 90px", width: "100%", fontSize: 10, color: "#94a3b8", letterSpacing: "0.08em" }}>
-              <div>SYMBOL</div><div>QTY</div><div style={{ textAlign: "right" }}>BUY</div><div style={{ textAlign: "right" }}>SELL</div><div style={{ textAlign: "right" }}>TIME</div><div style={{ textAlign: "right" }}>TYPE</div><div style={{ textAlign: "right" }}>COMM</div><div style={{ textAlign: "right" }}>NET P&L</div>
-            </div>
-            <button
-              onClick={() => {
-                const header = "Symbol,Qty,Buy Price,Buy Time,Duration,Sell Time,Sell Price,Gross P&L,Commission,Net P&L,Order Type,Multiplier,Notes\n";
-                const rows = trades.map(t =>
-                  `${t.symbol},${t.qty},${t.buyPrice},${t.buyTime || ""},${t.duration || ""},${t.sellTime || ""},${t.sellPrice},${t.pnl.toFixed(2)},${(t.commission||0).toFixed(2)},${(t.pnl-(t.commission||0)).toFixed(2)},${t.orderType||"MKT"},${t.multiplier||""},${t.notes||""}`
-                ).join("\n");
-                const blob = new Blob([header + rows], { type: "text/csv" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url; a.download = `trades-export.csv`; a.click();
-                URL.revokeObjectURL(url);
-              }}
-              style={{ background: "transparent", border: "1px solid #1e293b", color: "#64748b", padding: "3px 10px", borderRadius: 3, fontSize: 9, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.06em", whiteSpace: "nowrap", marginLeft: 10, flexShrink: 0, transition: "all .15s" }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.color = "#93c5fd"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#475569"; }}>
-              ↓ CSV
-            </button>
-            {entry?.rawCsvFile?.content && (
-              <button
-                onClick={() => {
-                  const blob = new Blob([entry.rawCsvFile.content], { type: "text/csv" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url; a.download = entry.rawCsvFile.name || `trades-original.csv`; a.click();
-                  URL.revokeObjectURL(url);
-                }}
-                style={{ background: "transparent", border: "1px solid #1e293b", color: "#64748b", padding: "3px 10px", borderRadius: 3, fontSize: 9, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.06em", whiteSpace: "nowrap", marginLeft: 4, flexShrink: 0, transition: "all .15s" }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "#4ade80"; e.currentTarget.style.color = "#4ade80"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#475569"; }}
-                title={`Download original: ${entry?.rawCsvFile?.name}`}>
-                ↓ ORIGINAL CSV
-              </button>
-            )}
-          </div>
-          <div style={{ maxHeight: 360, overflowY: "auto" }}>
-            {trades.map((t, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "100px 44px 90px 90px 96px 52px 70px 90px", padding: "8px 14px", borderBottom: "1px solid #0a0e1a", fontSize: 12, background: i % 2 === 0 ? "#0f1729" : "#0d1525" }}>
-                <div style={{ color: "#93c5fd" }}>{t.symbol}{t.notes ? <span style={{ fontSize: 9, color: "#f59e0b", marginLeft: 3 }} title={t.notes}>●</span> : null}</div>
-                <div style={{ color: "#94a3b8" }}>{t.qty}</div>
-                <div style={{ textAlign: "right", color: "#e2e8f0" }}>{t.buyPrice.toFixed(2)}</div>
-                <div style={{ textAlign: "right", color: "#e2e8f0" }}>{t.sellPrice.toFixed(2)}</div>
-                <div style={{ textAlign: "right", color: "#94a3b8", fontSize: 10 }}>{t.sellTime?.split(" ")[1] || ""}</div>
-                <div style={{ textAlign: "right", fontSize: 10 }}>
-                  <span style={{ padding: "1px 5px", borderRadius: 3, background: t.orderType === "LMT" ? "rgba(147,197,253,0.12)" : t.orderType === "STP" ? "rgba(251,146,60,0.12)" : "rgba(148,163,184,0.08)", color: t.orderType === "LMT" ? "#93c5fd" : t.orderType === "STP" ? "#fb923c" : "#64748b", letterSpacing: "0.05em" }}>{t.orderType || "MKT"}</span>
-                </div>
-                <div style={{ textAlign: "right", color: "#475569", fontSize: 11 }}>{t.commission > 0 ? `-$${t.commission.toFixed(2)}` : "—"}</div>
-                <div style={{ textAlign: "right", color: t.pnl > 0 ? "#4ade80" : t.pnl < 0 ? "#f87171" : "#94a3b8", fontWeight: 500 }}>{fmtPnl(t.pnl - (t.commission||0))}</div>
+      {analyticsTab === "trade log" && (() => {
+        const wins       = trades.filter(t => Number.isFinite(t.pnl) && t.pnl > 0);
+        const losses     = trades.filter(t => Number.isFinite(t.pnl) && t.pnl < 0);
+        const netPnls    = trades.map(t => Number.isFinite(t.pnl) ? (t.pnl - (t.commission||0)) : 0);
+        const totalNet   = netPnls.reduce((s,v) => s+v, 0);
+        const avgWin     = wins.length  ? wins.reduce((s,t)=>s+t.pnl,0)/wins.length   : 0;
+        const avgLoss    = losses.length? losses.reduce((s,t)=>s+t.pnl,0)/losses.length: 0;
+        const bestTrade  = wins.length  ? Math.max(...wins.map(t=>t.pnl))   : 0;
+        const worstTrade = losses.length? Math.min(...losses.map(t=>t.pnl)) : 0;
+        const winRate    = trades.length? Math.round(wins.length/trades.length*100) : 0;
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+            {/* ── SUMMARY HEADER ── */}
+            <div style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 6, padding: "14px 18px" }}>
+              <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.15em", marginBottom: 12 }}>SESSION SUMMARY</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
+                {[
+                  { label: "TRADES",    value: trades.length,                                           color: "#94a3b8" },
+                  { label: "WIN RATE",  value: `${winRate}%`,                                           color: winRate >= 50 ? "#4ade80" : "#f87171" },
+                  { label: "NET P&L",   value: `${totalNet >= 0 ? "+" : ""}$${Math.abs(totalNet).toFixed(2)}`, color: totalNet > 0 ? "#4ade80" : totalNet < 0 ? "#f87171" : "#94a3b8" },
+                  { label: "W / L",     value: `${wins.length} / ${losses.length}`,                    color: "#94a3b8" },
+                ].map(s => (
+                  <div key={s.label} style={{ background: "#0f1729", borderRadius: 4, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.12em", marginBottom: 4 }}>{s.label}</div>
+                    <div style={{ fontSize: 14, color: s.color, fontWeight: 600 }}>{s.value}</div>
+                  </div>
+                ))}
               </div>
-            ))}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                {[
+                  { label: "AVG WIN",    value: avgWin  ? `+$${avgWin.toFixed(2)}`   : "—", color: "#4ade80" },
+                  { label: "AVG LOSS",   value: avgLoss ? `-$${Math.abs(avgLoss).toFixed(2)}` : "—", color: "#f87171" },
+                  { label: "BEST TRADE", value: bestTrade  ? `+$${bestTrade.toFixed(2)}`        : "—", color: "#4ade80" },
+                  { label: "WORST TRADE",value: worstTrade ? `-$${Math.abs(worstTrade).toFixed(2)}` : "—", color: "#f87171" },
+                ].map(s => (
+                  <div key={s.label} style={{ background: "#0f1729", borderRadius: 4, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.12em", marginBottom: 4 }}>{s.label}</div>
+                    <div style={{ fontSize: 13, color: s.color, fontWeight: 600 }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── TRADE LIST ── */}
+            <div style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 6, overflow: "hidden" }}>
+
+              {/* Table header + export buttons */}
+              <div style={{ display: "flex", alignItems: "center", padding: "8px 14px", borderBottom: "1px solid #1e293b", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "28px 36px 80px 50px 100px 100px 60px 88px 88px", flex: 1, fontSize: 9, color: "#475569", letterSpacing: "0.1em" }}>
+                  <div></div>
+                  <div>#</div>
+                  <div>SYMBOL</div>
+                  <div style={{ textAlign: "center" }}>DIR</div>
+                  <div style={{ textAlign: "right" }}>ENTRY</div>
+                  <div style={{ textAlign: "right" }}>EXIT</div>
+                  <div style={{ textAlign: "center" }}>TYPE</div>
+                  <div style={{ textAlign: "right" }}>DURATION</div>
+                  <div style={{ textAlign: "right" }}>NET P&L</div>
+                </div>
+                <button onClick={() => {
+                  const header = "Symbol,Qty,Buy Price,Buy Time,Duration,Sell Time,Sell Price,Gross P&L,Commission,Net P&L,Order Type,Direction,Notes\n";
+                  const rows = trades.map(t =>
+                    `${t.symbol||""},${t.qty||""},${Number.isFinite(t.buyPrice)?t.buyPrice:""},${t.buyTime||""},${t.duration||""},${t.sellTime||""},${Number.isFinite(t.sellPrice)?t.sellPrice:""},${Number.isFinite(t.pnl)?t.pnl.toFixed(2):""},${Number.isFinite(t.commission)?(t.commission||0).toFixed(2):"0"},${Number.isFinite(t.pnl)?((t.pnl-(t.commission||0)).toFixed(2)):""},${t.orderType||"MKT"},${t.direction||""},${t.notes||""}`
+                  ).join("\n");
+                  const blob = new Blob([header+rows],{type:"text/csv"});
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a"); a.href=url; a.download="trades-export.csv"; a.click(); URL.revokeObjectURL(url);
+                }}
+                  style={{ background:"transparent", border:"1px solid #1e293b", color:"#475569", padding:"3px 10px", borderRadius:3, fontSize:9, cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.06em", whiteSpace:"nowrap", flexShrink:0, transition:"all .15s" }}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor="#3b82f6";e.currentTarget.style.color="#93c5fd";}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor="#1e293b";e.currentTarget.style.color="#475569";}}>↓ CSV</button>
+                {entry?.rawCsvFile?.content && (
+                  <button onClick={() => {
+                    const blob = new Blob([entry.rawCsvFile.content],{type:"text/csv"});
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a"); a.href=url; a.download=entry.rawCsvFile.name||"trades-original.csv"; a.click(); URL.revokeObjectURL(url);
+                  }}
+                    style={{ background:"transparent", border:"1px solid #1e293b", color:"#475569", padding:"3px 10px", borderRadius:3, fontSize:9, cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.06em", whiteSpace:"nowrap", flexShrink:0, transition:"all .15s" }}
+                    onMouseEnter={e=>{e.currentTarget.style.borderColor="#4ade80";e.currentTarget.style.color="#4ade80";}}
+                    onMouseLeave={e=>{e.currentTarget.style.borderColor="#1e293b";e.currentTarget.style.color="#475569";}}>↓ ORIGINAL</button>
+                )}
+              </div>
+
+              {/* Expandable rows */}
+              <div style={{ maxHeight: 440, overflowY: "auto" }}>
+                {(() => {
+                  let cumPnl = 0;
+                  return trades.map((t, i) => {
+                    const net    = Number.isFinite(t.pnl) ? (t.pnl - (t.commission||0)) : null;
+                    const isWin  = net !== null && net > 0;
+                    const isLoss = net !== null && net < 0;
+                    if (net !== null) cumPnl += net;
+                    const expanded = expandedTrade === i;
+                    const dir = t.direction || (t.qty > 0 ? "LONG" : "SHORT") || "—";
+                    const entryTime = t.buyTime?.split(" ")[1]  || t.buyTime  || "—";
+                    const exitTime  = t.sellTime?.split(" ")[1] || t.sellTime || "—";
+                    const rowBg = expanded ? "#0f1e38" : i % 2 === 0 ? "#0f1729" : "#0d1525";
+                    const accentColor = isWin ? "#4ade80" : isLoss ? "#f87171" : "#94a3b8";
+                    return (
+                      <div key={i}>
+                        {/* Collapsed row */}
+                        <div onClick={() => setExpandedTrade(expanded ? null : i)}
+                          style={{ display: "grid", gridTemplateColumns: "28px 36px 80px 50px 100px 100px 60px 88px 88px", padding: "9px 14px", borderBottom: expanded ? "none" : "1px solid #0a0e1a", fontSize: 12, background: rowBg, cursor: "pointer", transition: "background .12s" }}
+                          onMouseEnter={e => { if (!expanded) e.currentTarget.style.background = "#131e35"; }}
+                          onMouseLeave={e => { if (!expanded) e.currentTarget.style.background = rowBg; }}>
+                          {/* Expand arrow */}
+                          <div style={{ color: "#334155", fontSize: 9, display: "flex", alignItems: "center" }}>{expanded ? "▼" : "▶"}</div>
+                          {/* Trade # */}
+                          <div style={{ color: "#334155", fontSize: 11 }}>{i+1}</div>
+                          {/* Symbol + win/loss dot */}
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <div style={{ width: 6, height: 6, borderRadius: "50%", background: accentColor, flexShrink: 0 }} />
+                            <span style={{ color: "#93c5fd", fontWeight: 600 }}>{t.symbol || "—"}</span>
+                          </div>
+                          {/* Direction badge */}
+                          <div style={{ textAlign: "center" }}>
+                            <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, letterSpacing: "0.06em",
+                              background: dir === "LONG" ? "rgba(74,222,128,0.1)" : dir === "SHORT" ? "rgba(248,113,113,0.1)" : "rgba(148,163,184,0.08)",
+                              color:      dir === "LONG" ? "#4ade80"              : dir === "SHORT" ? "#f87171"              : "#64748b" }}>{dir}</span>
+                          </div>
+                          {/* Entry price @ time */}
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ color: "#e2e8f0", fontSize: 12 }}>{Number.isFinite(t.buyPrice) ? `$${t.buyPrice.toFixed(2)}` : "—"}</div>
+                            <div style={{ color: "#475569", fontSize: 9 }}>{entryTime}</div>
+                          </div>
+                          {/* Exit price @ time */}
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ color: "#e2e8f0", fontSize: 12 }}>{Number.isFinite(t.sellPrice) ? `$${t.sellPrice.toFixed(2)}` : "—"}</div>
+                            <div style={{ color: "#475569", fontSize: 9 }}>{exitTime}</div>
+                          </div>
+                          {/* Order type */}
+                          <div style={{ textAlign: "center" }}>
+                            <span style={{ fontSize: 9, padding: "2px 5px", borderRadius: 3, letterSpacing: "0.05em",
+                              background: t.orderType === "LMT" ? "rgba(147,197,253,0.12)" : t.orderType === "STP" ? "rgba(251,146,60,0.12)" : "rgba(148,163,184,0.08)",
+                              color:      t.orderType === "LMT" ? "#93c5fd"                : t.orderType === "STP" ? "#fb923c"                : "#64748b" }}>{t.orderType || "MKT"}</span>
+                          </div>
+                          {/* Duration */}
+                          <div style={{ textAlign: "right", color: "#64748b", fontSize: 11 }}>{t.duration || "—"}</div>
+                          {/* Net P&L */}
+                          <div style={{ textAlign: "right", color: accentColor, fontWeight: 600, fontSize: 13 }}>
+                            {net !== null ? fmtPnl(net) : "—"}
+                          </div>
+                        </div>
+
+                        {/* Expanded detail panel */}
+                        {expanded && (
+                          <div style={{ background: "#0f1e38", borderBottom: "1px solid #0a0e1a", padding: "12px 14px 14px 52px" }}>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 10 }}>
+                              {[
+                                { label: "GROSS P&L",  value: Number.isFinite(t.pnl) ? fmtPnl(t.pnl) : "—",             color: t.pnl > 0 ? "#4ade80" : t.pnl < 0 ? "#f87171" : "#94a3b8" },
+                                { label: "COMMISSION", value: (t.commission > 0 && Number.isFinite(t.commission)) ? `-$${t.commission.toFixed(2)}` : "—", color: "#f59e0b" },
+                                { label: "NET P&L",    value: net !== null ? fmtPnl(net) : "—",                          color: accentColor },
+                                { label: "RUNNING P&L",value: `${cumPnl >= 0 ? "+" : ""}$${Math.abs(cumPnl).toFixed(2)}`, color: cumPnl > 0 ? "#4ade80" : cumPnl < 0 ? "#f87171" : "#94a3b8" },
+                              ].map(d => (
+                                <div key={d.label} style={{ background: "#0a1628", borderRadius: 4, padding: "7px 10px" }}>
+                                  <div style={{ fontSize: 8, color: "#334155", letterSpacing: "0.12em", marginBottom: 3 }}>{d.label}</div>
+                                  <div style={{ fontSize: 13, color: d.color, fontWeight: 600 }}>{d.value}</div>
+                                </div>
+                              ))}
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+                              {[
+                                { label: "QTY / SIZE",   value: t.qty ?? "—",                                                          color: "#e2e8f0" },
+                                { label: "ENTRY TIME",   value: entryTime,                                                             color: "#94a3b8" },
+                                { label: "EXIT TIME",    value: exitTime,                                                              color: "#94a3b8" },
+                                { label: "DURATION",     value: t.duration || "—",                                                    color: "#94a3b8" },
+                              ].map(d => (
+                                <div key={d.label} style={{ background: "#0a1628", borderRadius: 4, padding: "7px 10px" }}>
+                                  <div style={{ fontSize: 8, color: "#334155", letterSpacing: "0.12em", marginBottom: 3 }}>{d.label}</div>
+                                  <div style={{ fontSize: 12, color: d.color }}>{d.value}</div>
+                                </div>
+                              ))}
+                            </div>
+                            {t.notes && (
+                              <div style={{ marginTop: 8, padding: "7px 10px", background: "#0a1628", borderRadius: 4, borderLeft: "2px solid #f59e0b" }}>
+                                <div style={{ fontSize: 8, color: "#334155", letterSpacing: "0.12em", marginBottom: 3 }}>NOTES</div>
+                                <div style={{ fontSize: 11, color: "#fde68a", lineHeight: 1.5 }}>{t.notes}</div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
