@@ -2945,36 +2945,6 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               )}
             </div>
 
-      {/* Monthly P&L Chart */}
-      {monthEntries.length > 0 && (() => {
-        const sorted = [...monthEntries].sort((a, b) => a.date.localeCompare(b.date));
-        let running = 0;
-        const points = sorted.map(e => { running += netPnl(e); return { date: e.date, cum: running, daily: netPnl(e) }; });
-        const lineColor = points[points.length - 1].cum >= 0 ? "#4ade80" : "#f87171";
-        // Pad to 2 points so the chart always renders (single day = flat line)
-        const chartVals = points.length === 1 ? [0, points[0].cum] : points.map(p => p.cum);
-
-        return (
-          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 6, padding: "14px 16px", marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em" }}>CUMULATIVE P&L</div>
-              <div style={{ fontSize: 13, color: lineColor, fontWeight: 500 }}>{fmtPnl(monthPnL)}</div>
-            </div>
-            <EquityCurveChart values={chartVals} dots={points.length > 1} height={100} gradientId="ec2" />
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-              {points.map((p, i) => {
-                const show = points.length <= 8 || i === 0 || i === points.length - 1 || i % Math.ceil(points.length / 6) === 0;
-                return (
-                  <div key={i} style={{ fontSize: 9, color: show ? "#475569" : "transparent", textAlign: "center", flex: 1 }}>
-                    {new Date(p.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Calendar grid header */}
       <div style={{ fontSize: 22, color: "#93c5fd", letterSpacing: "0.08em", fontWeight: 700, fontFamily: "'Bebas Neue', sans-serif", marginBottom: 12 }}>
         {(() => { const [y, m] = month.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase(); })()}
@@ -3046,7 +3016,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                 <>
                   {/* P&L — most important, largest */}
                   <div style={{ fontSize: 17, fontWeight: 700, color: n > 0 ? "#4ade80" : n < 0 ? "#f87171" : "#e2e8f0", lineHeight: 1, marginBottom: 5 }}>
-                    {n > 0 ? "+" : ""}{n !== null ? `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: n % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 })}` : "—"}
+                    {n > 0 ? "+" : n < 0 ? "-" : ""}{n !== null ? `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: n % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 })}` : "—"}
                   </div>
                   {/* Instruments — secondary */}
                   <div style={{ display: "flex", gap: 3, flexWrap: "wrap", alignItems: "center", marginBottom: 4 }}>
@@ -3084,6 +3054,36 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, border: "1px solid #3b82f6" }} /> Today</div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: "#0a0e1a", border: "1px solid #334155", opacity: 0.4 }} /> Weekend / no trade</div>
       </div>
+      {/* Monthly P&L Chart */}
+      {monthEntries.length > 0 && (() => {
+        const sorted = [...monthEntries].sort((a, b) => a.date.localeCompare(b.date));
+        let running = 0;
+        const points = sorted.map(e => { running += netPnl(e); return { date: e.date, cum: running, daily: netPnl(e) }; });
+        const lineColor = points[points.length - 1].cum >= 0 ? "#4ade80" : "#f87171";
+        // Pad to 2 points so the chart always renders (single day = flat line)
+        const chartVals = points.length === 1 ? [0, points[0].cum] : points.map(p => p.cum);
+
+        return (
+          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 6, padding: "14px 16px", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+              <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em" }}>CUMULATIVE P&L</div>
+              <div style={{ fontSize: 13, color: lineColor, fontWeight: 500 }}>{fmtPnl(monthPnL)}</div>
+            </div>
+            <EquityCurveChart values={chartVals} dots={points.length > 1} height={100} gradientId="ec2" />
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+              {points.map((p, i) => {
+                const show = points.length <= 8 || i === 0 || i === points.length - 1 || i % Math.ceil(points.length / 6) === 0;
+                return (
+                  <div key={i} style={{ fontSize: 9, color: show ? "#475569" : "transparent", textAlign: "center", flex: 1 }}>
+                    {new Date(p.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
             {/* Trade Statistics */}
             {monthAnalytics && (
               <div>
@@ -6279,6 +6279,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
 // ── Risk calculator extracted from ReferenceView IIFE to fix React hook rules ──
 function RiskCalcPanel() {
   const [mode, setMode] = useState("futures");
+  const [innerTab, setInnerTab] = useState("calc"); // "calc" | "specs"
         const [acctSize, setAcctSize] = useState("50000");
         const [riskPct, setRiskPct] = useState("1");
         const [stopTicks, setStopTicks] = useState("4");
@@ -6348,6 +6349,20 @@ function RiskCalcPanel() {
         return (
           <div style={{ animation: "refFadeIn .3s ease", display: "flex", flexDirection: "column", gap: 16 }}>
 
+            {/* Inner tab strip */}
+            <div style={{ display: "flex", gap: 6 }}>
+              {[["calc", "⚡ RISK CALCULATOR"], ["specs", "📋 CONTRACT SPECS"]].map(([id, label]) => (
+                <button key={id} onClick={() => setInnerTab(id)}
+                  style={{ padding: "8px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s",
+                    background: innerTab === id ? "#0a1628" : "transparent",
+                    border: `1px solid ${innerTab === id ? "#3b82f6" : "#1e293b"}`,
+                    color: innerTab === id ? "#93c5fd" : "#64748b" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {innerTab === "calc" && <>
             {/* Account + Risk% — shared */}
             <div style={{ background: "#070d1a", border: "1px solid #1e3a5f", borderRadius: 8, padding: "18px 20px" }}>
               <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.12em", marginBottom: 14 }}>⚡ POSITION SIZE CALCULATOR</div>
@@ -6486,6 +6501,65 @@ function RiskCalcPanel() {
                 )}
               </div>
             )}
+            </> /* end innerTab === calc */}
+
+            {innerTab === "specs" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 24 }}>
+
+          <div>
+            <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.18em", marginBottom: 4 }}>📋 CONTRACT SPECIFICATIONS — TICK & POINT VALUES</div>
+            <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
+              Cross-check your AI parser: <strong style={{ color: "#94a3b8" }}>Points Gained × Multiplier = $ P&L</strong>.
+              If the numbers don't match, there's a parsing error.
+            </div>
+          </div>
+          {/* Spec table */}
+          <div style={{ background: "rgba(7,13,26,0.8)", border: "1px solid #1e293b", borderRadius: 8, overflow: "hidden" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "72px 1fr 80px 90px 90px 90px", padding: "8px 14px", background: "#060810", borderBottom: "1px solid #1e293b" }}>
+              {["SYMBOL","NAME","TICK","TICK $","PT $","MULTIPLIER"].map(h => (
+                <div key={h} style={{ fontSize: 8, color: "#64748b", letterSpacing: "0.1em" }}>{h}</div>
+              ))}
+            </div>
+            {[
+              { sym:"ES",  name:"E-mini S&P 500",     tick:0.25,  tickVal:12.50, ptVal:50,   mult:50    },
+              { sym:"MES", name:"Micro E-mini S&P",   tick:0.25,  tickVal:1.25,  ptVal:5,    mult:5     },
+              { sym:"NQ",  name:"E-mini Nasdaq",       tick:0.25,  tickVal:5.00,  ptVal:20,   mult:20    },
+              { sym:"MNQ", name:"Micro E-mini Nasdaq", tick:0.25,  tickVal:0.50,  ptVal:2,    mult:2     },
+              { sym:"YM",  name:"E-mini Dow",          tick:1.00,  tickVal:5.00,  ptVal:5,    mult:5     },
+              { sym:"MYM", name:"Micro E-mini Dow",    tick:1.00,  tickVal:0.50,  ptVal:0.5,  mult:0.5   },
+              { sym:"RTY", name:"E-mini Russell 2000", tick:0.10,  tickVal:5.00,  ptVal:50,   mult:50    },
+              { sym:"M2K", name:"Micro E-mini Russell",tick:0.10,  tickVal:0.50,  ptVal:5,    mult:5     },
+              { sym:"CL",  name:"Crude Oil",           tick:0.01,  tickVal:10.00, ptVal:1000, mult:1000  },
+              { sym:"GC",  name:"Gold",                tick:0.10,  tickVal:10.00, ptVal:100,  mult:100   },
+            ].map((s, i, arr) => (
+              <div key={s.sym} style={{ display:"grid", gridTemplateColumns:"72px 1fr 80px 90px 90px 90px", padding:"9px 14px", borderBottom: i < arr.length-1 ? "1px solid #0a1220" : "none", background: i%2===0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
+                <div style={{ fontSize:12, color:"#f59e0b", fontFamily:"'DM Mono',monospace", fontWeight:600 }}>{s.sym}</div>
+                <div style={{ fontSize:10, color:"#94a3b8" }}>{s.name}</div>
+                <div style={{ fontSize:11, color:"#e2e8f0", fontFamily:"'DM Mono',monospace" }}>{s.tick}</div>
+                <div style={{ fontSize:11, color:"#4ade80", fontFamily:"'DM Mono',monospace" }}>${s.tickVal.toFixed(2)}</div>
+                <div style={{ fontSize:11, color:"#93c5fd", fontFamily:"'DM Mono',monospace" }}>${s.ptVal}</div>
+                <div style={{ fontSize:11, color:"#e2e8f0", fontFamily:"'DM Mono',monospace" }}>{s.mult}</div>
+              </div>
+            ))}
+          </div>
+          {/* Verification examples */}
+          <div style={{ background: "rgba(7,13,26,0.8)", border: "1px solid #1e293b", borderRadius: 8, padding: "16px 18px" }}>
+            <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.14em", marginBottom: 10, textTransform: "uppercase" }}>🔍 P&L VERIFICATION EXAMPLES</div>
+            {[
+              { sym:"ES",  ex:"Long 2 @ 5280.00 → 5282.50  =  (2.50 pts × 2 cts × $50)  = +$250.00" },
+              { sym:"MES", ex:"Long 5 @ 5280.00 → 5281.00  =  (1.00 pt  × 5 cts × $5)   = +$25.00" },
+              { sym:"NQ",  ex:"Short 1 @ 20000 → 19990     =  (10 pts   × 1 ct  × $20)   = +$200.00" },
+              { sym:"MNQ", ex:"Long 10 @ 20000 → 20008     =  (8 pts    × 10 cts × $2)   = +$160.00" },
+            ].map(r => (
+              <div key={r.sym} style={{ background:"#060810", borderRadius:4, padding:"8px 12px", marginBottom:6 }}>
+                <span style={{ fontSize:9, color:"#f59e0b", fontFamily:"'DM Mono',monospace", marginRight:10, fontWeight:600 }}>{r.sym}</span>
+                <span style={{ fontSize:9, color:"#64748b", fontFamily:"'DM Mono',monospace" }}>{r.ex}</span>
+              </div>
+            ))}
+          </div>
+
+              </div>
+            )}
           </div>
         );
 }
@@ -6493,13 +6567,57 @@ function RiskCalcPanel() {
 function ReferenceView() {
   const [activeSection, setActiveSection] = useState("sessions");
 
+  // ── Resource Links ──
+  const LINK_CATS = ["News", "Education", "Tools", "Brokers", "Charts", "Other"];
+  const [links, setLinks] = useState(() => {
+    try { const r = localStorage.getItem("tj-links-v1"); return r ? JSON.parse(r) : []; } catch { return []; }
+  });
+  const [linkForm, setLinkForm] = useState({ name: "", url: "", desc: "", cat: "Tools" });
+  const [linkError, setLinkError] = useState("");
+  const [linkFilter, setLinkFilter] = useState("All");
+  const [confirmDeleteLink, setConfirmDeleteLink] = useState(null);
+  const [editingLink, setEditingLink] = useState(null); // id of link being edited
+
+  const saveLinks = (updated) => {
+    setLinks(updated);
+    try { localStorage.setItem("tj-links-v1", JSON.stringify(updated)); } catch {}
+  };
+
+  const handleAddLink = () => {
+    const name = linkForm.name.trim();
+    let url = linkForm.url.trim();
+    if (!name) { setLinkError("Name is required."); return; }
+    if (!url)  { setLinkError("URL is required."); return; }
+    if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+    if (editingLink) {
+      saveLinks(links.map(l => l.id === editingLink ? { ...l, name, url, desc: linkForm.desc.trim(), cat: linkForm.cat } : l));
+      setEditingLink(null);
+    } else {
+      saveLinks([...links, { id: Date.now(), name, url, desc: linkForm.desc.trim(), cat: linkForm.cat, addedAt: new Date().toISOString() }]);
+    }
+    setLinkForm({ name: "", url: "", desc: "", cat: "Tools" });
+    setLinkError("");
+  };
+
+  const handleEditLink = (link) => {
+    setLinkForm({ name: link.name, url: link.url, desc: link.desc || "", cat: link.cat || "Tools" });
+    setEditingLink(link.id);
+    setLinkError("");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingLink(null);
+    setLinkForm({ name: "", url: "", desc: "", cat: "Tools" });
+    setLinkError("");
+  };
+
   const SECTIONS = [
     { id: "sessions", label: "SESSION MAP" },
-    { id: "newyork", label: "NEW YORK" },
     { id: "events",  label: "NEWS EVENTS" },
     { id: "notes",   label: "REMINDERS" },
     { id: "risk",    label: "⚡ RISK CALC" },
-    { id: "specs",   label: "📋 CONTRACT SPECS" },
+
+    { id: "links",   label: "🔗 MY LINKS" },
   ];
 
   // 24h timeline bar — 6PM to 5PM next day (23hrs)
@@ -6576,7 +6694,7 @@ function ReferenceView() {
       <div style={{ display:"flex", gap:6, marginBottom:20, flexWrap:"wrap" }}>
         {SECTIONS.map(s => (
           <button key={s.id} className="ref-sec-btn" onClick={() => setActiveSection(s.id)}
-            style={{ padding:"6px 16px", borderRadius:3, fontFamily:"inherit", fontSize:10, cursor:"pointer", letterSpacing:"0.1em", transition:"all .15s", background: activeSection===s.id?"#0a1628":"transparent", border:`1px solid ${activeSection===s.id?"#1e3a5f":"#0f1729"}`, color: activeSection===s.id?"#93c5fd":"#64748b" }}>
+            style={{ padding:"11px 24px", borderRadius:4, fontFamily:"inherit", fontSize:13, cursor:"pointer", letterSpacing:"0.06em", transition:"all .15s", background: activeSection===s.id?"#0a1628":"transparent", border:`1px solid ${activeSection===s.id?"#3b82f6":"#1e293b"}`, color: activeSection===s.id?"#93c5fd":"#94a3b8" }}>
             {s.label}
           </button>
         ))}
@@ -6672,25 +6790,10 @@ function ReferenceView() {
           </div>
 
           {/* NY teaser card */}
-          <div className="ref-card" style={{ background:"#060b18", border:"1px solid rgba(0,255,136,0.18)", borderRadius:8, padding:"18px 22px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}
-            onClick={() => setActiveSection("newyork")}>
-            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-              <span style={{ fontSize:26 }}>🗽</span>
-              <div>
-                <div style={{ fontFamily:"'Rajdhani',sans-serif", fontSize:18, fontWeight:700, color:"#00ff88", letterSpacing:"0.08em" }}>NEW YORK SESSION</div>
-                <div style={{ fontFamily:"'Share Tech Mono',monospace", fontSize:11, color:"#64748b", marginTop:3 }}>9:30 AM – 5:00 PM EST · 6 distinct windows</div>
-              </div>
-            </div>
-            <div style={{ fontSize:11, color:"#1e3a5f", letterSpacing:"0.08em" }}>VIEW DETAIL →</div>
-          </div>
-        </div>
-      )}
+          {/* NEW YORK SESSION — inline below session map */}
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize:9, color:"#64748b", letterSpacing:"0.15em", marginBottom:12 }}>🗽 NEW YORK SESSION WINDOWS</div>
 
-      {/* ════════════════════════════════════════════════
-          NEW YORK TAB
-      ════════════════════════════════════════════════ */}
-      {activeSection === "newyork" && (
-        <div style={{ animation:"refFadeIn .3s ease" }}>
           <div style={{ background:"#060b18", border:"1px solid rgba(0,255,136,0.18)", borderRadius:8, padding:"22px 24px", marginBottom:20, position:"relative", overflow:"hidden" }}>
             <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:"#00ff88", opacity:0.5 }}/>
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:18 }}>
@@ -6718,8 +6821,12 @@ function ReferenceView() {
               ))}
             </div>
           </div>
+
+          </div>
         </div>
       )}
+
+
 
       {/* ════════════════════════════════════════════════
           NEWS EVENTS TAB
@@ -6820,61 +6927,170 @@ function ReferenceView() {
       )}
       {activeSection === "risk" && <RiskCalcPanel />}
 
-      {activeSection === "specs" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 24 }}>
+      {activeSection === "links" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, paddingBottom: 24 }}>
+
+          {/* Header */}
           <div>
-            <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.18em", marginBottom: 4 }}>📋 CONTRACT SPECIFICATIONS — TICK & POINT VALUES</div>
-            <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
-              Cross-check your AI parser: <strong style={{ color: "#94a3b8" }}>Points Gained × Multiplier = $ P&L</strong>.
-              If the numbers don't match, there's a parsing error.
+            <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.18em", marginBottom: 4 }}>🔗 RESOURCE LINKS — USEFUL TRADING REFERENCES</div>
+            <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>Save links you come across — news sources, tools, education, brokers. Click any link to open it directly.</div>
+          </div>
+
+          {/* Add / Edit Form */}
+          <div style={{ background: "#070d1a", border: `1px solid ${editingLink ? "#3b82f6" : "#1e3a5f"}`, borderRadius: 6, padding: "16px 18px" }}>
+            <div style={{ fontSize: 10, color: editingLink ? "#93c5fd" : "#64748b", letterSpacing: "0.12em", marginBottom: 12 }}>
+              {editingLink ? "✏ EDIT LINK" : "+ ADD NEW LINK"}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>NAME *</label>
+                <input
+                  type="text" placeholder="e.g. TradingView, Investopedia..."
+                  value={linkForm.name}
+                  onChange={e => { setLinkForm(p => ({ ...p, name: e.target.value })); setLinkError(""); }}
+                  style={{ fontSize: 12, padding: "7px 10px" }}
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>CATEGORY</label>
+                <select value={linkForm.cat} onChange={e => setLinkForm(p => ({ ...p, cat: e.target.value }))}
+                  style={{ fontSize: 12, padding: "7px 10px" }}>
+                  {LINK_CATS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
+              <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>URL *</label>
+              <input
+                type="text" placeholder="https://..."
+                value={linkForm.url}
+                onChange={e => { setLinkForm(p => ({ ...p, url: e.target.value })); setLinkError(""); }}
+                style={{ fontSize: 12, padding: "7px 10px" }}
+              />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+              <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>SHORT DESCRIPTION <span style={{ color: "#475569" }}>(optional)</span></label>
+              <input
+                type="text" placeholder="What is this for?"
+                value={linkForm.desc}
+                onChange={e => setLinkForm(p => ({ ...p, desc: e.target.value }))}
+                style={{ fontSize: 12, padding: "7px 10px" }}
+              />
+            </div>
+            {linkError && <div style={{ fontSize: 11, color: "#f87171", marginBottom: 8 }}>⚠ {linkError}</div>}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={handleAddLink}
+                style={{ background: editingLink ? "#1e3a5f" : "#1d4ed8", color: "white", border: "none", padding: "9px 22px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em" }}>
+                {editingLink ? "✓ SAVE CHANGES" : "+ ADD LINK"}
+              </button>
+              {editingLink && (
+                <button onClick={handleCancelEdit}
+                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "9px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em" }}>
+                  CANCEL
+                </button>
+              )}
             </div>
           </div>
-          {/* Spec table */}
-          <div style={{ background: "rgba(7,13,26,0.8)", border: "1px solid #1e293b", borderRadius: 8, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "72px 1fr 80px 90px 90px 90px", padding: "8px 14px", background: "#060810", borderBottom: "1px solid #1e293b" }}>
-              {["SYMBOL","NAME","TICK","TICK $","PT $","MULTIPLIER"].map(h => (
-                <div key={h} style={{ fontSize: 8, color: "#64748b", letterSpacing: "0.1em" }}>{h}</div>
+
+          {/* Category filter */}
+          {links.length > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {["All", ...LINK_CATS.filter(c => links.some(l => l.cat === c))].map(c => (
+                <button key={c} onClick={() => setLinkFilter(c)}
+                  style={{ padding: "5px 14px", borderRadius: 3, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s",
+                    background: linkFilter === c ? "#1e3a5f" : "transparent",
+                    border: `1px solid ${linkFilter === c ? "#3b82f6" : "#1e293b"}`,
+                    color: linkFilter === c ? "#93c5fd" : "#64748b" }}>
+                  {c} {c !== "All" && <span style={{ color: "#475569" }}>({links.filter(l => l.cat === c).length})</span>}
+                </button>
               ))}
             </div>
-            {[
-              { sym:"ES",  name:"E-mini S&P 500",     tick:0.25,  tickVal:12.50, ptVal:50,   mult:50    },
-              { sym:"MES", name:"Micro E-mini S&P",   tick:0.25,  tickVal:1.25,  ptVal:5,    mult:5     },
-              { sym:"NQ",  name:"E-mini Nasdaq",       tick:0.25,  tickVal:5.00,  ptVal:20,   mult:20    },
-              { sym:"MNQ", name:"Micro E-mini Nasdaq", tick:0.25,  tickVal:0.50,  ptVal:2,    mult:2     },
-              { sym:"YM",  name:"E-mini Dow",          tick:1.00,  tickVal:5.00,  ptVal:5,    mult:5     },
-              { sym:"MYM", name:"Micro E-mini Dow",    tick:1.00,  tickVal:0.50,  ptVal:0.5,  mult:0.5   },
-              { sym:"RTY", name:"E-mini Russell 2000", tick:0.10,  tickVal:5.00,  ptVal:50,   mult:50    },
-              { sym:"M2K", name:"Micro E-mini Russell",tick:0.10,  tickVal:0.50,  ptVal:5,    mult:5     },
-              { sym:"CL",  name:"Crude Oil",           tick:0.01,  tickVal:10.00, ptVal:1000, mult:1000  },
-              { sym:"GC",  name:"Gold",                tick:0.10,  tickVal:10.00, ptVal:100,  mult:100   },
-            ].map((s, i, arr) => (
-              <div key={s.sym} style={{ display:"grid", gridTemplateColumns:"72px 1fr 80px 90px 90px 90px", padding:"9px 14px", borderBottom: i < arr.length-1 ? "1px solid #0a1220" : "none", background: i%2===0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
-                <div style={{ fontSize:12, color:"#f59e0b", fontFamily:"'DM Mono',monospace", fontWeight:600 }}>{s.sym}</div>
-                <div style={{ fontSize:10, color:"#94a3b8" }}>{s.name}</div>
-                <div style={{ fontSize:11, color:"#e2e8f0", fontFamily:"'DM Mono',monospace" }}>{s.tick}</div>
-                <div style={{ fontSize:11, color:"#4ade80", fontFamily:"'DM Mono',monospace" }}>${s.tickVal.toFixed(2)}</div>
-                <div style={{ fontSize:11, color:"#93c5fd", fontFamily:"'DM Mono',monospace" }}>${s.ptVal}</div>
-                <div style={{ fontSize:11, color:"#e2e8f0", fontFamily:"'DM Mono',monospace" }}>{s.mult}</div>
-              </div>
-            ))}
-          </div>
-          {/* Verification examples */}
-          <div style={{ background: "rgba(7,13,26,0.8)", border: "1px solid #1e293b", borderRadius: 8, padding: "16px 18px" }}>
-            <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.14em", marginBottom: 10, textTransform: "uppercase" }}>🔍 P&L VERIFICATION EXAMPLES</div>
-            {[
-              { sym:"ES",  ex:"Long 2 @ 5280.00 → 5282.50  =  (2.50 pts × 2 cts × $50)  = +$250.00" },
-              { sym:"MES", ex:"Long 5 @ 5280.00 → 5281.00  =  (1.00 pt  × 5 cts × $5)   = +$25.00" },
-              { sym:"NQ",  ex:"Short 1 @ 20000 → 19990     =  (10 pts   × 1 ct  × $20)   = +$200.00" },
-              { sym:"MNQ", ex:"Long 10 @ 20000 → 20008     =  (8 pts    × 10 cts × $2)   = +$160.00" },
-            ].map(r => (
-              <div key={r.sym} style={{ background:"#060810", borderRadius:4, padding:"8px 12px", marginBottom:6 }}>
-                <span style={{ fontSize:9, color:"#f59e0b", fontFamily:"'DM Mono',monospace", marginRight:10, fontWeight:600 }}>{r.sym}</span>
-                <span style={{ fontSize:9, color:"#64748b", fontFamily:"'DM Mono',monospace" }}>{r.ex}</span>
-              </div>
-            ))}
-          </div>
+          )}
+
+          {/* Links list */}
+          {links.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "32px 0", color: "#334155", fontSize: 12, borderRadius: 6, border: "1px dashed #1e293b" }}>
+              <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.4 }}>🔗</div>
+              No links saved yet — add your first one above
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {(() => {
+                const cats = linkFilter === "All"
+                  ? LINK_CATS.filter(c => links.some(l => l.cat === c))
+                  : [linkFilter];
+                return cats.map(cat => {
+                  const catLinks = links.filter(l => l.cat === cat);
+                  if (!catLinks.length) return null;
+                  return (
+                    <div key={cat} style={{ marginBottom: 14 }}>
+                      {/* Category header */}
+                      <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.16em", textTransform: "uppercase", padding: "4px 0 6px", borderBottom: "1px solid #1e293b", marginBottom: 6 }}>
+                        {cat} <span style={{ color: "#334155" }}>· {catLinks.length}</span>
+                      </div>
+                      {/* Rows */}
+                      {catLinks.map(link => (
+                        <div key={link.id}
+                          style={{ display: "grid", gridTemplateColumns: "1fr auto", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 4, background: editingLink === link.id ? "#070d1a" : "transparent", border: `1px solid ${editingLink === link.id ? "#1e3a5f" : "transparent"}`, transition: "all .15s" }}
+                          onMouseEnter={e => { if (editingLink !== link.id) e.currentTarget.style.background = "#0a0e1a"; }}
+                          onMouseLeave={e => { if (editingLink !== link.id) e.currentTarget.style.background = "transparent"; }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                            {/* Favicon */}
+                            <img
+                              src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(link.url)}&sz=16`}
+                              alt="" width={16} height={16}
+                              style={{ borderRadius: 3, flexShrink: 0, opacity: 0.8 }}
+                              onError={e => { e.target.style.display = "none"; }}
+                            />
+                            <div style={{ minWidth: 0 }}>
+                              <a href={link.url} target="_blank" rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                style={{ fontSize: 13, color: "#93c5fd", fontWeight: 500, textDecoration: "none", letterSpacing: "0.02em", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+                                onMouseEnter={e => e.target.style.textDecoration = "underline"}
+                                onMouseLeave={e => e.target.style.textDecoration = "none"}>
+                                {link.name}
+                              </a>
+                              {link.desc && <div style={{ fontSize: 11, color: "#475569", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{link.desc}</div>}
+                            </div>
+                          </div>
+                          {/* Actions */}
+                          <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>
+                            {confirmDeleteLink === link.id ? (
+                              <>
+                                <span style={{ fontSize: 10, color: "#f87171", marginRight: 4 }}>Delete?</span>
+                                <button onClick={() => { saveLinks(links.filter(l => l.id !== link.id)); setConfirmDeleteLink(null); }}
+                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 3, fontFamily: "inherit", cursor: "pointer", background: "#450a0a", border: "1px solid #7f1d1d", color: "#f87171", letterSpacing: "0.04em" }}>YES</button>
+                                <button onClick={() => setConfirmDeleteLink(null)}
+                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 3, fontFamily: "inherit", cursor: "pointer", background: "transparent", border: "1px solid #1e293b", color: "#64748b" }}>NO</button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={() => handleEditLink(link)}
+                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 3, fontFamily: "inherit", cursor: "pointer", background: "transparent", border: "1px solid #1e293b", color: "#64748b", transition: "all .15s", letterSpacing: "0.04em" }}
+                                  onMouseEnter={e => { e.target.style.borderColor = "#3b82f6"; e.target.style.color = "#93c5fd"; }}
+                                  onMouseLeave={e => { e.target.style.borderColor = "#1e293b"; e.target.style.color = "#64748b"; }}>
+                                  EDIT
+                                </button>
+                                <button onClick={() => setConfirmDeleteLink(link.id)}
+                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 3, fontFamily: "inherit", cursor: "pointer", background: "transparent", border: "1px solid #1e293b", color: "#64748b", transition: "all .15s", letterSpacing: "0.04em" }}
+                                  onMouseEnter={e => { e.target.style.borderColor = "#7f1d1d"; e.target.style.color = "#f87171"; }}
+                                  onMouseLeave={e => { e.target.style.borderColor = "#1e293b"; e.target.style.color = "#64748b"; }}>
+                                  ✕
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          )}
         </div>
       )}
+
     </div>
   );
 }
@@ -7598,7 +7814,8 @@ export default function TradingJournal() {
 
   const handleExport = async () => {
     try {
-      const allData = { version: 2, exportedAt: new Date().toISOString(), journals, entriesByJournal: {} };
+      const linksBackup = (() => { try { const r = localStorage.getItem("tj-links-v1"); return r ? JSON.parse(r) : []; } catch { return []; } })();
+      const allData = { version: 2, exportedAt: new Date().toISOString(), journals, entriesByJournal: {}, links: linksBackup };
       for (const j of journals) {
         try {
           const r = await storage.get(`journal-entries-${j.id}`);
@@ -7706,6 +7923,8 @@ export default function TradingJournal() {
         const jes = data.entriesByJournal[j.id] || [];
         await storage.set(`journal-entries-${j.id}`, JSON.stringify(jes));
       }
+      // Restore resource links if present in backup
+      if (data.links?.length) { try { localStorage.setItem("tj-links-v1", JSON.stringify(data.links)); } catch {} }
       const firstId = data.journals[0]?.id || DEFAULT_JOURNAL_ID;
       setActiveJournalId(firstId);
       setEntries(data.entriesByJournal[firstId] || []);
@@ -8605,45 +8824,88 @@ export default function TradingJournal() {
                     const a = entryAnalyticsMap[entry.id];
                     return (
                       <div key={entry.id} className="entry-card" onClick={() => viewDetail(entry)}
-                        style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 5, padding: "12px 16px", display: "grid", gridTemplateColumns: "100px 1fr 100px 90px", gap: 12, alignItems: "center" }}>
-                        <div>
-                          <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.08em" }}>{new Date(entry.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()}</div>
-                          <div style={{ fontSize: 13, color: "#e2e8f0", marginTop: 1 }}>{entry.date}</div>
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                            {(entry.instruments?.length ? entry.instruments : entry.instrument ? [entry.instrument] : []).map(sym => (
-                              <span key={sym} style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: "#1e3a5f", color: "#93c5fd" }}>{sym}</span>
-                            ))}
-                            {entry.bias && <span style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: entry.bias === "Bullish" ? "#052e16" : entry.bias === "Bearish" ? "#450a0a" : "#1e1b4b", color: entry.bias === "Bullish" ? "#4ade80" : entry.bias === "Bearish" ? "#f87171" : "#a5b4fc" }}>{entry.bias.toUpperCase()}</span>}
-                            {(entry.moods?.length ? entry.moods : entry.mood ? [entry.mood] : []).map(m => (
-                              <span key={m} style={{ fontSize: 12, color: "#94a3b8" }}>{m}</span>
-                            ))}
-                            {entry.grade && <span style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: "#0f172a", border: `1px solid ${gradeColor(entry.grade)}`, color: gradeColor(entry.grade) }}>{entry.grade}</span>}
-                            {a && <span style={{ fontSize: 10, color: "#94a3b8" }}><span style={{ letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{a.winners}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{a.losers}</span></span> · {Math.round(a.winRate)}% WR</span>}
+                        style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 6, padding: "18px 24px", display: "grid", gridTemplateColumns: "160px 1fr auto auto", gap: 24, alignItems: "center" }}>
+
+                        {/* DATE COLUMN */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <div style={{ fontSize: 11, color: "#475569", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+                            {new Date(entry.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long" }).toUpperCase()}
                           </div>
-                          {entry.sessionMistakes?.length > 0 && (
-                            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-                              {entry.sessionMistakes.includes("No Mistakes — Executed the Plan ✓") ? (
-                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 3, fontSize: 10, background: "#052e16", border: "1px solid #166534", color: "#4ade80" }}>
-                                  ✓ Clean Session
-                                </span>
-                              ) : (
-                                <>
-                                  <span style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.08em", textTransform: "uppercase", marginRight: 2 }}>Mistakes:</span>
-                                  {entry.sessionMistakes.map(m => (
-                                    <span key={m} style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: "#1f0606", border: "1px solid #7f1d1d", color: "#f87171" }}>{m}</span>
-                                  ))}
-                                </>
-                              )}
-                            </div>
-                          )}
+                          <div style={{ fontSize: 18, color: "#e2e8f0", fontWeight: 600, letterSpacing: "0.02em" }}>
+                            {(() => { const d = new Date(entry.date + "T12:00:00"); return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); })()}
+                          </div>
+                          <div style={{ display: "flex", gap: 6, marginTop: 2, flexWrap: "wrap" }}>
+                            {(entry.instruments?.length ? entry.instruments : entry.instrument ? [entry.instrument] : []).map(sym => (
+                              <span key={sym} style={{ padding: "3px 10px", borderRadius: 4, fontSize: 11, fontWeight: 600, background: "#1e3a5f", color: "#93c5fd", letterSpacing: "0.06em" }}>{sym}</span>
+                            ))}
+                          </div>
                         </div>
-                        <div>{a && <MiniCurve curve={a.equityCurve} />}</div>
-                        <div style={{ textAlign: "right" }}>
+
+                        {/* STATS + TAGS COLUMN */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {/* Stats row */}
+                          <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+                            {a && <>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>Trades</div>
+                                <div style={{ fontSize: 15, color: "#e2e8f0", fontWeight: 600 }}>{a.trades}</div>
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>Win Rate</div>
+                                <div style={{ fontSize: 15, color: a.winRate >= 50 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{Math.round(a.winRate)}%</div>
+                              </div>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>W / L</div>
+                                <div style={{ fontSize: 15, fontWeight: 600 }}>
+                                  <span style={{ color: "#4ade80" }}>{a.winners}</span>
+                                  <span style={{ color: "#475569" }}> / </span>
+                                  <span style={{ color: "#f87171" }}>{a.losers}</span>
+                                </div>
+                              </div>
+                              {a.profitFactor !== null && a.profitFactor !== undefined && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                                  <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>Prof. Factor</div>
+                                  <div style={{ fontSize: 15, color: a.profitFactor >= 1 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{typeof a.profitFactor === "number" ? a.profitFactor.toFixed(2) : "—"}</div>
+                                </div>
+                              )}
+                              {parseFloat(entry.commissions) > 0 && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                                  <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>Fees</div>
+                                  <div style={{ fontSize: 15, color: "#f87171", fontWeight: 600 }}>-${parseFloat(entry.commissions).toFixed(2)}</div>
+                                </div>
+                              )}
+                            </>}
+                          </div>
+                          {/* Tags row */}
+                          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                            {entry.grade && <span style={{ padding: "3px 10px", borderRadius: 4, fontSize: 11, fontWeight: 600, background: "#0f172a", border: `1px solid ${gradeColor(entry.grade)}`, color: gradeColor(entry.grade) }}>{entry.grade}</span>}
+                            {entry.bias && <span style={{ padding: "3px 10px", borderRadius: 4, fontSize: 11, background: entry.bias === "Bullish" ? "#052e16" : entry.bias === "Bearish" ? "#450a0a" : "#1e1b4b", color: entry.bias === "Bullish" ? "#4ade80" : entry.bias === "Bearish" ? "#f87171" : "#a5b4fc" }}>{entry.bias.toUpperCase()}</span>}
+                            {(entry.moods?.length ? entry.moods : entry.mood ? [entry.mood] : []).map(m => (
+                              <span key={m} style={{ fontSize: 12, color: "#64748b" }}>{m}</span>
+                            ))}
+                            {entry.sessionMistakes?.length > 0 && (
+                              entry.sessionMistakes.includes("No Mistakes — Executed the Plan ✓") ? (
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 4, fontSize: 11, background: "#052e16", border: "1px solid #166534", color: "#4ade80" }}>✓ Clean Session</span>
+                              ) : (
+                                <span style={{ padding: "3px 10px", borderRadius: 4, fontSize: 11, background: "#1f0606", border: "1px solid #7f1d1d", color: "#f87171" }}>
+                                  {entry.sessionMistakes.length} mistake{entry.sessionMistakes.length !== 1 ? "s" : ""}
+                                </span>
+                              )
+                            )}
+                          </div>
+                        </div>
+
+                        {/* EQUITY CURVE */}
+                        <div style={{ width: 120 }}>{a && <MiniCurve curve={a.equityCurve} w={120} h={40} />}</div>
+
+                        {/* P&L COLUMN */}
+                        <div style={{ textAlign: "right", minWidth: 110 }}>
                           {entry.pnl !== "" && <>
-                            <div style={{ fontSize: 16, color: pnlColor(netPnl(entry)), fontWeight: 500 }}>{fmtPnl(netPnl(entry))}</div>
-                            {parseFloat(entry.commissions) ? <div style={{ fontSize: 9, color: "#64748b", marginTop: 1 }}>net of fees</div> : null}
+                            <div style={{ fontSize: 22, color: pnlColor(netPnl(entry)), fontWeight: 700, letterSpacing: "0.02em" }}>{fmtPnl(netPnl(entry))}</div>
+                            {parseFloat(entry.commissions) > 0 && <div style={{ fontSize: 10, color: "#475569", marginTop: 3 }}>net of fees</div>}
+                            {entry.pnl !== "" && parseFloat(entry.pnl) !== netPnl(entry) && (
+                              <div style={{ fontSize: 11, color: "#334155", marginTop: 2 }}>gross {fmtPnl(parseFloat(entry.pnl))}</div>
+                            )}
                           </>}
                         </div>
                       </div>
