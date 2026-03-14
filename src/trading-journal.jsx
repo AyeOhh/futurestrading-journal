@@ -1692,8 +1692,8 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                 {a.avgWinDuration > 0 && a.avgLossDuration > 0 && (
                   <div style={{ fontSize: 9, color: a.avgLossDuration > a.avgWinDuration ? "#f87171" : "#475569" }}>
                     {a.avgLossDuration > a.avgWinDuration ? "⚠ holding losers longer than winners" : "✓ cutting losers faster than winners"}
-                  </div>
-                )}
+          </div>
+          )}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {(a.DURATION_BUCKETS || []).map(bucket => {
@@ -1796,8 +1796,8 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                   <div style={{ marginTop: 10, padding: "8px 12px", background: "#0a0e1a", borderRadius: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em" }}>TOTAL COMMISSIONS</span>
                     <span style={{ fontSize: 12, color: "#f87171" }}>-${a.totalCommission.toFixed(2)}</span>
-                  </div>
-                )}
+          </div>
+          )}
               </div>
             );
           })()}
@@ -2614,8 +2614,8 @@ Rewritten summary:` }],
                         <span key={m} style={{ padding: "4px 10px", borderRadius: 20, fontSize: 12, background: "#0a1628", border: "1px solid #1e3a5f", color: "#e2e8f0" }}>{m}</span>
                       ))}
                     </div>
-                  </div>
-                )}
+          </div>
+          )}
                 {entry.sessionMistakes?.length > 0 && (
                   <div style={{ background: "#0f1729", border: "1px solid #450a0a", borderRadius: 6, padding: "14px 16px" }}>
                     <div style={{ fontSize: 10, color: "#f87171", letterSpacing: "0.12em", marginBottom: 10 }}>⚠️ SESSION MISTAKES FLAGGED</div>
@@ -2653,8 +2653,8 @@ Rewritten summary:` }],
                         </div>
                       );
                     })()}
-                  </div>
-                )}
+          </div>
+          )}
               </div>
             )}
 
@@ -2688,8 +2688,8 @@ Rewritten summary:` }],
                       <RewriteBtn fieldKey="bestTrade" text={entry.bestTrade} />
                     </div>
                     <div style={{ fontSize: 13, color: rewrites.bestTrade && !showOriginal.bestTrade ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.bestTrade && !showOriginal.bestTrade ? "italic" : "normal" }}>{rewrites.bestTrade && !showOriginal.bestTrade ? rewrites.bestTrade : entry.bestTrade}</div>
-                  </div>
-                )}
+          </div>
+          )}
                 {entry.worstTrade && (
                   <div style={{ background: "#1f0606", border: "1px solid #7f1d1d", borderRadius: 6, padding: "14px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -2697,8 +2697,8 @@ Rewritten summary:` }],
                       <RewriteBtn fieldKey="worstTrade" text={entry.worstTrade} />
                     </div>
                     <div style={{ fontSize: 13, color: rewrites.worstTrade && !showOriginal.worstTrade ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.worstTrade && !showOriginal.worstTrade ? "italic" : "normal" }}>{rewrites.worstTrade && !showOriginal.worstTrade ? rewrites.worstTrade : entry.worstTrade}</div>
-                  </div>
-                )}
+          </div>
+          )}
               </div>
             )}
 
@@ -2713,8 +2713,8 @@ Rewritten summary:` }],
                       <RewriteBtn fieldKey="lessonsLearned" text={entry.lessonsLearned} />
                     </div>
                     <div style={{ fontSize: 13, color: rewrites.lessonsLearned && !showOriginal.lessonsLearned ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.lessonsLearned && !showOriginal.lessonsLearned ? "italic" : "normal" }}>{rewrites.lessonsLearned && !showOriginal.lessonsLearned ? rewrites.lessonsLearned : entry.lessonsLearned}</div>
-                  </div>
-                )}
+          </div>
+          )}
                 {entry.mistakes && (
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -2722,8 +2722,8 @@ Rewritten summary:` }],
                       <RewriteBtn fieldKey="mistakes" text={entry.mistakes} />
                     </div>
                     <div style={{ fontSize: 13, color: rewrites.mistakes && !showOriginal.mistakes ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.mistakes && !showOriginal.mistakes ? "italic" : "normal" }}>{rewrites.mistakes && !showOriginal.mistakes ? rewrites.mistakes : entry.mistakes}</div>
-                  </div>
-                )}
+          </div>
+          )}
                 {entry.improvements && (
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -2731,8 +2731,8 @@ Rewritten summary:` }],
                       <RewriteBtn fieldKey="improvements" text={entry.improvements} />
                     </div>
                     <div style={{ fontSize: 13, color: rewrites.improvements && !showOriginal.improvements ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.improvements && !showOriginal.improvements ? "italic" : "normal" }}>{rewrites.improvements && !showOriginal.improvements ? rewrites.improvements : entry.improvements}</div>
-                  </div>
-                )}
+          </div>
+          )}
               </div>
             )}
 
@@ -2746,8 +2746,8 @@ Rewritten summary:` }],
                       <RewriteBtn fieldKey="reinforceRule" text={entry.reinforceRule} />
                     </div>
                     <div style={{ fontSize: 13, color: rewrites.reinforceRule && !showOriginal.reinforceRule ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.reinforceRule && !showOriginal.reinforceRule ? "italic" : "normal" }}>{rewrites.reinforceRule && !showOriginal.reinforceRule ? rewrites.reinforceRule : entry.reinforceRule}</div>
-                  </div>
-                )}
+          </div>
+          )}
                 {entry.tomorrow && (
                   <div style={{ background: "#0f1729", border: "1px solid #1e3a5f", borderRadius: 6, padding: "14px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -2755,8 +2755,8 @@ Rewritten summary:` }],
                       <RewriteBtn fieldKey="tomorrow" text={entry.tomorrow} />
                     </div>
                     <div style={{ fontSize: 13, color: rewrites.tomorrow && !showOriginal.tomorrow ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.tomorrow && !showOriginal.tomorrow ? "italic" : "normal" }}>{rewrites.tomorrow && !showOriginal.tomorrow ? rewrites.tomorrow : entry.tomorrow}</div>
-                  </div>
-                )}
+          </div>
+          )}
               </div>
             )}
 
@@ -2953,7 +2953,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
       {/* Day headers */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 3 }}>
         {DAYS.map(d => (
-          <div key={d} style={{ textAlign: "center", fontSize: 9, letterSpacing: "0.1em", padding: "3px 0",
+          <div key={d} style={{ textAlign: "center", fontSize: 12, letterSpacing: "0.08em", padding: "6px 0", fontWeight: 600,
             color: d === "SAT" || d === "SUN" ? "#475569" : "#94a3b8" }}>{d}</div>
         ))}
       </div>
@@ -2992,7 +2992,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               onClick={() => hasEntry ? onDayClick(entry) : (!isWeekend && isPast || dateStr === today) ? onNewDay(dateStr) : null}
               style={{
                 background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 4,
-                padding: "10px 8px", minHeight: 115, position: "relative",
+                padding: "12px 10px", minHeight: 148, position: "relative",
                 cursor: hasEntry ? "pointer" : (!isWeekend && (isPast || dateStr === today)) ? "pointer" : "default",
                 transition: "all .15s", opacity: isWeekend && !hasEntry ? 0.3 : isFuture && !isWeekend ? 0.5 : 1,
               }}
@@ -3001,43 +3001,43 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
             >
               {/* Row 1: day number + emoji + grade */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ fontSize: 14, fontWeight: 600, color: isToday ? "#3b82f6" : hasEntry ? "#e2e8f0" : isWeekend ? "#475569" : "#94a3b8" }}>{day}</span>
+                <span style={{ fontSize: 17, fontWeight: 700, color: isToday ? "#3b82f6" : hasEntry ? "#e2e8f0" : isWeekend ? "#475569" : "#94a3b8" }}>{day}</span>
                 {entry?.grade && (
                   <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                     {(entry.moods?.length ? entry.moods : entry.mood ? [entry.mood] : []).map(m => (
                       <span key={m} style={{ fontSize: 10 }}>{m.split(" ").pop()}</span>
                     ))}
                     <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 5px", borderRadius: 3, background: gradeColor(entry.grade) + "22", border: `1px solid ${gradeColor(entry.grade)}`, color: gradeColor(entry.grade), letterSpacing: "0.06em" }}>{entry.grade}</span>
-                  </div>
-                )}
+          </div>
+          )}
               </div>
 
               {hasEntry ? (
                 <>
                   {/* P&L — most important, largest */}
-                  <div style={{ fontSize: 17, fontWeight: 700, color: n > 0 ? "#4ade80" : n < 0 ? "#f87171" : "#e2e8f0", lineHeight: 1, marginBottom: 5 }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: n > 0 ? "#4ade80" : n < 0 ? "#f87171" : "#e2e8f0", lineHeight: 1, marginBottom: 6 }}>
                     {n > 0 ? "+" : n < 0 ? "-" : ""}{n !== null ? `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: n % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 })}` : "—"}
                   </div>
-                  {/* Instruments — secondary */}
-                  <div style={{ display: "flex", gap: 3, flexWrap: "wrap", alignItems: "center", marginBottom: 4 }}>
-                    {(entry.instruments?.length ? entry.instruments : entry.instrument ? [entry.instrument] : []).map(sym => (
-                      <span key={sym} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 2, background: "#1e3a5f22", color: "#94a3b8", border: "1px solid #1e3a5f44", letterSpacing: "0.04em" }}>{sym}</span>
-                    ))}
-                    {!entry.grade && (entry.moods?.length ? entry.moods : entry.mood ? [entry.mood] : []).map(m => (
-                      <span key={m} style={{ fontSize: 11 }}>{m.split(" ").pop()}</span>
-                    ))}
-                  </div>
-                  {/* Trades + Win Rate — supporting info, smallest */}
+                  {/* Trades + Win Rate */}
                   {entry.parsedTrades?.length > 0 && (() => {
                     const wins = entry.parsedTrades.filter(t => t.pnl > 0).length;
                     const wr = Math.round(wins / entry.parsedTrades.length * 100);
                     return (
                       <>
-                        <div style={{ fontSize: 9, color: "#94a3b8", lineHeight: 1.5 }}>Trades: {entry.parsedTrades.length}</div>
-                        <div style={{ fontSize: 9, color: wr >= 50 ? "#4ade80" : "#f87171", lineHeight: 1.5 }}>Win Rate: {wr}%</div>
+                        <div style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.5 }}>{entry.parsedTrades.length} trades</div>
+                        <div style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171", lineHeight: 1.5 }}>{wr}% WR</div>
                       </>
                     );
                   })()}
+                  {/* Instruments — bottom right */}
+                  <div style={{ position: "absolute", bottom: 7, right: 7, display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    {(entry.instruments?.length ? entry.instruments : entry.instrument ? [entry.instrument] : []).map(sym => (
+                      <span key={sym} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 2, background: "#1e3a5f33", color: "#64748b", border: "1px solid #1e3a5f55", letterSpacing: "0.04em" }}>{sym}</span>
+                    ))}
+                    {!entry.grade && (entry.moods?.length ? entry.moods : entry.mood ? [entry.mood] : []).map(m => (
+                      <span key={m} style={{ fontSize: 10 }}>{m.split(" ").pop()}</span>
+                    ))}
+                  </div>
                 </>
               ) : !isWeekend && (isPast || dateStr === today) ? (
                 <div style={{ fontSize: 9, color: "#1e293b", marginTop: 6, textAlign: "center" }}>+ add</div>
@@ -3054,23 +3054,22 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, border: "1px solid #3b82f6" }} /> Today</div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: "#0a0e1a", border: "1px solid #334155", opacity: 0.4 }} /> Weekend / no trade</div>
       </div>
-      {/* Monthly P&L Chart */}
+
+      {/* Cumulative P&L Chart — below calendar */}
       {monthEntries.length > 0 && (() => {
         const sorted = [...monthEntries].sort((a, b) => a.date.localeCompare(b.date));
         let running = 0;
         const points = sorted.map(e => { running += netPnl(e); return { date: e.date, cum: running, daily: netPnl(e) }; });
         const lineColor = points[points.length - 1].cum >= 0 ? "#4ade80" : "#f87171";
-        // Pad to 2 points so the chart always renders (single day = flat line)
         const chartVals = points.length === 1 ? [0, points[0].cum] : points.map(p => p.cum);
-
         return (
-          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 6, padding: "14px 16px", marginBottom: 16 }}>
+          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 6, padding: "16px 18px", marginTop: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em" }}>CUMULATIVE P&L</div>
-              <div style={{ fontSize: 13, color: lineColor, fontWeight: 500 }}>{fmtPnl(monthPnL)}</div>
+              <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em" }}>CUMULATIVE P&L · {(() => { const [y, m] = month.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase(); })()}</div>
+              <div style={{ fontSize: 14, color: lineColor, fontWeight: 600 }}>{fmtPnl(monthPnL)}</div>
             </div>
-            <EquityCurveChart values={chartVals} dots={points.length > 1} height={100} gradientId="ec2" />
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+            <EquityCurveChart values={chartVals} dots={points.length > 1} height={110} gradientId="ec2" />
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
               {points.map((p, i) => {
                 const show = points.length <= 8 || i === 0 || i === points.length - 1 || i % Math.ceil(points.length / 6) === 0;
                 return (
@@ -3083,7 +3082,6 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
           </div>
         );
       })()}
-
             {/* Trade Statistics */}
             {monthAnalytics && (
               <div>
@@ -3508,28 +3506,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
         <div style={{ fontSize: 10, color: "#64748b" }}>{weeks.length} weeks · {yearEntries.length} trading days</div>
       </div>
 
-      {/* Year summary bar */}
-      <div style={{ background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 6, padding: "14px 18px", marginBottom: 20 }}>
-        <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 12 }}>YEAR SUMMARY · {selectedYear}</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 14, marginBottom: equityPoints.length > 1 ? 18 : 0 }}>
-          {[
-            { l: "NET P&L", v: fmtPnl(yearNet), c: pnlColor(yearNet), hi: true },
-            { l: "WIN WEEKS", v: `${weeks.filter(wk => byWeek[wk].reduce((s,e)=>s+netPnl(e),0) > 0).length}/${weeks.length}`, c: "#e2e8f0" },
-            { l: "WIN DAYS", v: `${yearWinDays}/${yearLossDays}`, c: "#e2e8f0" },
-            { l: "TOTAL TRADES", v: yearTrades.length || "—", c: "#e2e8f0" },
-            { l: "WIN RATE", v: yearA ? `${yearA.winRate.toFixed(1)}%` : "—", c: yearA?.winRate >= 50 ? "#4ade80" : "#f87171" },
-            { l: "PROFIT FACTOR", v: yearA?.profitFactor ? yearA.profitFactor.toFixed(2) : "—", c: yearA?.profitFactor >= 1 ? "#4ade80" : "#f87171" },
-          ].map(s => (
-            <div key={s.l}>
-              <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 4 }}>{s.l}</div>
-              <div style={{ fontSize: 15, color: s.c, fontWeight: s.hi ? 700 : 500 }}>{s.v}</div>
-            </div>
-          ))}
-        </div>
-        {equityPoints.length >= 1 && (
-          <EquityCurveChart values={equityPoints.length === 1 ? [0, equityPoints[0]] : equityPoints} height={70} gradientId="ec4" />
-        )}
-      </div>
+
 
       {/* Weekly cards */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -3875,7 +3852,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
           return (
             <div key={monthStr}
               onClick={() => hasData && setExpandedMonth(isExpanded ? null : monthStr)}
-              style={{ background: hasData ? (netTotal > 0 ? "#061f0f" : netTotal < 0 ? "#1f0606" : "#0f1729") : isFuture ? "#060810" : "#0a0e1a", border: `1px solid ${isExpanded ? "#3b82f6" : hasData ? (netTotal > 0 ? "#166534" : netTotal < 0 ? "#7f1d1d" : "#1e293b") : "#0f1729"}`, borderRadius: 6, padding: "14px 16px", cursor: hasData ? "pointer" : "default", transition: "all .15s", opacity: isFuture ? 0.4 : 1 }}
+              style={{ background: hasData ? (netTotal > 0 ? "#061f0f" : netTotal < 0 ? "#1f0606" : "#0f1729") : isFuture ? "#060810" : "#0a0e1a", border: `1px solid ${isExpanded ? "#3b82f6" : hasData ? (netTotal > 0 ? "#166534" : netTotal < 0 ? "#7f1d1d" : "#1e293b") : "#0f1729"}`, borderRadius: 6, padding: "16px 18px", minHeight: hasData ? 130 : undefined, cursor: hasData ? "pointer" : "default", transition: "all .15s", opacity: isFuture ? 0.4 : 1 }}
               onMouseEnter={e => { if (hasData) e.currentTarget.style.borderColor = netTotal > 0 ? "#22c55e" : netTotal < 0 ? "#ef4444" : "#3b82f6"; }}
               onMouseLeave={e => { if (hasData) e.currentTarget.style.borderColor = isExpanded ? "#3b82f6" : netTotal > 0 ? "#166534" : netTotal < 0 ? "#7f1d1d" : "#1e293b"; }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: hasData ? 10 : 0 }}>
@@ -4022,8 +3999,8 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                         <div style={{ fontSize: 16, color: s.c, fontWeight: s.hi ? 700 : 500 }}>{s.v}</div>
                       </div>
                     ))}
-                  </div>
-                )}
+          </div>
+          )}
               </div>
 
               {/* Trade Statistics */}
@@ -4760,8 +4737,8 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
                   <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #1e293b", display: "flex", justifyContent: "flex-end" }}>
                     <button onClick={() => { setGenerated(prev => { const n = {...prev}; delete n[selectedPeriod]; return n; }); generateSummary(selectedPeriod); }}
                       style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em" }}>↺ REGENERATE</button>
-                  </div>
-                )}
+          </div>
+          )}
               </div>
             )}
           </div>
@@ -5534,8 +5511,8 @@ function CertificatesTab({ certs, setCerts, certLightbox, setCertLightbox }) {
                     <div style={{ fontSize: 8, color: "#1e293b", letterSpacing: "0.06em", flexShrink: 0 }}>
                       {new Date(cert.addedAt).toLocaleDateString("en-US", { month: "short", year: "numeric" }).toUpperCase()}
                     </div>
-                  </div>
-                )}
+          </div>
+          )}
               </div>
 
               {/* Hover overlay: edit + remove buttons */}
@@ -5959,8 +5936,8 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                     </div>
                     <PctBar pct={ps.evalProfitTargetPct} color="#3b82f6" warn={75} danger={101} />
                     <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 4 }}>{fmt$(ps.evalStats.cumPnl)} of {fmt$(cfg.eval.profitTarget)} target</div>
-                  </div>
-                )}
+          </div>
+          )}
                 {ps?.fundedStats && (
                   <div style={{ background: "#070d1a", border: "1px solid #166534", borderRadius: 6, padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, color: "#4ade80", letterSpacing: "0.1em", marginBottom: 12 }}>✓ FUNDED · ACTIVE</div>
@@ -5981,8 +5958,8 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                     </div>
                     <PctBar pct={(ps.qualifyingProfitDays / cfg.funded.minProfitDays) * 100} color="#4ade80" warn={80} danger={101} />
                     <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 4 }}>{ps.qualifyingProfitDays} of {cfg.funded.minProfitDays} qualifying profit days (≥{fmt$(cfg.funded.minDailyProfit)}/day)</div>
-                  </div>
-                )}
+          </div>
+          )}
               </div>
               {ps && (
                 <div style={{ background: "#070d1a", border: "1px solid #1e293b", borderRadius: 6, padding: "16px 18px" }}>
@@ -6438,8 +6415,8 @@ function RiskCalcPanel() {
                       <Stat label="2R Target" value={`$${reward2x.toLocaleString()}`} color="#4ade80" sub={`${(ticks*2).toFixed(0)} ticks`} />
                       <Stat label="3R Target" value={`$${reward3x.toLocaleString()}`} color="#22d3ee" sub={`${(ticks*3).toFixed(0)} ticks`} />
                     </div>
-                  </div>
-                )}
+          </div>
+          )}
 
                 {/* Quick presets */}
                 <div style={{ background: "#070d1a", border: "1px solid #0f1729", borderRadius: 6, padding: "12px 14px" }}>
@@ -6490,15 +6467,15 @@ function RiskCalcPanel() {
                         return <Stat key={r} label={`${r} Target`} value={`$${profit.toLocaleString()}`} color={c} sub={`$${target.toFixed(2)} per share`} />;
                       })}
                     </div>
-                  </div>
-                )}
+          </div>
+          )}
 
                 {/* Position concentration warning */}
                 {sPositionPct > 25 && (
                   <div style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 6, padding: "10px 14px", fontSize: 11, color: "#f87171" }}>
                     ⚠ Position is {sPositionPct.toFixed(0)}% of account — consider reducing size or using options for defined risk.
-                  </div>
-                )}
+          </div>
+          )}
               </div>
             )}
             </> /* end innerTab === calc */}
@@ -6566,9 +6543,68 @@ function RiskCalcPanel() {
 
 function ReferenceView() {
   const [activeSection, setActiveSection] = useState("sessions");
+  const [sessInnerTab, setSessInnerTab] = useState("map");
 
   // ── Resource Links ──
   const LINK_CATS = ["News", "Education", "Tools", "Brokers", "Charts", "Other"];
+
+  // ── Trading Album ──
+  const [album, setAlbum] = useState(() => {
+    try { const r = localStorage.getItem("tj-album-v1"); return r ? JSON.parse(r) : []; } catch { return []; }
+  });
+  const ALBUM_CATS = [
+    { id: "chart",     label: "Chart",      emoji: "📊", color: "#3b82f6" },
+    { id: "lesson",    label: "Lesson",     emoji: "📚", color: "#8b5cf6" },
+    { id: "motivation",label: "Motivation", emoji: "🔥", color: "#f59e0b" },
+    { id: "news",      label: "News",       emoji: "📰", color: "#ef4444" },
+    { id: "setup",     label: "Setup",      emoji: "📈", color: "#10b981" },
+    { id: "mistake",   label: "Mistake",    emoji: "⚠️",  color: "#f97316" },
+    { id: "strategy",  label: "Strategy",   emoji: "🧠", color: "#ec4899" },
+    { id: "other",     label: "Other",      emoji: "📌", color: "#64748b" },
+  ];
+  const [albumFilter, setAlbumFilter] = useState("all");
+  const [albumForm, setAlbumForm] = useState({ title: "", caption: "", type: "chart" });
+  const [albumPending, setAlbumPending] = useState(null); // base64 image waiting for title
+  const [albumLightbox, setAlbumLightbox] = useState(null); // id of image to show full size
+  const [albumEditing, setAlbumEditing] = useState(null); // id being edited
+  const [albumConfirmDelete, setAlbumConfirmDelete] = useState(null);
+  const [albumPasteActive, setAlbumPasteActive] = useState(false);
+
+  const saveAlbum = (updated) => {
+    setAlbum(updated);
+    try { localStorage.setItem("tj-album-v1", JSON.stringify(updated)); } catch {}
+  };
+
+  const handleAlbumPaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setAlbumPending(ev.target.result);
+          setAlbumForm({ title: "", caption: "" });
+        };
+        reader.readAsDataURL(blob);
+        break;
+      }
+    }
+  };
+
+  const confirmAddAlbumImage = () => {
+    if (!albumPending) return;
+    const entry = { id: Date.now(), src: albumPending, title: albumForm.title.trim() || "Untitled", caption: albumForm.caption.trim(), type: albumForm.type || "chart", addedAt: new Date().toISOString() };
+    saveAlbum([entry, ...album]);
+    setAlbumPending(null);
+    setAlbumForm({ title: "", caption: "", type: "chart" });
+  };
+
+  const saveAlbumEdit = (id) => {
+    saveAlbum(album.map(img => img.id === id ? { ...img, title: albumForm.title.trim() || img.title, caption: albumForm.caption.trim(), type: albumForm.type || img.type || "setup" } : img));
+    setAlbumEditing(null);
+  };
   const [links, setLinks] = useState(() => {
     try { const r = localStorage.getItem("tj-links-v1"); return r ? JSON.parse(r) : []; } catch { return []; }
   });
@@ -6613,11 +6649,11 @@ function ReferenceView() {
 
   const SECTIONS = [
     { id: "sessions", label: "SESSION MAP" },
-    { id: "events",  label: "NEWS EVENTS" },
-    { id: "notes",   label: "REMINDERS" },
     { id: "risk",    label: "⚡ RISK CALC" },
 
-    { id: "links",   label: "🔗 MY LINKS" },
+    { id: "links",   label: "🔗 RESOURCE LINKS" },
+    { id: "album",   label: "📸 TRADING ALBUM" },
+    { id: "quotes",  label: "💬 QUOTES" },
   ];
 
   // 24h timeline bar — 6PM to 5PM next day (23hrs)
@@ -6671,9 +6707,9 @@ function ReferenceView() {
   const slotNameColor = (kind) => kind === "best" ? "#00ff88" : kind === "avoid" ? "#ff3355" : "#ff8c00";
 
   return (
-    <div style={{ fontFamily:"'DM Mono',monospace" }}>
+    <div style={{ fontFamily:"'DM Mono',monospace", overflow:"visible" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&family=Bodoni+Moda:ital,wght@1,900&display=swap');
         @keyframes refFadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         .ref-card { transition: border-color .18s, transform .18s; }
         .ref-card:hover { transform: translateY(-1px); }
@@ -6683,7 +6719,7 @@ function ReferenceView() {
 
       {/* ── PAGE HEADER ── */}
       <div style={{ marginBottom:24, animation:"refFadeIn .35s ease" }}>
-        <div style={{ fontSize:9, color:"#3b82f6", letterSpacing:"0.2em", marginBottom:8 }}>📊 ES · MES · FUTURES REFERENCE</div>
+
         <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:28, color:"#e2e8f0", letterSpacing:"0.1em", lineHeight:1 }}>
           TRADING <span style={{ color:"#00ff88" }}>SESSIONS</span>
         </div>
@@ -6694,7 +6730,7 @@ function ReferenceView() {
       <div style={{ display:"flex", gap:6, marginBottom:20, flexWrap:"wrap" }}>
         {SECTIONS.map(s => (
           <button key={s.id} className="ref-sec-btn" onClick={() => setActiveSection(s.id)}
-            style={{ padding:"11px 24px", borderRadius:4, fontFamily:"inherit", fontSize:13, cursor:"pointer", letterSpacing:"0.06em", transition:"all .15s", background: activeSection===s.id?"#0a1628":"transparent", border:`1px solid ${activeSection===s.id?"#3b82f6":"#1e293b"}`, color: activeSection===s.id?"#93c5fd":"#94a3b8" }}>
+            style={{ padding:"8px 18px", borderRadius:4, fontFamily:"inherit", fontSize:11, cursor:"pointer", letterSpacing:"0.06em", transition:"all .15s", background: activeSection===s.id?"#0a1628":"transparent", border:`1px solid ${activeSection===s.id?"#3b82f6":"#1e293b"}`, color: activeSection===s.id?"#93c5fd":"#94a3b8" }}>
             {s.label}
           </button>
         ))}
@@ -6705,6 +6741,19 @@ function ReferenceView() {
       ════════════════════════════════════════════════ */}
       {activeSection === "sessions" && (
         <div style={{ animation:"refFadeIn .3s ease" }}>
+          <div style={{ display:"flex", gap:6, marginBottom:18 }}>
+            {[["map","🗺 SESSION MAP"],["reminders","📌 REMINDERS"]].map(([id,label]) => (
+              <button key={id} onClick={() => setSessInnerTab(id)}
+                style={{ padding:"7px 16px", borderRadius:4, fontFamily:"inherit", fontSize:11, cursor:"pointer", letterSpacing:"0.06em", transition:"all .15s",
+                  background: sessInnerTab===id ? "#0a1628" : "transparent",
+                  border: `1px solid ${sessInnerTab===id ? "#3b82f6" : "#1e293b"}`,
+                  color: sessInnerTab===id ? "#93c5fd" : "#94a3b8" }}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {sessInnerTab === "map" && <>
 
           {/* 24-Hour Timeline */}
           <div style={{ background:"#060b18", border:"1px solid #0f1e30", borderRadius:8, padding:"22px 24px 20px", marginBottom:20, position:"relative", overflow:"hidden" }}>
@@ -6822,17 +6871,10 @@ function ReferenceView() {
             </div>
           </div>
 
-          </div>
-        </div>
-      )}
+          {/* NEWS EVENTS — merged into Session Map */}
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.15em", marginBottom: 12 }}>📅 HIGH VOLUME NEWS EVENTS</div>
 
-
-
-      {/* ════════════════════════════════════════════════
-          NEWS EVENTS TAB
-      ════════════════════════════════════════════════ */}
-      {activeSection === "events" && (
-        <div style={{ animation:"refFadeIn .3s ease" }}>
           <div style={{ background:"#060b18", border:"1px solid #0f1e30", borderRadius:8, padding:"22px 24px", position:"relative", overflow:"hidden" }}>
             <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:"linear-gradient(90deg,#ff8c00,#ffd700)" }}/>
             <div style={{ fontSize:10, color:"#64748b", letterSpacing:"0.15em", marginBottom:18 }}>📅 HIGH VOLUME NEWS EVENTS — WATCH THESE</div>
@@ -6854,14 +6896,14 @@ function ReferenceView() {
               </div>
             </div>
           </div>
-        </div>
-      )}
+          </div>
+          </div>
 
-      {/* ════════════════════════════════════════════════
-          REMINDERS TAB
-      ════════════════════════════════════════════════ */}
-      {activeSection === "notes" && (
-        <div style={{ animation:"refFadeIn .3s ease", display:"flex", flexDirection:"column", gap:14 }}>
+          </> /* end sessInnerTab map */}
+
+          {sessInnerTab === "reminders" && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+
 
           {/* Ontario / EST advantage */}
           <div style={{ background:"rgba(0,255,136,0.04)", border:"1px solid rgba(0,255,136,0.18)", borderRadius:8, padding:"18px 22px", display:"flex", alignItems:"flex-start", gap:16 }}>
@@ -6923,8 +6965,15 @@ function ReferenceView() {
             </div>
           </div>
 
+
+          </div>
+          )}
+
         </div>
       )}
+
+
+
       {activeSection === "risk" && <RiskCalcPanel />}
 
       {activeSection === "links" && (
@@ -7088,6 +7137,236 @@ function ReferenceView() {
               })()}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ══════════════════ TRADING ALBUM TAB ══════════════════ */}
+      {activeSection === "album" && (
+        <div style={{ animation: "refFadeIn .3s ease" }}
+          onPaste={handleAlbumPaste}>
+
+          {/* Header */}
+          <div style={{ background: "#060b18", border: "1px solid #1e3a5f", borderRadius: 8, padding: "18px 22px", marginBottom: 20, position: "relative", overflow: "hidden" }}>
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#3b82f6,#8b5cf6,#ec4899)" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 26 }}>📸</span>
+              <div>
+                <div style={{ fontFamily: "'Rajdhani',sans-serif", fontSize: 18, fontWeight: 700, color: "#93c5fd", letterSpacing: "0.08em" }}>TRADING ALBUM</div>
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 2 }}>Chart setups, lessons, marked-up screenshots — your visual trading library</div>
+              </div>
+              <div style={{ marginLeft: "auto", fontSize: 10, color: "#334155", background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 4, padding: "6px 12px", letterSpacing: "0.06em" }}>
+                {album.length} image{album.length !== 1 ? "s" : ""}
+              </div>
+            </div>
+          </div>
+
+          {/* Paste zone */}
+          <div
+            style={{ border: `2px dashed ${albumPasteActive ? "#3b82f6" : "#1e293b"}`, borderRadius: 8, padding: "28px 24px", textAlign: "center", marginBottom: 20, cursor: "pointer", background: albumPasteActive ? "rgba(59,130,246,0.04)" : "transparent", transition: "all .2s" }}
+            onFocus={() => setAlbumPasteActive(true)}
+            onBlur={() => setAlbumPasteActive(false)}
+            onClick={() => { setAlbumPasteActive(true); }}
+            tabIndex={0}
+            onPaste={handleAlbumPaste}>
+            {albumPending ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, alignItems: "center" }}>
+                <img src={albumPending} alt="preview" style={{ maxHeight: 220, maxWidth: "100%", borderRadius: 6, border: "1px solid #1e3a5f", objectFit: "contain" }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", maxWidth: 560 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>TITLE</label>
+                      <input type="text" placeholder="e.g. MES breakout setup" value={albumForm.title} onChange={e => setAlbumForm(p => ({ ...p, title: e.target.value }))}
+                        style={{ fontSize: 12, padding: "7px 10px" }} autoFocus />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>CAPTION / NOTE</label>
+                      <input type="text" placeholder="What does this chart show?" value={albumForm.caption} onChange={e => setAlbumForm(p => ({ ...p, caption: e.target.value }))}
+                        style={{ fontSize: 12, padding: "7px 10px" }} />
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>TYPE</label>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {ALBUM_CATS.map(cat => (
+                        <button key={cat.id} type="button" onClick={() => setAlbumForm(p => ({ ...p, type: cat.id }))}
+                          style={{ padding: "6px 14px", borderRadius: 20, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.04em", transition: "all .15s",
+                            background: albumForm.type === cat.id ? cat.color + "22" : "transparent",
+                            border: `1px solid ${albumForm.type === cat.id ? cat.color : "#1e293b"}`,
+                            color: albumForm.type === cat.id ? cat.color : "#64748b" }}>
+                          {cat.emoji} {cat.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={confirmAddAlbumImage}
+                    style={{ background: "#1d4ed8", color: "white", border: "none", padding: "9px 22px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em" }}>
+                    + SAVE TO ALBUM
+                  </button>
+                  <button onClick={() => { setAlbumPending(null); setAlbumForm({ title: "", caption: "" }); }}
+                    style={{ background: "transparent", border: "1px solid #1e293b", color: "#64748b", padding: "9px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em" }}>
+                    CANCEL
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontSize: 32, marginBottom: 10, opacity: 0.4 }}>📋</div>
+                <div style={{ fontSize: 14, color: "#334155", marginBottom: 4 }}>Click here, then paste a screenshot</div>
+                <div style={{ fontSize: 11, color: "#1e293b" }}>Ctrl+V / Cmd+V — works with any chart, screenshot, or image</div>
+              </div>
+            )}
+          </div>
+
+          {/* Filter bar */}
+          {album.length > 0 && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
+              <button onClick={() => setAlbumFilter("all")}
+                style={{ padding: "6px 16px", borderRadius: 20, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.04em", transition: "all .15s",
+                  background: albumFilter === "all" ? "rgba(255,255,255,0.08)" : "transparent",
+                  border: `1px solid ${albumFilter === "all" ? "#475569" : "#1e293b"}`,
+                  color: albumFilter === "all" ? "#e2e8f0" : "#64748b" }}>
+                All ({album.length})
+              </button>
+              {ALBUM_CATS.map(cat => {
+                const count = album.filter(img => (img.type || "chart") === cat.id).length;
+                if (count === 0) return null;
+                return (
+                  <button key={cat.id} onClick={() => setAlbumFilter(cat.id)}
+                    style={{ padding: "6px 16px", borderRadius: 20, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.04em", transition: "all .15s",
+                      background: albumFilter === cat.id ? cat.color + "22" : "transparent",
+                      border: `1px solid ${albumFilter === cat.id ? cat.color : "#1e293b"}`,
+                      color: albumFilter === cat.id ? cat.color : "#64748b" }}>
+                    {cat.emoji} {cat.label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Grid */}
+          {(() => {
+            const filtered = albumFilter === "all" ? album : album.filter(img => (img.type || "chart") === albumFilter);
+            return filtered.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px 0", color: "#1e293b", fontSize: 12 }}>
+              {album.length === 0 ? "No images yet — paste your first chart above" : "No images in this category"}
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 }}>
+              {filtered.map(img => (
+                <div key={img.id}
+                  style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 6, overflow: "hidden", transition: "border-color .15s" }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = "#3b82f6"}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = "#1e293b"}>
+
+                  {/* Thumbnail */}
+                  <div style={{ position: "relative", cursor: "pointer" }} onClick={() => setAlbumLightbox(img.id)}>
+                    <img src={img.src} alt={img.title} style={{ width: "100%", height: 160, objectFit: "cover", display: "block" }} />
+                    <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0)", transition: "background .15s", display: "flex", alignItems: "center", justifyContent: "center" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.35)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "rgba(0,0,0,0)"}>
+                      <span style={{ fontSize: 22, opacity: 0, transition: "opacity .15s" }}
+                        onMouseEnter={e => { e.currentTarget.style.opacity = 1; }}
+                        onMouseLeave={e => { e.currentTarget.style.opacity = 0; }}>🔍</span>
+                    </div>
+                  </div>
+
+                  {/* Info */}
+                  <div style={{ padding: "10px 12px" }}>
+                    {albumEditing === img.id ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <input type="text" value={albumForm.title} onChange={e => setAlbumForm(p => ({ ...p, title: e.target.value }))}
+                          placeholder="Title" style={{ fontSize: 11, padding: "5px 8px" }} autoFocus />
+                        <input type="text" value={albumForm.caption} onChange={e => setAlbumForm(p => ({ ...p, caption: e.target.value }))}
+                          placeholder="Caption / note" style={{ fontSize: 11, padding: "5px 8px" }} />
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          {ALBUM_CATS.map(cat => (
+                            <button key={cat.id} type="button" onClick={() => setAlbumForm(p => ({ ...p, type: cat.id }))}
+                              style={{ padding: "3px 10px", borderRadius: 20, fontFamily: "inherit", fontSize: 10, cursor: "pointer", transition: "all .15s",
+                                background: albumForm.type === cat.id ? cat.color + "22" : "transparent",
+                                border: `1px solid ${albumForm.type === cat.id ? cat.color : "#1e293b"}`,
+                                color: albumForm.type === cat.id ? cat.color : "#475569" }}>
+                              {cat.emoji} {cat.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button onClick={() => saveAlbumEdit(img.id)}
+                            style={{ flex: 1, background: "#1d4ed8", color: "white", border: "none", padding: "5px 0", borderRadius: 3, fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.06em" }}>SAVE</button>
+                          <button onClick={() => setAlbumEditing(null)}
+                            style={{ flex: 1, background: "transparent", border: "1px solid #1e293b", color: "#64748b", padding: "5px 0", borderRadius: 3, fontFamily: "inherit", fontSize: 10, cursor: "pointer" }}>CANCEL</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                          {(() => { const cat = ALBUM_CATS.find(c => c.id === (img.type || "chart")); return cat ? <span style={{ fontSize: 9, padding: "1px 7px", borderRadius: 10, background: cat.color + "18", border: `1px solid ${cat.color}44`, color: cat.color, letterSpacing: "0.06em", flexShrink: 0 }}>{cat.emoji} {cat.label}</span> : null; })()}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 600, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{img.title}</div>
+                        {img.caption && <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.5, marginBottom: 6 }}>{img.caption}</div>}
+                        <div style={{ fontSize: 9, color: "#334155", marginBottom: 8 }}>{new Date(img.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button onClick={() => { setAlbumEditing(img.id); setAlbumForm({ title: img.title, caption: img.caption || "", type: img.type || "chart" }); }}
+                            style={{ flex: 1, background: "transparent", border: "1px solid #1e293b", color: "#64748b", padding: "4px 0", borderRadius: 3, fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.04em", transition: "all .15s" }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.color = "#93c5fd"; }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#64748b"; }}>
+                            EDIT
+                          </button>
+                          {albumConfirmDelete === img.id ? (
+                            <>
+                              <button onClick={() => { saveAlbum(album.filter(a => a.id !== img.id)); setAlbumConfirmDelete(null); }}
+                                style={{ flex: 1, background: "#450a0a", border: "1px solid #7f1d1d", color: "#f87171", padding: "4px 0", borderRadius: 3, fontFamily: "inherit", fontSize: 10, cursor: "pointer" }}>DELETE</button>
+                              <button onClick={() => setAlbumConfirmDelete(null)}
+                                style={{ flex: 1, background: "transparent", border: "1px solid #1e293b", color: "#64748b", padding: "4px 0", borderRadius: 3, fontFamily: "inherit", fontSize: 10, cursor: "pointer" }}>NO</button>
+                            </>
+                          ) : (
+                            <button onClick={() => setAlbumConfirmDelete(img.id)}
+                              style={{ flex: 1, background: "transparent", border: "1px solid #1e293b", color: "#475569", padding: "4px 0", borderRadius: 3, fontFamily: "inherit", fontSize: 10, cursor: "pointer", transition: "all .15s" }}
+                              onMouseEnter={e => { e.currentTarget.style.borderColor = "#7f1d1d"; e.currentTarget.style.color = "#f87171"; }}
+                              onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#475569"; }}>
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+          })()}
+
+          {/* Lightbox */}
+          {albumLightbox && (() => {
+            const img = album.find(a => a.id === albumLightbox);
+            if (!img) return null;
+            return (
+              <div onClick={() => setAlbumLightbox(null)}
+                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+                <div onClick={e => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", alignItems: "center", maxWidth: "90vw", maxHeight: "90vh", gap: 14 }}>
+                  <img src={img.src} alt={img.title} style={{ maxWidth: "100%", maxHeight: "78vh", objectFit: "contain", borderRadius: 6, border: "1px solid #1e3a5f" }} />
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 15, color: "#e2e8f0", fontWeight: 600, marginBottom: 4 }}>{img.title}</div>
+                    {img.caption && <div style={{ fontSize: 12, color: "#64748b" }}>{img.caption}</div>}
+                  </div>
+                  <button onClick={() => setAlbumLightbox(null)}
+                    style={{ background: "transparent", border: "1px solid #334155", color: "#94a3b8", padding: "8px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em" }}>
+                    CLOSE ✕
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+
+      {/* ══════════════════ QUOTES TAB ══════════════════ */}
+      {activeSection === "quotes" && (
+        <div style={{ animation: "refFadeIn .3s ease" }}>
+          <QuotesView />
         </div>
       )}
 
@@ -7814,8 +8093,11 @@ export default function TradingJournal() {
 
   const handleExport = async () => {
     try {
-      const linksBackup = (() => { try { const r = localStorage.getItem("tj-links-v1"); return r ? JSON.parse(r) : []; } catch { return []; } })();
-      const allData = { version: 2, exportedAt: new Date().toISOString(), journals, entriesByJournal: {}, links: linksBackup };
+      const linksBackup  = (() => { try { const r = localStorage.getItem("tj-links-v1");  return r ? JSON.parse(r) : []; } catch { return []; } })();
+      const albumBackup  = (() => { try { const r = localStorage.getItem("tj-album-v1");  return r ? JSON.parse(r) : []; } catch { return []; } })();
+      const quotesResult = await storage.get("trader-quotes-v1");
+      const quotesBackup = quotesResult?.value ? JSON.parse(quotesResult.value) : [];
+      const allData = { version: 2, exportedAt: new Date().toISOString(), journals, entriesByJournal: {}, links: linksBackup, album: albumBackup, quotes: quotesBackup };
       for (const j of journals) {
         try {
           const r = await storage.get(`journal-entries-${j.id}`);
@@ -7924,7 +8206,11 @@ export default function TradingJournal() {
         await storage.set(`journal-entries-${j.id}`, JSON.stringify(jes));
       }
       // Restore resource links if present in backup
-      if (data.links?.length) { try { localStorage.setItem("tj-links-v1", JSON.stringify(data.links)); } catch {} }
+      if (data.links?.length)  { try { localStorage.setItem("tj-links-v1",  JSON.stringify(data.links));  } catch {} }
+      // Restore trading album if present in backup
+      if (data.album?.length)  { try { localStorage.setItem("tj-album-v1",  JSON.stringify(data.album));  } catch {} }
+      // Restore custom quotes if present in backup
+      if (data.quotes?.length) { try { await storage.set("trader-quotes-v1", JSON.stringify(data.quotes)); } catch {} }
       const firstId = data.journals[0]?.id || DEFAULT_JOURNAL_ID;
       setActiveJournalId(firstId);
       setEntries(data.entriesByJournal[firstId] || []);
@@ -7945,9 +8231,9 @@ export default function TradingJournal() {
 
   return (
     <>
-    <div style={{ fontFamily: "'DM Mono','Courier New',monospace", background: "#0a0e1a", minHeight: "100vh", color: "#e2e8f0" }}>
+    <div style={{ fontFamily: "'Space Grotesk','DM Mono',sans-serif", background: "#0a0e1a", minHeight: "100vh", color: "#e2e8f0" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&family=Bodoni+Moda:ital,wght@1,900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
         html,body{width:100%;margin:0;padding:0}*{box-sizing:border-box;margin:0;padding:0}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0a0e1a}::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px}
         textarea,input,select{background:#0f1729!important;color:#e2e8f0!important;border:1px solid #1e3a5f!important;border-radius:4px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:13px;width:100%;outline:none;transition:border-color .2s;resize:vertical}
@@ -7965,12 +8251,23 @@ export default function TradingJournal() {
       `}</style>
 
       {/* Header */}
-      <div style={{ borderBottom: "1px solid #1e293b", padding: "14px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#0a0e1a", zIndex: 10 }}>
+      <div style={{ borderBottom: "1px solid #1e293b", padding: "10px 32px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#0a0e1a", zIndex: 10, overflow: "visible" }}>
 
-        {/* LEFT: Title + backup menu */}
-        <div style={{ display: "flex", alignItems: "baseline", gap: 14, position: "relative", flexShrink: 0 }}>
-          <span onClick={() => { setView("list"); setActiveEntry(null); }} style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 30, color: "#3b82f6", letterSpacing: "0.15em", cursor: "pointer", transition: "color .15s" }} onMouseEnter={e => e.currentTarget.style.color="#60a5fa"} onMouseLeave={e => e.currentTarget.style.color="#3b82f6"}>TRADING JOURNAL</span>
-          <span style={{ fontSize: 11, color: "#334155", letterSpacing: "0.12em" }}>FUTURES</span>
+        {/* LEFT: AyeOh signature — clickable home, with settings trigger */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative", flexShrink: 0, overflow: "visible" }}>
+          <div onClick={() => { setView("list"); setActiveEntry(null); setListMode("calendar"); }}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0, cursor: "pointer", userSelect: "none", paddingBottom: 4 }}
+            onMouseEnter={e => e.currentTarget.querySelector(".ayeoh-sig").style.opacity = "0.75"}
+            onMouseLeave={e => e.currentTarget.querySelector(".ayeoh-sig").style.opacity = "1"}>
+            <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+              <div className="ayeoh-sig" style={{ fontFamily: "'Bodoni Moda',serif", fontSize: 32, fontWeight: 900, fontStyle: "italic", letterSpacing: "0.04em", lineHeight: 1.2, background: "linear-gradient(135deg, #38bdf8 0%, #818cf8 55%, #c084fc 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", transition: "opacity .15s", paddingBottom: 2 }}>AyeOh</div>
+              <div style={{ width: 1, height: 28, background: "linear-gradient(180deg, transparent, #334155, transparent)", margin: "0 10px", flexShrink: 0 }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, justifyContent: "center" }}>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: "#38bdf8", letterSpacing: "0.25em", opacity: 0.8 }}>TRADING</div>
+                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: "#38bdf8", letterSpacing: "0.25em", opacity: 0.8 }}>JOURNAL</div>
+              </div>
+            </div>
+          </div>
           {/* Settings trigger */}
           <button
             onClick={() => { setShowSettings(true); setSettingsTab("backup"); setImportMsg(null); }}
@@ -8657,15 +8954,19 @@ export default function TradingJournal() {
       {/* ── QUOTE OF THE DAY — independent full-width section ── */}
       {headerQuotes.length > 0 && (view === "list" || view === "recap") && (() => {
         const CARD_STYLES = [
-          { accent: "#3b82f6", glow: "rgba(59,130,246,0.07)", label: "✦ QUOTE OF THE DAY ✦", textSize: 22, layout: "center" },
           { accent: "#f59e0b", glow: "rgba(245,158,11,0.06)",  label: "✦ DISCIPLINE ✦",       textSize: 16, layout: "left"   },
+          { accent: "#3b82f6", glow: "rgba(59,130,246,0.07)", label: "✦ QUOTE OF THE DAY ✦", textSize: 22, layout: "center" },
           { accent: "#4ade80", glow: "rgba(74,222,128,0.06)",  label: "✦ EDGE ✦",              textSize: 16, layout: "left"   },
         ];
+        // Reorder quotes so hero (QUOTE OF THE DAY) is centre
+        const orderedQuotes = headerQuotes.length >= 3
+          ? [headerQuotes[1], headerQuotes[0], headerQuotes[2]]
+          : headerQuotes;
         return (
-          <div style={{ width: "100%", padding: "28px 40px 0", boxSizing: "border-box", display: "grid", gridTemplateColumns: "1.55fr 1fr 1fr", gap: 20, marginBottom: 0 }}>
-              {headerQuotes.map((q, i) => {
+          <div style={{ width: "100%", padding: "28px 40px 0", boxSizing: "border-box", display: "grid", gridTemplateColumns: "1fr 1.4fr 1fr", gap: 20, marginBottom: 0 }}>
+              {orderedQuotes.map((q, i) => {
                 const cs = CARD_STYLES[i] || CARD_STYLES[2];
-                const isHero = i === 0;
+                const isHero = i === 1;
                 return (
                   <div key={q.id} onClick={() => setView("quotes")} style={{ borderRadius: 8, border: `1px solid ${cs.accent}28`, background: "#070d1a", padding: isHero ? "52px 44px 48px" : "44px 32px 40px", position: "relative", overflow: "hidden", textAlign: cs.layout, cursor: "pointer", transition: "border-color .15s" }} onMouseEnter={e => e.currentTarget.style.borderColor=`${cs.accent}55`} onMouseLeave={e => e.currentTarget.style.borderColor=`${cs.accent}28`}>
                     {/* Top accent line */}
@@ -8725,10 +9026,7 @@ export default function TradingJournal() {
                 style={{ padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", whiteSpace: "nowrap" }}>
                 📊 REFERENCE
               </button>
-              <button onClick={() => setView("quotes")}
-                style={{ padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", whiteSpace: "nowrap" }}>
-                💬 QUOTES
-              </button>
+
               {listMode === "calendar" ? (
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button onClick={() => { const [y, m] = calMonth.split("-").map(Number); const d = new Date(y, m - 2, 1); setCalMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }}
@@ -9034,8 +9332,8 @@ export default function TradingJournal() {
                       <input type="number" placeholder="0.00" value={form.pnl} onChange={e => f("pnl", e.target.value)}
                         style={{ width: 160, fontSize: 16, fontWeight: 600, padding: "8px 12px", textAlign: "right" }} />
                     </div>
-                  </div>
-                )}
+          </div>
+          )}
               </div>
             </div>
             {/* Fees + Net PnL + optional cash deposit row */}
@@ -9269,23 +9567,23 @@ export default function TradingJournal() {
                       <button onClick={confirmCsvReplace} style={{ background: "#1d4ed8", color: "white", border: "none", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em" }}>YES, REPLACE</button>
                       <button onClick={() => setCsvConfirmPending(null)} style={{ background: "transparent", border: "1px solid #334155", color: "#94a3b8", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em" }}>CANCEL</button>
                     </div>
-                  </div>
-                )}
+          </div>
+          )}
 
                 {/* Errors */}
                 {(importError || aiParseError) && (
                   <div style={{ color: "#f87171", fontSize: 12, background: "#1f060622", border: "1px solid #450a0a", padding: "10px 14px", borderRadius: 4 }}>
                     ⚠ {importError || aiParseError}
-                  </div>
-                )}
+          </div>
+          )}
 
                 {/* Success */}
                 {importSuccess && (
                   <div style={{ color: "#4ade80", fontSize: 12, background: "#052e1622", border: "1px solid #166534", padding: "12px 14px", borderRadius: 4 }}>
                     <div>✓ <strong>{form.parsedTrades.length} trades</strong> parsed · Total P&L: <strong>{fmtPnl(form.pnl)}</strong></div>
                     <div style={{ fontSize: 10, color: "#4ade8099", marginTop: 4 }}>Analysis tab is now unlocked →</div>
-                  </div>
-                )}
+          </div>
+          )}
 
                 {/* Parse button */}
                 <button
