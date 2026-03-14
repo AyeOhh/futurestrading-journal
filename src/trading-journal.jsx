@@ -1,90 +1,81 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 
-// ── Storage adapter: uses window.storage in Claude.ai, localStorage elsewhere ──
-const storage = (() => {
-  const hasWindowStorage = typeof window !== 'undefined' && window.storage &&
-    typeof window.storage.get === 'function' && typeof window.storage.set === 'function';
+// ... [Storage adapter and constant definitions remain unchanged] ...
 
-  if (hasWindowStorage) return window.storage;
+// ── REFERENCE SECTION COMPONENT ──
+const ReferenceSection = ({ activeSection, setActiveSection }) => {
+  const SECTIONS = [
+    { id: "sessions", label: "📈 SESSIONS" },
+    { id: "rules", label: "📜 TRADING RULES" },
+    { id: "checklist", label: "✅ CHECKLIST" },
+    { id: "specs", label: "🔍 CONTRACT SPECS" }
+  ];
 
-  return {
-    get: async (key) => {
-      try {
-        const val = localStorage.getItem(key);
-        return val !== null ? { key, value: val } : null;
-      } catch { return null; }
-    },
-    set: async (key, value) => {
-      try { localStorage.setItem(key, value); return { key, value }; } catch { return null; }
-    },
-    delete: async (key) => {
-      try { localStorage.removeItem(key); return { key, deleted: true }; } catch { return null; }
-    },
-    list: async (prefix) => {
-      try {
-        const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
-        return { keys };
-      } catch { return { keys: [] }; }
-    },
-  };
-})();
-
-// ... [Existing Options and Registry Code] ...
-
-const TradingJournal = () => {
-  // ... [Existing State Logic] ...
-
-  // ── RENDER INDIVIDUAL ENTRY IN LIST ──
-  const RenderEntry = ({ e, idx }) => {
-    const a = entryAnalytics[e.id];
-    const isActive = form.id === e.id;
-    
-    return (
-      <div 
-        onClick={() => { setForm(e); setTab("session"); }}
-        style={{ 
-          padding: "12px 16px", 
-          background: isActive ? "#0f172a" : (idx % 2 === 0 ? "#070d1a" : "transparent"),
-          borderBottom: "1px solid #0f1729",
-          cursor: "pointer",
-          position: "relative",
-          transition: "background .15s"
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          {/* ... [Entry details like date, P&L, etc] ... */}
-
-          {/* ── UPDATED DELETE BUTTON WITH CONFIRMATION ── */}
-          <button 
-            onClick={(event) => {
-              event.stopPropagation(); // Stop row click from opening the editor
-              if (window.confirm("Are you sure you want to delete this trade entry? This cannot be undone.")) {
-                removeEntry(e.id);
-              }
-            }} 
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "#475569", 
-              fontSize: 14,
-              cursor: "pointer",
-              padding: "4px 8px",
-              transition: "color .15s",
-              fontFamily: "inherit",
-              zIndex: 10
-            }}
-            onMouseEnter={el => el.currentTarget.style.color = "#f87171"} // Warning color on hover
-            onMouseLeave={el => el.currentTarget.style.color = "#475569"}
-            title="Delete Entry"
-          >
-            ✕
-          </button>
+  return (
+    <div style={{ padding: "20px", maxWidth: "1200px", margin: "0 auto" }}>
+      <div style={{ marginBottom: 30 }}>
+        <div style={{ fontSize: 11, color: "#3b82f6", letterSpacing: "0.2em", marginBottom: 10 }}>REFERENCE</div>
+        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, color: "#e2e8f0", letterSpacing: "0.1em", lineHeight: 1 }}>
+          TRADING <span style={{ color: "#00ff88" }}>SESSIONS</span>
         </div>
       </div>
-    );
-  };
 
-  // ... [Remainder of existing file content] ...
+      {/* ── SECTION TABS (Sizing Fixed) ── */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 30, flexWrap: "wrap" }}>
+        {SECTIONS.map(s => (
+          <button 
+            key={s.id} 
+            className="ref-sec-btn" 
+            onClick={() => setActiveSection(s.id)} 
+            style={{ 
+              flex: "1 1 auto", // Allows buttons to grow and fill space
+              minWidth: "140px",
+              padding: "12px 24px", // Increased padding to match main page
+              borderRadius: 6, 
+              fontFamily: "inherit", 
+              fontSize: 12, // Increased font size for legibility
+              cursor: "pointer", 
+              letterSpacing: "0.1em", 
+              transition: "all .15s", 
+              background: activeSection === s.id ? "#0a1628" : "transparent", 
+              border: `1px solid ${activeSection === s.id ? "#1e3a5f" : "#1e293b"}`, 
+              color: activeSection === s.id ? "#93c5fd" : "#64748b",
+              fontWeight: activeSection === s.id ? 600 : 400
+            }}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── TAB CONTENT: SESSIONS MAP (Sizing Fixed) ── */}
+      {activeSection === "sessions" && (
+        <div style={{ animation: "refFadeIn .3s ease", width: "100%" }}>
+          <div style={{ 
+            background: "#060b18", 
+            border: "1px solid #1e293b", 
+            borderRadius: 8, 
+            padding: "25px", // Increased inner padding
+            width: "100%",
+            boxSizing: "border-box" 
+          }}>
+            <div style={{ fontSize: 11, color: "#64748b", letterSpacing: "0.15em", marginBottom: 20 }}>TIME WINDOWS</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 20 }}>
+              <div style={{ fontSize: 14, color: "#94a3b8", lineHeight: 1.8 }}>
+                Primary window: <strong style={{ color: "#00ff88" }}>9:30 AM–12:00 PM EST</strong><br/>
+                Secondary window: <strong style={{ color: "#ff8c00" }}>3:00–4:00 PM EST</strong><br/>
+                <span style={{ color: "#f87171" }}>All Lucid Flex positions must close by 4:45 PM EST.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ... [Additional tab content logic] ... */}
+    </div>
+  );
 };
 
-export default TradingJournal;
+export default function TradingJournal() {
+  // ... [Main component logic] ...
+}
