@@ -46,7 +46,7 @@ const MISTAKE_OPTIONS = [
   "Traded during news without plan",
   "Traded tired/distracted",
 ];
-const MOOD_OPTIONS = ["Focused 🎯", "Disciplined 🧠", "Confident 💪", "Patient 🧘", "Calm 😌", "Excited ⚡", "Tired 😴", "Anxious 😬", "Fearful 😰", "Distracted 😵", "Frustrated 😤", "Overconfident 😎", "Greedy 🤑", "Revenge mode 😡"];
+const MOOD_OPTIONS = ["Focused 🎯", "Disciplined 🧠", "Confident 💪", "Patient 🧘", "Calm 😌", "Locked In 🔒", "Motivated 🚀", "Clear-Headed 💎", "Recharged 🔋", "Excited ⚡", "Tired 😴", "Anxious 😬", "Fearful 😰", "Distracted 😵", "Frustrated 😤", "Overconfident 😎", "Greedy 🤑", "Revenge mode 😡"];
 const GRADE_OPTIONS = ["A+", "A", "B+", "B", "C", "D", "F"];
 const INSTRUMENTS = ["ES", "MES", "NQ", "MNQ"];
 
@@ -1551,7 +1551,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
               { l: "NET P&L", v: fmtPnl(netTotal), c: pnlColor(netTotal), highlight: true },
               { l: "LARGEST WIN", v: a.largestWin ? fmtPnl(a.largestWin) : "—", c: "#4ade80" },
               { l: "LARGEST LOSS", v: a.largestLoss ? fmtPnl(a.largestLoss) : "—", c: "#f87171" },
-              { l: "MAX DRAWDOWN", v: `$${a.maxDD.toFixed(2)}`, c: "#f87171" },
+              { l: "MAX DRAWDOWN", v: a.maxDD > 0 ? `-$${a.maxDD.toFixed(2)}` : "—", c: "#f87171" },
             ].map(s => (
               <div key={s.l} style={{ background: s.highlight ? "#0f1a2e" : "#0f1729", border: `1px solid ${s.highlight ? "#1e3a5f" : "#1e293b"}`, borderRadius: 4, padding: "10px 12px" }}>
                 <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
@@ -1574,7 +1574,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
               { l: "AVG LOSS", v: fmtPnl(a.avgLoss), c: "#f87171" },
               { l: "MAX WIN STREAK", v: `${a.maxConsecWins} trades`, c: "#4ade80" },
               { l: "MAX LOSS STREAK", v: `${a.maxConsecLoss} trades`, c: "#f87171" },
-              { l: "MAX DRAWDOWN", v: `$${a.maxDD.toFixed(2)}`, c: "#f87171" },
+              { l: "MAX DRAWDOWN", v: a.maxDD > 0 ? `-$${a.maxDD.toFixed(2)}` : "—", c: "#f87171" },
             ].map(s => (
               <div key={s.l} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "10px 12px" }}>
                 <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
@@ -1601,8 +1601,8 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                         <div style={{ fontSize: 13, color: '#e2e8f0' }}>{card.data.winRate.toFixed(0)}% WR</div>
                         <div style={{ fontSize: 13, color: card.label.includes('TRADES') || card.label.includes('SESSION') ? (card.data.pnl >= 0 ? '#4ade80' : '#f87171') : (card.data.avgPnl >= 0 ? '#4ade80' : '#f87171'), fontWeight: 600 }}>
                           {card.label === 'AFTER A LOSS' || card.label === 'AFTER A WIN'
-                            ? `${card.data.avgPnl >= 0 ? '+' : ''}$${Math.abs(card.data.avgPnl).toFixed(2)}/trade`
-                            : `${card.data.pnl >= 0 ? '+' : ''}$${Math.abs(card.data.pnl).toFixed(2)}`}
+                            ? `${card.data.avgPnl >= 0 ? '+' : '-'}$${Math.abs(card.data.avgPnl).toFixed(2)}/trade`
+                            : `${card.data.pnl >= 0 ? '+' : '-'}$${Math.abs(card.data.pnl).toFixed(2)}`}
                         </div>
                       </div>
                       <div style={{ fontSize: 10, color: '#64748b', marginTop: 6 }}>n={card.data.total} · avg size {card.data.avgQty.toFixed(1)} cts</div>
@@ -3060,8 +3060,8 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
   const [collapsed, setCollapsed] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("tj-collapse-cal-v1") || "{}");
-      return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false, ...saved };
-    } catch { return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false }; }
+      return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false, direction: false, ...saved };
+    } catch { return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false, direction: false }; }
   });
   const toggleSection = (key) => setCollapsed(prev => {
     const next = { ...prev, [key]: !prev[key] };
@@ -3229,7 +3229,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                           { l: "LOSS STREAK", v: `${monthAnalytics.maxConsecLoss} trades`, c: "#f87171" },
                         ].map(s => (
                           <div key={s.l} style={{ background: "#0a0e1a", border: "1px solid #0f1729", borderRadius: 4, padding: "8px 10px" }}>
-                            <div style={{ fontSize: 8, color: "#334155", letterSpacing: "0.08em", marginBottom: 3 }}>{s.l}</div>
+                            <div style={{ fontSize: 8, color: "#64748b", letterSpacing: "0.08em", marginBottom: 3 }}>{s.l}</div>
                             <div style={{ fontSize: 13, color: s.c, fontWeight: 600 }}>{s.v}</div>
                           </div>
                         ))}
@@ -3241,8 +3241,18 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
             </div>
 
       {/* Calendar grid header */}
-      <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, letterSpacing: "0.08em", fontWeight: 700, marginBottom: 12, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-        {(() => { const [y, m] = month.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase(); })()}
+      <div style={{ marginBottom: 14, position: "relative" }}>
+        {/* Accent top line */}
+        <div style={{ height: 1, background: "linear-gradient(90deg, #38bdf8, #818cf8, #c084fc, transparent)", marginBottom: 10, opacity: 0.5 }} />
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 38, letterSpacing: "0.1em", lineHeight: 1, background: "linear-gradient(135deg,#38bdf8 0%,#818cf8 55%,#c084fc 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+            {(() => { const [y, m] = month.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleString("default", { month: "long" }).toUpperCase(); })()}
+          </div>
+          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: "#475569", letterSpacing: "0.18em", paddingBottom: 3 }}>
+            {(() => { const [y] = month.split("-").map(Number); return y; })()}
+          </div>
+        </div>
+        <div style={{ height: 1, background: "linear-gradient(90deg, transparent, #818cf8, #c084fc, transparent)", marginTop: 8, opacity: 0.25 }} />
       </div>
 
       {/* Day headers */}
@@ -3290,7 +3300,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               onClick={() => hasEntry ? onDayClick(entry) : (!isWeekend && isPast || dateStr === today) ? onNewDay(dateStr) : null}
               style={{
                 background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 4,
-                padding: "10px 10px 8px", minHeight: 148, position: "relative",
+                padding: "12px 12px 10px", minHeight: 172, position: "relative",
                 display: "flex", flexDirection: "column",
                 cursor: hasEntry ? "pointer" : (!isWeekend && (isPast || dateStr === today)) ? "pointer" : "default",
                 transition: "all .15s", opacity: isWeekend && !hasEntry ? 0.3 : isFuture && !isWeekend ? 0.5 : 1,
@@ -3300,8 +3310,8 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               onMouseLeave={e => { e.currentTarget.style.borderColor = borderColor; }}
             >
               {/* Row 1: day number + emoji + grade */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ fontSize: 17, fontWeight: 700, ...(isToday
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7 }}>
+                <span style={{ fontSize: 19, fontWeight: 700, ...(isToday
                     ? { background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }
                     : { color: hasEntry ? "#e2e8f0" : isWeekend ? "#475569" : "#94a3b8" }
                   ) }}>{day}</span>
@@ -3318,7 +3328,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               {hasEntry ? (
                 <>
                   {/* P&L — most important, largest */}
-                  <div style={{ fontSize: 18, fontWeight: 700, color: n > 0 ? "#4ade80" : n < 0 ? "#f87171" : "#e2e8f0", lineHeight: 1, marginBottom: 6 }}>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: n > 0 ? "#4ade80" : n < 0 ? "#f87171" : "#e2e8f0", lineHeight: 1, marginBottom: 7 }}>
                     {n > 0 ? "+" : n < 0 ? "-" : ""}{n !== null ? `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: n % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 })}` : "—"}
                   </div>
                   {/* Trades + Win Rate */}
@@ -3330,7 +3340,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                     const pf = grossLoss > 0 ? (gross/grossLoss) : gross > 0 ? null : null;
                     return (
                       <>
-                        <div style={{ fontSize: 10, lineHeight: 1.5 }}>
+                        <div style={{ fontSize: 11, lineHeight: 1.5 }}>
                           <span style={{ color: "#4ade80" }}>W{wins}</span>
                           <span style={{ color: "#475569" }}> / </span>
                           <span style={{ color: "#f87171" }}>L{losses}</span>
@@ -3338,26 +3348,26 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                         </div>
                         {pf !== null && (
                           pf >= 1 ? (
-                            <div style={{ fontSize: 10, fontWeight: 700, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1.4 }}>PF {pf.toFixed(2)}</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1.4 }}>PF {pf.toFixed(2)}</div>
                           ) : (
-                            <div style={{ fontSize: 10, color: "#f87171", lineHeight: 1.4 }}>PF {pf.toFixed(2)}</div>
+                            <div style={{ fontSize: 11, color: "#f87171", lineHeight: 1.4 }}>PF {pf.toFixed(2)}</div>
                           )
                         )}
                       </>
                     );
                   })()}
                   {/* Instruments — in flow, bottom of entry content */}
-                  <div style={{ marginTop: 4, display: "flex", gap: 3, flexWrap: "wrap" }}>
+                  <div style={{ marginTop: 5, display: "flex", gap: 3, flexWrap: "wrap" }}>
                     {(entry.instruments?.length ? entry.instruments : entry.instrument ? [entry.instrument] : []).map(sym => (
-                      <span key={sym} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 2, background: "#1e3a5f33", color: "#3b82f6", border: "1px solid #1e3a5f55", letterSpacing: "0.04em" }}>{sym}</span>
+                      <span key={sym} style={{ fontSize: 10, padding: "1px 6px", borderRadius: 2, background: "#1e3a5f33", color: "#3b82f6", border: "1px solid #1e3a5f55", letterSpacing: "0.04em" }}>{sym}</span>
                     ))}
                     {!entry.grade && (entry.moods?.length ? entry.moods : entry.mood ? [entry.mood] : []).map(m => (
-                      <span key={m} style={{ fontSize: 10 }}>{m.split(" ").pop()}</span>
+                      <span key={m} style={{ fontSize: 11 }}>{m.split(" ").pop()}</span>
                     ))}
                   </div>
                 </>
               ) : !isWeekend && (isPast || dateStr === today) ? (
-                <div style={{ fontSize: 9, color: "#1e293b", marginTop: 6, textAlign: "center" }}>+ add</div>
+                <div style={{ fontSize: 10, color: "#334155", marginTop: 6, textAlign: "center", letterSpacing: "0.08em" }}>+ add</div>
               ) : null}
               {/* Note area — auto-resize driven by live value via scrollHeight */}
               <div style={{ marginTop: "auto", paddingTop: 8, marginTop: 8, borderTop: calendarNotes[dateStr] ? "1px solid #1e293b" : "1px solid transparent" }}
@@ -3375,16 +3385,16 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                   }}
                   onClick={e => e.stopPropagation()}
                   placeholder={isWeekend ? "weekend plan…" : "notes…"}
-                  style={{ width: "100%", fontSize: 10, color: "#64748b", background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px" }}
+                  style={{ width: "100%", fontSize: 12, color: "#94a3b8", background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px", textAlign: "center" }}
                   onFocus={e => {
-                    e.currentTarget.style.color = "#94a3b8";
+                    e.currentTarget.style.color = "#cbd5e1";
                     e.currentTarget.parentNode.style.borderTopColor = "rgba(129,140,248,0.4)";
                     // Expand to full content on focus
                     e.currentTarget.style.height = "20px";
                     e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
                   }}
                   onBlur={e => {
-                    e.currentTarget.style.color = "#64748b";
+                    e.currentTarget.style.color = "#94a3b8";
                     const val = e.currentTarget.value;
                     e.currentTarget.parentNode.style.borderTopColor = val ? "#1e293b" : "transparent";
                     // Shrink back to 1 row if empty, keep height if has content
@@ -3582,58 +3592,224 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               </div>
             )}
 
-            {/* Mistake Frequency */}
-            {monthEntries.length > 0 && (() => {
-              const mistakeCounts = {};
-              let totalSessions = 0;
-              for (const e of monthEntries) {
-                const mistakes = (e.sessionMistakes || []).filter(m => m !== "No Mistakes — Executed the Plan ✓");
-                if (mistakes.length > 0) totalSessions++;
-                for (const m of mistakes) {
-                  mistakeCounts[m] = (mistakeCounts[m] || 0) + 1;
-                }
-              }
-              const sorted = Object.entries(mistakeCounts).sort((a, b) => b[1] - a[1]);
-              const cleanSessions = monthEntries.filter(e => e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓")).length;
-              if (sorted.length === 0 && cleanSessions === 0) return null;
-              const maxCount = sorted[0]?.[1] || 1;
+            {/* Long vs Short */}
+            {monthAnalytics?.byDirection && (monthAnalytics.byDirection.long.trades > 0 || monthAnalytics.byDirection.short.trades > 0) && (() => {
+              const dirs = [
+                { key: "long",  label: "Long",  emoji: "📈", accentColor: "#4ade80", dimColor: "#166534", bgColor: "rgba(16,63,33,0.35)" },
+                { key: "short", label: "Short", emoji: "📉", accentColor: "#f87171", dimColor: "#7f1d1d", bgColor: "rgba(63,16,16,0.35)" },
+              ].filter(d => monthAnalytics.byDirection[d.key].trades > 0);
+              const maxPnl = Math.max(Math.abs(monthAnalytics.byDirection.long.pnl), Math.abs(monthAnalytics.byDirection.short.pnl), 1);
+              const totalTrades = (monthAnalytics.byDirection.long.trades || 0) + (monthAnalytics.byDirection.short.trades || 0);
               return (
                 <div>
-                  <SectionHeader label="MISTAKE FREQUENCY" skey="mistakes"
-                    summary={<span style={{ color: "#64748b" }}>{sorted.length} types · {cleanSessions} clean day{cleanSessions !== 1 ? "s" : ""}</span>} />
-                  {!collapsed.mistakes && (
+                  <SectionHeader label="LONG vs SHORT" skey="direction"
+                    summary={<span style={{ color: "#64748b" }}>{totalTrades} trades · {dirs.length === 2 ? `${Math.round(monthAnalytics.byDirection.long.trades / totalTrades * 100)}% long` : dirs[0]?.label + " only"}</span>} />
+                  {!collapsed.direction && (
                     <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
-                      {cleanSessions > 0 && (
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: sorted.length ? 10 : 0, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
-                          <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Executed the Plan</span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: "#4ade80" }}>{cleanSessions} day{cleanSessions !== 1 ? "s" : ""}</span>
-                        </div>
-                      )}
-                      {sorted.map(([mistake, count]) => {
-                        const barW = (count / maxCount) * 100;
-                        const freq = Math.round((count / monthEntries.length) * 100);
-                        return (
-                          <div key={mistake} style={{ marginBottom: 10 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                              <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mistake}</span>
-                              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                <span style={{ fontSize: 9, color: "#94a3b8" }}>{freq}% of sessions</span>
-                                <span style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>{count}×</span>
+                      {/* Side-by-side cards */}
+                      <div style={{ display: "grid", gridTemplateColumns: dirs.length === 2 ? "1fr 1fr" : "1fr", gap: 10, marginBottom: 14 }}>
+                        {dirs.map(({ key, label, emoji, accentColor, dimColor, bgColor }) => {
+                          const d = monthAnalytics.byDirection[key];
+                          const wr = Math.round(d.wins / d.trades * 100);
+                          const avg = d.pnl / d.trades;
+                          const pf = d.grossLoss > 0 ? (d.grossWin / d.grossLoss) : d.grossWin > 0 ? null : null;
+                          const sharePct = Math.round(d.trades / totalTrades * 100);
+                          return (
+                            <div key={key} style={{ background: bgColor, border: `1px solid ${dimColor}`, borderRadius: 5, padding: "12px 14px", position: "relative", overflow: "hidden" }}>
+                              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: accentColor, opacity: 0.5 }} />
+                              {/* Header row */}
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span style={{ fontSize: 14 }}>{emoji}</span>
+                                  <span style={{ fontSize: 12, color: accentColor, fontWeight: 600, letterSpacing: "0.08em" }}>{label.toUpperCase()}</span>
+                                </div>
+                                <span style={{ fontSize: 10, color: "#475569" }}>{sharePct}% of trades</span>
+                              </div>
+                              {/* P&L hero */}
+                              <div style={{ fontSize: 22, fontWeight: 700, color: d.pnl >= 0 ? "#4ade80" : "#f87171", lineHeight: 1, marginBottom: 8 }}>
+                                {d.pnl >= 0 ? "+" : "-"}${Math.abs(d.pnl).toFixed(0)}
+                              </div>
+                              {/* Stats row */}
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                                <div style={{ background: "#0a0e1a", borderRadius: 3, padding: "6px 8px" }}>
+                                  <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 2 }}>WIN RATE</div>
+                                  <div style={{ fontSize: 13, color: wr >= 50 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{wr}%</div>
+                                  <div style={{ fontSize: 9, color: "#334155", marginTop: 1 }}><span style={{ color: "#4ade80" }}>{d.wins}</span><span style={{ color: "#334155" }}>W</span> <span style={{ color: "#f87171" }}>{d.losses}</span><span style={{ color: "#334155" }}>L</span></div>
+                                </div>
+                                <div style={{ background: "#0a0e1a", borderRadius: 3, padding: "6px 8px" }}>
+                                  <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 2 }}>AVG/TRADE</div>
+                                  <div style={{ fontSize: 13, color: avg >= 0 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)}</div>
+                                  <div style={{ fontSize: 9, color: "#334155", marginTop: 1 }}>{d.trades} trades</div>
+                                </div>
+                                <div style={{ background: "#0a0e1a", borderRadius: 3, padding: "6px 8px" }}>
+                                  <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 2 }}>PROF. FACTOR</div>
+                                  <div style={{ fontSize: 13, color: pf != null ? (pf >= 1 ? "#4ade80" : "#f87171") : "#475569", fontWeight: 600 }}>{pf != null ? pf.toFixed(2) : "—"}</div>
+                                  <div style={{ fontSize: 9, color: "#334155", marginTop: 1 }}>+${d.grossWin.toFixed(0)} / -${d.grossLoss.toFixed(0)}</div>
+                                </div>
                               </div>
                             </div>
-                            <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
-                              <div style={{ width: `${barW}%`, height: "100%", background: "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                          );
+                        })}
+                      </div>
+                      {/* Bar comparison */}
+                      {dirs.length === 2 && (() => {
+                        const l = monthAnalytics.byDirection.long;
+                        const s = monthAnalytics.byDirection.short;
+                        const lBarW = Math.abs(l.pnl) / maxPnl * 100;
+                        const sBarW = Math.abs(s.pnl) / maxPnl * 100;
+                        const bestDir = l.pnl >= s.pnl ? "Long" : "Short";
+                        return (
+                          <div style={{ background: "#0a0e1a", borderRadius: 4, padding: "10px 12px" }}>
+                            <div style={{ marginBottom: 8 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3, fontSize: 9, color: "#475569" }}>
+                                <span>📈 Long</span><span style={{ color: l.pnl >= 0 ? "#4ade80" : "#f87171" }}>{l.pnl >= 0 ? "+" : "-"}${Math.abs(l.pnl).toFixed(0)}</span>
+                              </div>
+                              <div style={{ background: "#0f1729", borderRadius: 2, height: 5, overflow: "hidden" }}>
+                                <div style={{ width: `${lBarW}%`, height: "100%", background: l.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3, fontSize: 9, color: "#475569" }}>
+                                <span>📉 Short</span><span style={{ color: s.pnl >= 0 ? "#4ade80" : "#f87171" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(0)}</span>
+                              </div>
+                              <div style={{ background: "#0f1729", borderRadius: 2, height: 5, overflow: "hidden" }}>
+                                <div style={{ width: `${sBarW}%`, height: "100%", background: s.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                              </div>
+                            </div>
+                            <div style={{ marginTop: 8, fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
+                              <span style={{ color: "#3b82f6" }}>💡 </span>
+                              Stronger edge on <span style={{ color: bestDir === "Long" ? "#4ade80" : "#f87171" }}>{bestDir}</span> trades this month
+                              {" · "}{Math.round(l.trades / totalTrades * 100)}% long / {Math.round(s.trades / totalTrades * 100)}% short split
                             </div>
                           </div>
                         );
-                      })}
+                      })()}
                     </div>
                   )}
                 </div>
               );
             })()}
 
-            {/* Feature 4: Mistake Cost Accounting */}
+            {/* Mistake Frequency + Mood vs Performance — side by side */}
+            {monthEntries.length > 0 && (() => {
+              // ── Mistake Frequency data ──
+              const mistakeCounts = {};
+              let totalSessions = 0;
+              for (const e of monthEntries) {
+                const mistakes = (e.sessionMistakes || []).filter(m => m !== "No Mistakes — Executed the Plan ✓");
+                if (mistakes.length > 0) totalSessions++;
+                for (const m of mistakes) mistakeCounts[m] = (mistakeCounts[m] || 0) + 1;
+              }
+              const mistakeSorted = Object.entries(mistakeCounts).sort((a, b) => b[1] - a[1]);
+              const cleanSessions = monthEntries.filter(e => e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓")).length;
+              const maxCount = mistakeSorted[0]?.[1] || 1;
+              const hasMistakes = mistakeSorted.length > 0 || cleanSessions > 0;
+
+              // ── Mood vs Performance data ──
+              const moodStats = {};
+              for (const e of monthEntries) {
+                const moods = e.moods?.length ? e.moods : e.mood ? [e.mood] : [];
+                const ep = netPnl(e);
+                for (const m of moods) {
+                  if (!moodStats[m]) moodStats[m] = { pnl: 0, sessions: 0, wins: 0 };
+                  moodStats[m].pnl += ep;
+                  moodStats[m].sessions++;
+                  if (ep > 0) moodStats[m].wins++;
+                }
+              }
+              const moodEntries = Object.entries(moodStats).filter(([, s]) => s.sessions >= 1).sort((a, b) => (b[1].pnl / b[1].sessions) - (a[1].pnl / a[1].sessions));
+              const maxAvg = Math.max(...moodEntries.map(([, s]) => Math.abs(s.pnl / s.sessions)), 1);
+              const hasMoods = moodEntries.length > 0;
+
+              if (!hasMistakes && !hasMoods) return null;
+
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
+
+                  {/* LEFT — Mistake Frequency */}
+                  {hasMistakes ? (
+                    <div>
+                      <SectionHeader label="MISTAKE FREQUENCY" skey="mistakes"
+                        summary={<span style={{ color: "#64748b" }}>{mistakeSorted.length} types · {cleanSessions} clean day{cleanSessions !== 1 ? "s" : ""}</span>} />
+                      {!collapsed.mistakes && (
+                        <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
+                          {cleanSessions > 0 && (
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: mistakeSorted.length ? 10 : 0, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
+                              <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Executed the Plan</span>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: "#4ade80" }}>{cleanSessions} day{cleanSessions !== 1 ? "s" : ""}</span>
+                            </div>
+                          )}
+                          {mistakeSorted.map(([mistake, count]) => {
+                            const barW = (count / maxCount) * 100;
+                            const freq = Math.round((count / monthEntries.length) * 100);
+                            return (
+                              <div key={mistake} style={{ marginBottom: 10 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                                  <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mistake}</span>
+                                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                                    <span style={{ fontSize: 9, color: "#94a3b8" }}>{freq}% of sessions</span>
+                                    <span style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>{count}×</span>
+                                  </div>
+                                </div>
+                                <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
+                                  <div style={{ width: `${barW}%`, height: "100%", background: "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : <div />}
+
+                  {/* RIGHT — Mood vs Performance */}
+                  {hasMoods ? (
+                    <div>
+                      <SectionHeader label="MOOD VS PERFORMANCE" skey="mood"
+                        summary={<span style={{ color: "#64748b" }}>{moodEntries.length} mood{moodEntries.length !== 1 ? "s" : ""} tracked</span>} />
+                      {!collapsed.mood && (
+                        <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                          {moodEntries.map(([mood, s]) => {
+                            const avg = s.pnl / s.sessions;
+                            const wr = Math.round((s.wins / s.sessions) * 100);
+                            const barW = Math.abs(avg) / maxAvg * 100;
+                            const isPos = avg >= 0;
+                            return (
+                              <div key={mood}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                                  <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mood}</span>
+                                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                                    <span style={{ fontSize: 9, color: "#94a3b8" }}>{s.sessions} session{s.sessions !== 1 ? "s" : ""} · {wr}% WR</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 70, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
+                                  </div>
+                                </div>
+                                <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
+                                  <div style={{ width: `${barW}%`, height: "100%", background: isPos ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {moodEntries.length >= 2 && (() => {
+                            const best = moodEntries[0];
+                            const worst = moodEntries[moodEntries.length - 1];
+                            return (
+                              <div style={{ marginTop: 4, padding: "8px 10px", background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 4, fontSize: 10, color: "#94a3b8", lineHeight: 1.7 }}>
+                                <span style={{ color: "#3b82f6" }}>💡 </span>
+                                Best mindset: <span style={{ color: "#4ade80" }}>{best[0]}</span> (+${(best[1].pnl / best[1].sessions).toFixed(0)} avg).
+                                {(worst[1].pnl / worst[1].sessions) < 0 && <> Avoid trading in <span style={{ color: "#f87171" }}>{worst[0]}</span> state (${(worst[1].pnl / worst[1].sessions).toFixed(0)} avg).</>}
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  ) : <div />}
+
+                </div>
+              );
+            })()}
+
+            {/* Mistake Cost Accounting — full width row */}
             {monthEntries.length > 0 && (() => {
               const costByTag = {};
               for (const e of monthEntries) {
@@ -3683,65 +3859,6 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                 </div>
               );
             })()}
-
-            {/* Mood vs Performance */}
-            {monthEntries.length > 0 && (() => {
-              const moodStats = {};
-              for (const e of monthEntries) {
-                const moods = e.moods?.length ? e.moods : e.mood ? [e.mood] : [];
-                const ep = netPnl(e);
-                for (const m of moods) {
-                  if (!moodStats[m]) moodStats[m] = { pnl: 0, sessions: 0, wins: 0 };
-                  moodStats[m].pnl += ep;
-                  moodStats[m].sessions++;
-                  if (ep > 0) moodStats[m].wins++;
-                }
-              }
-              const moodEntries = Object.entries(moodStats).filter(([, s]) => s.sessions >= 1).sort((a, b) => (b[1].pnl / b[1].sessions) - (a[1].pnl / a[1].sessions));
-              if (moodEntries.length === 0) return null;
-              const maxAvg = Math.max(...moodEntries.map(([, s]) => Math.abs(s.pnl / s.sessions)), 1);
-              return (
-                <div>
-                  <SectionHeader label="MOOD VS PERFORMANCE" skey="mood"
-                    summary={<span style={{ color: "#64748b" }}>{moodEntries.length} mood{moodEntries.length !== 1 ? "s" : ""} tracked</span>} />
-                  {!collapsed.mood && (
-                    <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-                      {moodEntries.map(([mood, s]) => {
-                        const avg = s.pnl / s.sessions;
-                        const wr = Math.round((s.wins / s.sessions) * 100);
-                        const barW = Math.abs(avg) / maxAvg * 100;
-                        const isPos = avg >= 0;
-                        return (
-                          <div key={mood}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                              <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mood}</span>
-                              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                                <span style={{ fontSize: 9, color: "#94a3b8" }}>{s.sessions} session{s.sessions !== 1 ? "s" : ""} · {wr}% WR</span>
-                                <span style={{ fontSize: 11, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 70, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
-                              </div>
-                            </div>
-                            <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
-                              <div style={{ width: `${barW}%`, height: "100%", background: isPos ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                      {moodEntries.length >= 2 && (() => {
-                        const best = moodEntries[0];
-                        const worst = moodEntries[moodEntries.length - 1];
-                        return (
-                          <div style={{ marginTop: 4, padding: "8px 10px", background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 4, fontSize: 10, color: "#94a3b8", lineHeight: 1.7 }}>
-                            <span style={{ color: "#3b82f6" }}>💡 </span>
-                            Best mindset: <span style={{ color: "#4ade80" }}>{best[0]}</span> (+${(best[1].pnl / best[1].sessions).toFixed(0)} avg).
-                            {(worst[1].pnl / worst[1].sessions) < 0 && <> Avoid trading in <span style={{ color: "#f87171" }}>{worst[0]}</span> state (${(worst[1].pnl / worst[1].sessions).toFixed(0)} avg).</>}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  )}
-                </div>
-              );
-              })()}
               {/* TREND RECAP */}
               {monthEntries.length >= 3 && (() => {
                 const tradWR = tradeWinRate !== null ? tradeWinRate : null;
@@ -3803,64 +3920,85 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                 );
               })()}
 
-              {/* TIME OF DAY HEATMAP */}
-              {allMonthTrades.length > 0 && (() => {
-                // Group trades by hour of day using sellTime
-                const byHour = {};
-                for (const t of allMonthTrades) {
-                  const timeStr = t.sellTime || t.buyTime || "";
-                  if (!timeStr) continue;
-                  const parts = timeStr.replace(/[^0-9:]/g, "").split(":");
-                  let hour = null;
-                  if (parts.length >= 2) hour = parseInt(parts[0]);
-                  else if (timeStr.length >= 4 && !timeStr.includes(":")) hour = parseInt(timeStr.slice(0,2));
-                  if (hour === null || isNaN(hour) || hour < 0 || hour > 23) continue;
-                  if (!byHour[hour]) byHour[hour] = { trades: 0, pnl: 0, wins: 0 };
-                  byHour[hour].trades++;
-                  byHour[hour].pnl += t.pnl || 0;
-                  if ((t.pnl || 0) > 0) byHour[hour].wins++;
-                }
-                const hours = Object.keys(byHour).map(Number).sort((a,b) => a-b);
-                if (hours.length === 0) return null;
-                const maxAbs = Math.max(...hours.map(h => Math.abs(byHour[h].pnl)));
-                const fmt12 = h => { const ap = h < 12 ? "AM" : "PM"; const h12 = h % 12 || 12; return `${h12}${ap}`; };
+              {/* TIME OF DAY — session-based analysis (uses same getSession logic as analytics for consistency) */}
+              {allMonthTrades.length > 0 && monthAnalytics?.bySession && (() => {
+                // Re-use the bySession data already computed by calcAnalytics (with tzLock=true)
+                // This is consistent with how the rest of the analytics work
+                const SESSION_ORDER = [
+                  "Asian Session (6PM–12AM)",
+                  "London Session (12AM–9:30AM)",
+                  "NY Open (9:30AM–12PM)",
+                  "Afternoon Deadzone (12–3PM)",
+                  "Power Hour (3–4PM)",
+                  "After Hours (4–6PM)",
+                ];
+                const SESSION_META = {
+                  "Asian Session (6PM–12AM)":       { short: "Asian",     time: "6PM – 12AM ET",   emoji: "🌙" },
+                  "London Session (12AM–9:30AM)":   { short: "London",    time: "12AM – 9:30AM ET", emoji: "🇬🇧" },
+                  "NY Open (9:30AM–12PM)":          { short: "NY Open",   time: "9:30AM – 12PM ET", emoji: "🔥" },
+                  "Afternoon Deadzone (12–3PM)":    { short: "Midday",    time: "12PM – 3PM ET",    emoji: "😴" },
+                  "Power Hour (3–4PM)":             { short: "Power Hr",  time: "3PM – 4PM ET",     emoji: "⚡" },
+                  "After Hours (4–6PM)":            { short: "After Hrs", time: "4PM – 6PM ET",     emoji: "🌆" },
+                };
+                const sessData = SESSION_ORDER
+                  .map(s => ({ name: s, ...(monthAnalytics.bySession[s] || { trades: 0, pnl: 0, wins: 0 }) }))
+                  .filter(s => s.trades > 0);
+                if (sessData.length === 0) return null;
+                const maxAbs = Math.max(...sessData.map(s => Math.abs(s.pnl)), 1);
+                const bestSess = sessData.reduce((a, b) => a.pnl > b.pnl ? a : b);
+                const worstSess = sessData.reduce((a, b) => a.pnl < b.pnl ? a : b);
+                const totalTrades = sessData.reduce((s, x) => s + x.trades, 0);
                 return (
                   <div>
-                    <SectionHeader label="TIME OF DAY" skey="timeofday"
-                      summary={<span style={{ color: "#64748b" }}>{hours.length} active hour{hours.length !== 1 ? "s" : ""}</span>} />
+                    <SectionHeader label="TIME OF DAY ANALYSIS" skey="timeofday"
+                      summary={<span style={{ color: "#64748b" }}>{sessData.length} session{sessData.length !== 1 ? "s" : ""} · {totalTrades} trades</span>} />
                     {!collapsed.timeofday && (
                       <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
-                        <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginBottom: 12 }}>
-                          {hours.map(h => {
-                            const d = byHour[h];
-                            const pct = maxAbs > 0 ? Math.abs(d.pnl) / maxAbs : 0;
-                            const isPos = d.pnl >= 0;
-                            const opacity = 0.2 + pct * 0.8;
-                            const bg = isPos ? `rgba(74,222,128,${opacity})` : `rgba(248,113,113,${opacity})`;
-                            const wr = d.trades ? Math.round(d.wins / d.trades * 100) : 0;
+                        {/* Session rows with bar chart */}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 11, marginBottom: 14 }}>
+                          {sessData.map(s => {
+                            const meta = SESSION_META[s.name] || { short: s.name, time: "", emoji: "📊" };
+                            const wr = s.trades ? Math.round(s.wins / s.trades * 100) : 0;
+                            const barW = Math.abs(s.pnl) / maxAbs * 100;
+                            const isPos = s.pnl >= 0;
+                            const isBest = s.name === bestSess.name;
+                            const isWorst = s.pnl < 0 && sessData.length > 1 && s.name === worstSess.name;
+                            const sharePct = Math.round(s.trades / totalTrades * 100);
                             return (
-                              <div key={h} title={`${fmt12(h)}: ${d.trades} trades, ${wr}% WR, $${d.pnl.toFixed(0)}`}
-                                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: "default" }}>
-                                <div style={{ width: 36, height: 36, borderRadius: 4, background: bg, border: `1px solid ${isPos ? "rgba(74,222,128,0.3)" : "rgba(248,113,113,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                  <span style={{ fontSize: 9, color: isPos ? "#4ade80" : "#f87171", fontWeight: 600 }}>{d.trades}</span>
+                              <div key={s.name}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <span style={{ fontSize: 12 }}>{meta.emoji}</span>
+                                    <span style={{ fontSize: 11, color: isBest ? "#4ade80" : isWorst ? "#f87171" : "#e2e8f0", fontWeight: isBest || isWorst ? 600 : 400 }}>{meta.short}</span>
+                                    <span style={{ fontSize: 9, color: "#475569" }}>{meta.time}</span>
+                                    {isBest && <span style={{ fontSize: 8, color: "#4ade80", background: "rgba(16,63,33,0.5)", border: "1px solid #166534", padding: "1px 5px", borderRadius: 2, letterSpacing: "0.05em" }}>BEST</span>}
+                                    {isWorst && <span style={{ fontSize: 8, color: "#f87171", background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", padding: "1px 5px", borderRadius: 2, letterSpacing: "0.05em" }}>AVOID</span>}
+                                  </div>
+                                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                                    <span style={{ fontSize: 9, color: "#475569" }}>{s.trades}T ({sharePct}%)</span>
+                                    <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171", minWidth: 42, textAlign: "right" }}>{wr}% WR</span>
+                                    <span style={{ fontSize: 12, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 78, textAlign: "right" }}>{isPos ? "+" : "-"}${Math.abs(s.pnl).toFixed(0)}</span>
+                                  </div>
                                 </div>
-                                <span style={{ fontSize: 8, color: "#475569", letterSpacing: "0.05em" }}>{fmt12(h)}</span>
+                                {/* Bar */}
+                                <div style={{ background: "#0a0e1a", borderRadius: 2, height: 6, overflow: "hidden" }}>
+                                  <div style={{ width: `${barW}%`, height: "100%", background: isPos ? "#4ade80" : "#f87171", borderRadius: 2, opacity: isBest || isWorst ? 0.9 : 0.55, transition: "width .3s" }} />
+                                </div>
+                                {/* Mini per-trade avg beneath */}
+                                <div style={{ marginTop: 3, fontSize: 9, color: "#334155" }}>
+                                  avg/trade: <span style={{ color: isPos ? "#4ade80" : "#f87171" }}>{isPos ? "+" : "-"}${Math.abs(s.pnl / s.trades).toFixed(0)}</span>
+                                  {" · "}wins: <span style={{ color: "#4ade80" }}>{s.wins}</span> · losses: <span style={{ color: "#f87171" }}>{s.trades - s.wins}</span>
+                                </div>
                               </div>
                             );
                           })}
                         </div>
-                        {(() => {
-                          const bestH = hours.reduce((best, h) => byHour[h].pnl > byHour[best].pnl ? h : best, hours[0]);
-                          const worstH = hours.reduce((worst, h) => byHour[h].pnl < byHour[worst].pnl ? h : worst, hours[0]);
-                          const bestWR = byHour[hours.reduce((b,h) => (byHour[h].trades >= 2 && byHour[h].wins/byHour[h].trades > byHour[b].wins/byHour[b].trades) ? h : b, hours[0])];
-                          return (
-                            <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.7, background: "#0a0e1a", borderRadius: 4, padding: "8px 12px" }}>
-                              <span style={{ color: "#3b82f6" }}>💡 </span>
-                              Best hour: <span style={{ color: "#4ade80" }}>{fmt12(bestH)}</span> ({byHour[bestH].trades} trades · ${byHour[bestH].pnl.toFixed(0)}).
-                              {byHour[worstH].pnl < 0 && <> Worst: <span style={{ color: "#f87171" }}>{fmt12(worstH)}</span> (${byHour[worstH].pnl.toFixed(0)}).</>}
-                            </div>
-                          );
-                        })()}
+                        {/* Insight bar */}
+                        <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.7, background: "#0a0e1a", borderRadius: 4, padding: "8px 12px" }}>
+                          <span style={{ color: "#3b82f6" }}>💡 </span>
+                          Best: <span style={{ color: "#4ade80" }}>{SESSION_META[bestSess.name]?.short || bestSess.name}</span> — {bestSess.trades} trades · {Math.round(bestSess.wins / bestSess.trades * 100)}% WR · <span style={{ color: "#4ade80" }}>+${bestSess.pnl.toFixed(0)}</span>.
+                          {worstSess.pnl < 0 && worstSess.name !== bestSess.name && <> Weakest: <span style={{ color: "#f87171" }}>{SESSION_META[worstSess.name]?.short || worstSess.name}</span> (<span style={{ color: "#f87171" }}>-${Math.abs(worstSess.pnl).toFixed(0)}</span>).</>}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -4528,7 +4666,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                       ...(a ? [
                         { l: "LARGEST WIN DAY", v: fmtPnl(Math.max(...me.map(e => netPnl(e)))), c: "#4ade80" },
                         { l: "LARGEST LOSS DAY", v: fmtPnl(Math.min(...me.map(e => netPnl(e)))), c: "#f87171" },
-                        { l: "MAX DRAWDOWN", v: `$${a.maxDD.toFixed(2)}`, c: "#f87171" },
+                        { l: "MAX DRAWDOWN", v: a.maxDD > 0 ? `-$${a.maxDD.toFixed(2)}` : "—", c: "#f87171" },
                       ] : []),
                     ].map(s => (
                       <div key={s.l} style={{ background: s.hi ? "#0d1f3c" : "#0f1729", border: `1px solid ${s.hi ? "#1e3a5f" : "#1e293b"}`, borderRadius: 4, padding: "10px 12px" }}>
@@ -4569,6 +4707,99 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                   )}
                 </div>
               )}
+
+              {/* Long vs Short */}
+              {a?.byDirection && (a.byDirection.long.trades > 0 || a.byDirection.short.trades > 0) && (() => {
+                const dirs = [
+                  { key: "long",  label: "Long",  emoji: "📈", accentColor: "#4ade80", dimColor: "#166534", bgColor: "rgba(16,63,33,0.35)" },
+                  { key: "short", label: "Short", emoji: "📉", accentColor: "#f87171", dimColor: "#7f1d1d", bgColor: "rgba(63,16,16,0.35)" },
+                ].filter(d => a.byDirection[d.key].trades > 0);
+                const totalTrades = (a.byDirection.long.trades || 0) + (a.byDirection.short.trades || 0);
+                const maxPnl = Math.max(Math.abs(a.byDirection.long.pnl), Math.abs(a.byDirection.short.pnl), 1);
+                return (
+                  <div>
+                    <MonthSectionHeader label="LONG vs SHORT" monthKey={expandedMonth} skey="direction"
+                      summary={<span style={{ color: "#64748b" }}>{totalTrades} trades · {dirs.length === 2 ? `${Math.round(a.byDirection.long.trades / totalTrades * 100)}% long` : dirs[0]?.label + " only"}</span>} />
+                    {!isCollapsed(expandedMonth, "direction") && (
+                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: dirs.length === 2 ? "1fr 1fr" : "1fr", gap: 10, marginBottom: dirs.length === 2 ? 14 : 0 }}>
+                          {dirs.map(({ key, label, emoji, accentColor, dimColor, bgColor }) => {
+                            const d = a.byDirection[key];
+                            const wr = Math.round(d.wins / d.trades * 100);
+                            const avg = d.pnl / d.trades;
+                            const pf = d.grossLoss > 0 ? (d.grossWin / d.grossLoss) : d.grossWin > 0 ? null : null;
+                            const sharePct = Math.round(d.trades / totalTrades * 100);
+                            return (
+                              <div key={key} style={{ background: bgColor, border: `1px solid ${dimColor}`, borderRadius: 5, padding: "12px 14px", position: "relative", overflow: "hidden" }}>
+                                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: accentColor, opacity: 0.5 }} />
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <span style={{ fontSize: 14 }}>{emoji}</span>
+                                    <span style={{ fontSize: 12, color: accentColor, fontWeight: 600, letterSpacing: "0.08em" }}>{label.toUpperCase()}</span>
+                                  </div>
+                                  <span style={{ fontSize: 10, color: "#475569" }}>{sharePct}% of trades</span>
+                                </div>
+                                <div style={{ fontSize: 22, fontWeight: 700, color: d.pnl >= 0 ? "#4ade80" : "#f87171", lineHeight: 1, marginBottom: 8 }}>
+                                  {d.pnl >= 0 ? "+" : "-"}${Math.abs(d.pnl).toFixed(0)}
+                                </div>
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                                  <div style={{ background: "#0a0e1a", borderRadius: 3, padding: "6px 8px" }}>
+                                    <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 2 }}>WIN RATE</div>
+                                    <div style={{ fontSize: 13, color: wr >= 50 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{wr}%</div>
+                                    <div style={{ fontSize: 9, color: "#334155", marginTop: 1 }}><span style={{ color: "#4ade80" }}>{d.wins}</span>W <span style={{ color: "#f87171" }}>{d.losses}</span>L</div>
+                                  </div>
+                                  <div style={{ background: "#0a0e1a", borderRadius: 3, padding: "6px 8px" }}>
+                                    <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 2 }}>AVG/TRADE</div>
+                                    <div style={{ fontSize: 13, color: avg >= 0 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)}</div>
+                                    <div style={{ fontSize: 9, color: "#334155", marginTop: 1 }}>{d.trades} trades</div>
+                                  </div>
+                                  <div style={{ background: "#0a0e1a", borderRadius: 3, padding: "6px 8px" }}>
+                                    <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 2 }}>PROF. FACTOR</div>
+                                    <div style={{ fontSize: 13, color: pf != null ? (pf >= 1 ? "#4ade80" : "#f87171") : "#475569", fontWeight: 600 }}>{pf != null ? pf.toFixed(2) : "—"}</div>
+                                    <div style={{ fontSize: 9, color: "#334155", marginTop: 1 }}>+${d.grossWin.toFixed(0)} / -${d.grossLoss.toFixed(0)}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {dirs.length === 2 && (() => {
+                          const l = a.byDirection.long;
+                          const s = a.byDirection.short;
+                          const lBarW = Math.abs(l.pnl) / maxPnl * 100;
+                          const sBarW = Math.abs(s.pnl) / maxPnl * 100;
+                          const bestDir = l.pnl >= s.pnl ? "Long" : "Short";
+                          return (
+                            <div style={{ background: "#0a0e1a", borderRadius: 4, padding: "10px 12px" }}>
+                              <div style={{ marginBottom: 8 }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3, fontSize: 9, color: "#475569" }}>
+                                  <span>📈 Long</span><span style={{ color: l.pnl >= 0 ? "#4ade80" : "#f87171" }}>{l.pnl >= 0 ? "+" : "-"}${Math.abs(l.pnl).toFixed(0)}</span>
+                                </div>
+                                <div style={{ background: "#0f1729", borderRadius: 2, height: 5, overflow: "hidden" }}>
+                                  <div style={{ width: `${lBarW}%`, height: "100%", background: l.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                                </div>
+                              </div>
+                              <div>
+                                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3, fontSize: 9, color: "#475569" }}>
+                                  <span>📉 Short</span><span style={{ color: s.pnl >= 0 ? "#4ade80" : "#f87171" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(0)}</span>
+                                </div>
+                                <div style={{ background: "#0f1729", borderRadius: 2, height: 5, overflow: "hidden" }}>
+                                  <div style={{ width: `${sBarW}%`, height: "100%", background: s.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                                </div>
+                              </div>
+                              <div style={{ marginTop: 8, fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
+                                <span style={{ color: "#3b82f6" }}>💡 </span>
+                                Stronger edge on <span style={{ color: bestDir === "Long" ? "#4ade80" : "#f87171" }}>{bestDir}</span> trades
+                                {" · "}{Math.round(l.trades / totalTrades * 100)}% long / {Math.round(s.trades / totalTrades * 100)}% short split
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Performance by Time of Day */}
               {a && (() => {
@@ -8872,7 +9103,7 @@ export default function TradingJournal() {
       `}</style>
 
       {/* Header */}
-      <div style={{ borderBottom: "1px solid #1e293b", padding: "0 32px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#0a0e1a", zIndex: 10, overflow: "visible", height: 64 }}>
+      <div style={{ borderBottom: "1px solid #1e293b", padding: "0 40px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#0a0e1a", zIndex: 10, overflow: "visible", height: 64 }}>
 
         {/* LEFT: C4 signature — AyeOh + rule + TRADING JOURNAL horizontal + tagline */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, overflow: "visible" }}>
@@ -9411,7 +9642,7 @@ export default function TradingJournal() {
       )}
 
       {/* Journal tab strip */}
-      <div style={{ borderBottom: "1px solid #1e293b", background: "#060810", padding: "0 32px", display: "flex", alignItems: "stretch", gap: 2, overflowX: "auto", position: "sticky", top: 58, zIndex: 9 }}>
+      <div style={{ borderBottom: "1px solid #1e293b", background: "#060810", padding: "0 40px", display: "flex", alignItems: "stretch", gap: 2, overflowX: "auto", position: "sticky", top: 58, zIndex: 9 }}>
         {journals.map(j => {
           const isActive = j.id === activeJournalId;
           const isRenaming = renamingId === j.id;
@@ -9685,7 +9916,7 @@ export default function TradingJournal() {
         );
       })()}
 
-      <div style={{ width: "100%", padding: "28px 40px" }}>
+      <div style={{ width: "100%", padding: "28px 40px", maxWidth: 1600, margin: "0 auto", boxSizing: "border-box" }}>
         {/* LIST */}
         {view === "list" && (<div>
           {filtered.length > 0 && (
@@ -10084,9 +10315,13 @@ export default function TradingJournal() {
                               entry.sessionMistakes.includes("No Mistakes — Executed the Plan ✓") ? (
                                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 4, fontSize: 11, background: "#052e16", border: "1px solid #166534", color: "#4ade80" }}>✓ Clean Session</span>
                               ) : (
-                                <span style={{ padding: "3px 10px", borderRadius: 4, fontSize: 11, background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", color: "#f87171" }}>
-                                  {entry.sessionMistakes.length} mistake{entry.sessionMistakes.length !== 1 ? "s" : ""}
-                                </span>
+                                <>
+                                  {entry.sessionMistakes.map((m, mi) => (
+                                    <span key={mi} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "3px 9px", borderRadius: 4, fontSize: 10, background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", color: "#f87171", letterSpacing: "0.01em" }}>
+                                      ⚠ {m}
+                                    </span>
+                                  ))}
+                                </>
                               )
                             )}
                           </div>
