@@ -857,14 +857,21 @@ const getEstOffsetMinutes = () => {
 const getSession = (timeStr, tzLock = false) => {
   if (!timeStr) return "Unknown";
   const str = timeStr.trim();
+  // Support both "YYYY-MM-DD HH:MM:SS" and plain "HH:MM:SS" or "HH:MM" formats
   const spaceIdx = str.indexOf(" ");
-  if (spaceIdx === -1) return "Unknown";
-  const timePart = str.slice(spaceIdx + 1).trim();
+  const timePart = (spaceIdx !== -1 ? str.slice(spaceIdx + 1) : str).trim();
   const timeLower = timePart.toLowerCase();
   const colonParts = timePart.split(":");
-  if (colonParts.length < 2) return "Unknown";
-  let h = parseInt(colonParts[0]);
-  const mn = parseInt(colonParts[1]);
+  let h, mn;
+  if (colonParts.length >= 2) {
+    h = parseInt(colonParts[0]); mn = parseInt(colonParts[1]);
+  } else if (/^\d{6}$/.test(timePart)) {
+    // IBKR HHMMSS no-colon format e.g. "094500"
+    h = parseInt(timePart.slice(0,2)); mn = parseInt(timePart.slice(2,4));
+  } else if (/^\d{4}$/.test(timePart)) {
+    // HHMM no-colon format
+    h = parseInt(timePart.slice(0,2)); mn = parseInt(timePart.slice(2,4));
+  } else { return "Unknown"; }
   if (isNaN(h) || isNaN(mn)) return "Unknown";
   if (timeLower.includes("pm")) { if (h !== 12) h += 12; }
   else if (timeLower.includes("am")) { if (h === 12) h = 0; }
@@ -876,6 +883,12 @@ const getSession = (timeStr, tzLock = false) => {
   if (t < 900)   return "Afternoon Deadzone (12–3PM)";
   if (t < 960)   return "Power Hour (3–4PM)";
   return "After Hours (4–6PM)";
+};
+
+// Strip futures contract month+year suffix so MESH6, MESH26, MESM5 all group as MES
+const normalizeSymbol = (sym) => {
+  if (!sym) return sym;
+  return sym.replace(/^([A-Z]+)\s*[FGHJKMNQUVXZ]\d{1,2}$/, '$1').trim() || sym;
 };
 
 const calcAnalytics = (trades, tzLock = false) => {
@@ -905,10 +918,11 @@ const calcAnalytics = (trades, tzLock = false) => {
 
   const bySymbol = {};
   for (const t of trades) {
-    if (!bySymbol[t.symbol]) bySymbol[t.symbol] = { trades: 0, pnl: 0, wins: 0 };
-    bySymbol[t.symbol].trades++;
-    bySymbol[t.symbol].pnl += t.pnl;
-    if (t.pnl > 0) bySymbol[t.symbol].wins++;
+    const sym = normalizeSymbol(t.symbol);
+    if (!bySymbol[sym]) bySymbol[sym] = { trades: 0, pnl: 0, wins: 0 };
+    bySymbol[sym].trades++;
+    bySymbol[sym].pnl += t.pnl;
+    if (t.pnl > 0) bySymbol[sym].wins++;
   }
 
   const bySession = {};
@@ -1277,9 +1291,10 @@ const EquityCurveChart = ({ values, dots = false, height = 90, gradientId = "ecF
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
       <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={lineColor} stopOpacity="0.18" />
-          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.22" />
+          <stop offset="50%" stopColor="#818cf8" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="#c084fc" stopOpacity="0.08" />
         </linearGradient>
         {dangerLine !== null && (
           <linearGradient id={`${gradientId}-danger`} x1="0" y1="0" x2="0" y2="1">
@@ -1428,7 +1443,7 @@ function ChartScreenshotZone({ screenshots = [], onChange }) {
 
   return (
     <div style={{ marginTop: 24 }}>
-      <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>CHART SCREENSHOTS</div>
+      <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10 }}>CHART SCREENSHOTS</div>
 
       {/* Paste zone */}
       {/* Paste zone — compact when images already added */}
@@ -1476,9 +1491,10 @@ function ChartScreenshotZone({ screenshots = [], onChange }) {
   );
 }
 
-function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalyticsTab, totalFees = 0, dangerLine = null }) {
+function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalyticsTab, totalFees = 0, dangerLine = null, rawCsvFile = null }) {
   const ATABS = ["overview", "by session", "trade log"];
   const [expandedTrade, setExpandedTrade] = useState(null);
+  const [ecCollapsed, setEcCollapsed] = useState(false);
   const netTotal = a.totalPnL - totalFees;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -1498,14 +1514,14 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
             {[
               { l: "GROSS P&L", v: fmtPnl(a.totalPnL), c: pnlColor(a.totalPnL) },
-              { l: "TOTAL FEES", v: totalFees > 0 ? `-$${totalFees.toFixed(2)}` : "—", c: totalFees > 0 ? "#f87171" : "#94a3b8" },
+              { l: "TOTAL FEES", v: totalFees > 0 ? `-$${totalFees.toFixed(2)}` : "—", c: "#475569", small: true },
               { l: "NET P&L", v: fmtPnl(netTotal), c: pnlColor(netTotal), highlight: true },
               { l: "LARGEST WIN", v: a.largestWin ? fmtPnl(a.largestWin) : "—", c: "#4ade80" },
               { l: "LARGEST LOSS", v: a.largestLoss ? fmtPnl(a.largestLoss) : "—", c: "#f87171" },
               { l: "MAX DRAWDOWN", v: `$${a.maxDD.toFixed(2)}`, c: "#f87171" },
             ].map(s => (
               <div key={s.l} style={{ background: s.highlight ? "#0f1a2e" : "#0f1729", border: `1px solid ${s.highlight ? "#1e3a5f" : "#1e293b"}`, borderRadius: 4, padding: "10px 12px" }}>
-                <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
+                <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
                 <div style={{ fontSize: 16, color: s.c, fontWeight: 500 }}>{s.v}</div>
               </div>
             ))}
@@ -1528,7 +1544,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
               { l: "MAX DRAWDOWN", v: `$${a.maxDD.toFixed(2)}`, c: "#f87171" },
             ].map(s => (
               <div key={s.l} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "10px 12px" }}>
-                <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
+                <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
                 <div style={{ fontSize: 16, color: s.c, fontWeight: 500 }}>{s.v}</div>
               </div>
             ))}
@@ -1604,7 +1620,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                             <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
                             <span style={{ fontSize: 10, letterSpacing: 0 }}><span style={{ letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{s.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{s.trades - s.wins}</span></span></span>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : ""}${s.pnl.toFixed(2)}</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(2)}</span>
                           </div>
                         </div>
                         <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
@@ -1634,7 +1650,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                           <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
                           <span style={{ fontSize: 10, letterSpacing: 0 }}><span style={{ letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{s.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{s.trades - s.wins}</span></span></span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : ""}${s.pnl.toFixed(2)}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(2)}</span>
                         </div>
                       </div>
                       <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
@@ -1667,12 +1683,12 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
                         <div>
                           <span style={{ fontSize: 11, color: "#e2e8f0", fontWeight: 500 }}>{label}</span>
-                          <span style={{ fontSize: 9, color: "#64748b", marginLeft: 8 }}>{d.trades} trades · avg {avg >= 0 ? "+" : ""}${avg.toFixed(2)}</span>
+                          <span style={{ fontSize: 9, color: "#64748b", marginLeft: 8 }}>{d.trades} trades · avg {avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(2)}</span>
                         </div>
                         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                           <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
                           <span style={{ fontSize: 10 }}><span style={{ color: "#4ade80" }}>{d.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{d.losses}</span></span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: d.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{d.pnl >= 0 ? "+" : ""}${d.pnl.toFixed(2)}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: d.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{d.pnl >= 0 ? "+" : "-"}${Math.abs(d.pnl).toFixed(2)}</span>
                         </div>
                       </div>
                       <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
@@ -1715,8 +1731,8 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                           <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
                           <span style={{ fontSize: 10 }}><span style={{ color: "#4ade80" }}>{b.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{b.losses}</span></span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: b.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{b.pnl >= 0 ? "+" : ""}${b.pnl.toFixed(2)}</span>
-                          <span style={{ fontSize: 9, color: "#64748b", minWidth: 60, textAlign: "right" }}>avg {avg >= 0 ? "+" : ""}${avg.toFixed(2)}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: b.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{b.pnl >= 0 ? "+" : "-"}${Math.abs(b.pnl).toFixed(2)}</span>
+                          <span style={{ fontSize: 9, color: "#64748b", minWidth: 60, textAlign: "right" }}>avg {avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(2)}</span>
                         </div>
                       </div>
                       <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
@@ -1734,7 +1750,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                     { l: "AVG LOSER HELD",  v: (() => { const s = a.avgLossDuration; return s < 60 ? `${Math.round(s)}s` : s < 3600 ? `${Math.floor(s/60)}m ${Math.round(s%60)}s` : `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`; })(), c: "#f87171" },
                   ].map(s => (
                     <div key={s.l} style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 4, padding: "8px 12px" }}>
-                      <div style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
+                      <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
                       <div style={{ fontSize: 16, color: s.c }}>{s.v}</div>
                     </div>
                   ))}
@@ -1749,14 +1765,18 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
             const hasBoth = activeOTs.length > 1;
             return (
               <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px" }}>
-                <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 12 }}>ORDER TYPE BREAKDOWN</div>
+                <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 12 }}>ORDER TYPE BREAKDOWN</div>
                 <div style={{ display: "grid", gridTemplateColumns: activeOTs.length === 3 ? "1fr 1fr 1fr" : activeOTs.length === 2 ? "1fr 1fr" : "1fr", gap: 10 }}>
                   {[
-                    { key: "LMT", label: "LIMIT",  color: "#93c5fd", bg: "rgba(147,197,253,0.08)", border: "rgba(147,197,253,0.2)"  },
-                    { key: "STP", label: "STOP",   color: "#fb923c", bg: "rgba(251,146,60,0.08)",  border: "rgba(251,146,60,0.2)"   },
-                    { key: "MKT", label: "MARKET", color: "#94a3b8", bg: "rgba(148,163,184,0.06)", border: "rgba(148,163,184,0.15)" },
-                  ].filter(({ key }) => (a.byOrderType[key] || {}).trades > 0).map(({ key, label, color, bg, border }) => {
+                    { key: "LMT", label: "LIMIT"  },
+                    { key: "STP", label: "STOP"   },
+                    { key: "MKT", label: "MARKET" },
+                  ].filter(({ key }) => (a.byOrderType[key] || {}).trades > 0).map(({ key, label }) => {
                     const d = a.byOrderType[key];
+                    const profitable = d.pnl >= 0;
+                    const color  = profitable ? "#4ade80" : "#f87171";
+                    const bg     = profitable ? "rgba(74,222,128,0.07)" : "rgba(248,113,113,0.07)";
+                    const border = profitable ? "rgba(74,222,128,0.2)"  : "rgba(248,113,113,0.2)";
                     const wr = d.trades ? Math.round(d.wins / d.trades * 100) : 0;
                     const pf = d.grossLoss > 0 ? (d.grossWin / d.grossLoss).toFixed(2) : d.grossWin > 0 ? "∞" : "—";
                     const avgPnl = d.trades ? d.pnl / d.trades : 0;
@@ -1769,12 +1789,12 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                           {[
                             { l: "WIN RATE", v: `${wr}%`, c: wr >= 50 ? "#4ade80" : "#f87171" },
-                            { l: "NET P&L", v: `${d.pnl >= 0 ? "+" : ""}$${d.pnl.toFixed(0)}`, c: d.pnl >= 0 ? "#4ade80" : "#f87171" },
-                            { l: "AVG/TRADE", v: `${avgPnl >= 0 ? "+" : ""}$${avgPnl.toFixed(0)}`, c: avgPnl >= 0 ? "#4ade80" : "#f87171" },
+                            { l: "NET P&L", v: `${d.pnl >= 0 ? "+" : "-"}$${d.pnl >= 0 ? d.pnl.toFixed(0) : (-d.pnl).toFixed(0)}`, c: d.pnl >= 0 ? "#4ade80" : "#f87171" },
+                            { l: "AVG/TRADE", v: `${avgPnl >= 0 ? "+" : "-"}$${avgPnl >= 0 ? avgPnl.toFixed(0) : (-avgPnl).toFixed(0)}`, c: avgPnl >= 0 ? "#4ade80" : "#f87171" },
                             { l: "PROF FACTOR", v: pf, c: "#e2e8f0" },
                           ].map(s => (
                             <div key={s.l} style={{ background: "#0a0e1a", borderRadius: 4, padding: "6px 8px" }}>
-                              <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.1em", marginBottom: 3 }}>{s.l}</div>
+                              <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 3 }}>{s.l}</div>
                               <div style={{ fontSize: 13, color: s.c, fontWeight: 500 }}>{s.v}</div>
                             </div>
                           ))}
@@ -1795,7 +1815,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                 </div>
                 {a.totalCommission > 0 && (
                   <div style={{ marginTop: 10, padding: "8px 12px", background: "#0a0e1a", borderRadius: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em" }}>TOTAL COMMISSIONS</span>
+                    <span style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em" }}>TOTAL COMMISSIONS</span>
                     <span style={{ fontSize: 12, color: "#f87171" }}>-${a.totalCommission.toFixed(2)}</span>
           </div>
           )}
@@ -1803,14 +1823,22 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
             );
           })()}
 
-          {/* Equity Curve */}
-          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 14px 10px" }}>
-            <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 10 }}>EQUITY CURVE</div>
-            {(() => {
-              const vals = a.equityCurve.map(p => p.pnl);
-              const chartVals = vals.length === 1 ? [0, vals[0]] : vals;
-              return <EquityCurveChart values={chartVals} height={90} gradientId="ec1" dangerLine={dangerLine} />;
-            })()}
+          {/* Equity Curve — collapsible */}
+          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, overflow: "hidden" }}>
+            <div onClick={() => setEcCollapsed(p => !p)}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", cursor: "pointer", userSelect: "none" }}>
+              <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em" }}>EQUITY CURVE</div>
+              <span style={{ fontSize: 10, color: "#475569", transition: "transform .2s", display: "inline-block", transform: ecCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
+            </div>
+            {!ecCollapsed && (
+              <div style={{ padding: "0 14px 10px" }}>
+                {(() => {
+                  const vals = a.equityCurve.map(p => p.pnl);
+                  const chartVals = vals.length === 1 ? [0, vals[0]] : vals;
+                  return <EquityCurveChart values={chartVals} height={90} gradientId="ec1" dangerLine={dangerLine} />;
+                })()}
+              </div>
+            )}
           </div>
         </>
       )}
@@ -1818,7 +1846,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
 
       {analyticsTab === "by session" && (
         <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "16px" }}>
-          <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 14 }}>P&L BY TIME OF DAY</div>
+          <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 14 }}>P&L BY TIME OF DAY</div>
           {Object.entries(a.bySession).sort((a, b) => b[1].pnl - a[1].pnl).map(([sess, s]) => {
             const maxPnl = Math.max(...Object.values(a.bySession).map(x => Math.abs(x.pnl)));
             return (
@@ -1863,7 +1891,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
 
             {/* ── SUMMARY HEADER ── */}
             <div style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 6, padding: "14px 18px" }}>
-              <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.15em", marginBottom: 12 }}>SESSION SUMMARY</div>
+              <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.15em", marginBottom: 12 }}>SESSION SUMMARY</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 12 }}>
                 {[
                   { label: "TRADES",    value: trades.length,                                           color: "#94a3b8" },
@@ -1872,7 +1900,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                   { label: "W / L",     value: `${wins.length} / ${losses.length}`,                    color: "#94a3b8" },
                 ].map(s => (
                   <div key={s.label} style={{ background: "#0f1729", borderRadius: 4, padding: "8px 10px" }}>
-                    <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.12em", marginBottom: 4 }}>{s.label}</div>
+                    <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.12em", marginBottom: 4 }}>{s.label}</div>
                     <div style={{ fontSize: 14, color: s.color, fontWeight: 600 }}>{s.value}</div>
                   </div>
                 ))}
@@ -1885,7 +1913,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                   { label: "WORST TRADE",value: worstTrade ? `-$${Math.abs(worstTrade).toFixed(2)}` : "—", color: "#f87171" },
                 ].map(s => (
                   <div key={s.label} style={{ background: "#0f1729", borderRadius: 4, padding: "8px 10px" }}>
-                    <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.12em", marginBottom: 4 }}>{s.label}</div>
+                    <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.12em", marginBottom: 4 }}>{s.label}</div>
                     <div style={{ fontSize: 13, color: s.color, fontWeight: 600 }}>{s.value}</div>
                   </div>
                 ))}
@@ -1897,7 +1925,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
 
               {/* Table header + export buttons */}
               <div style={{ display: "flex", alignItems: "center", padding: "8px 14px", borderBottom: "1px solid #1e293b", gap: 8 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "28px 36px 80px 50px 100px 100px 60px 88px 88px", flex: 1, fontSize: 9, color: "#475569", letterSpacing: "0.1em" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "28px 36px 80px 50px 100px 100px 60px 88px 88px", flex: 1, fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em" }}>
                   <div></div>
                   <div>#</div>
                   <div>SYMBOL</div>
@@ -1917,16 +1945,16 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a"); a.href=url; a.download="trades-export.csv"; a.click(); URL.revokeObjectURL(url);
                 }}
-                  style={{ background:"transparent", border:"1px solid #1e293b", color:"#475569", padding:"3px 10px", borderRadius:3, fontSize:9, cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.06em", whiteSpace:"nowrap", flexShrink:0, transition:"all .15s" }}
+                  style={{ background:"transparent", border:"1px solid #1e293b", color:"#3b82f6", padding:"3px 10px", borderRadius:3, fontSize:9, cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.06em", whiteSpace:"nowrap", flexShrink:0, transition:"all .15s" }}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor="#3b82f6";e.currentTarget.style.color="#93c5fd";}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor="#1e293b";e.currentTarget.style.color="#475569";}}>↓ CSV</button>
-                {entry?.rawCsvFile?.content && (
+                {rawCsvFile?.content && (
                   <button onClick={() => {
-                    const blob = new Blob([entry.rawCsvFile.content],{type:"text/csv"});
+                    const blob = new Blob([rawCsvFile.content],{type:"text/csv"});
                     const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a"); a.href=url; a.download=entry.rawCsvFile.name||"trades-original.csv"; a.click(); URL.revokeObjectURL(url);
+                    const a = document.createElement("a"); a.href=url; a.download=rawCsvFile.name||"trades-original.csv"; a.click(); URL.revokeObjectURL(url);
                   }}
-                    style={{ background:"transparent", border:"1px solid #1e293b", color:"#475569", padding:"3px 10px", borderRadius:3, fontSize:9, cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.06em", whiteSpace:"nowrap", flexShrink:0, transition:"all .15s" }}
+                    style={{ background:"transparent", border:"1px solid #1e293b", color:"#3b82f6", padding:"3px 10px", borderRadius:3, fontSize:9, cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.06em", whiteSpace:"nowrap", flexShrink:0, transition:"all .15s" }}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor="#4ade80";e.currentTarget.style.color="#4ade80";}}
                     onMouseLeave={e=>{e.currentTarget.style.borderColor="#1e293b";e.currentTarget.style.color="#475569";}}>↓ ORIGINAL</button>
                 )}
@@ -2168,7 +2196,7 @@ Return EXACTLY this format, nothing else:
       <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <span>🔍 TOP 3 FINDINGS</span>
         {!loading && findings && (
-          <button onClick={generate} style={{ background: "transparent", border: "1px solid #1e293b", color: "#64748b", padding: "2px 8px", borderRadius: 3, fontSize: 9, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.06em" }}>↺ regenerate</button>
+          <button onClick={generate} style={{ background: "transparent", border: "1px solid #1e293b", color: "#3b82f6", padding: "2px 8px", borderRadius: 3, fontSize: 9, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.06em" }}>↺ regenerate</button>
         )}
       </div>
 
@@ -2198,7 +2226,7 @@ Return EXACTLY this format, nothing else:
       )}
 
       {!loading && error && (
-        <div style={{ background: "#1f0606", border: "1px solid #7f1d1d", borderRadius: 6, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", borderRadius: 6, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <span style={{ fontSize: 12, color: "#f87171" }}>⚠ {error}</span>
           <button onClick={generate} style={{ background: "transparent", border: "1px solid #7f1d1d", color: "#f87171", padding: "3px 10px", borderRadius: 3, fontSize: 10, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.06em", whiteSpace: "nowrap" }}>↺ retry</button>
         </div>
@@ -2261,7 +2289,7 @@ ${(() => {
   if (rows.length === 0) return "";
   const total = rows.reduce((s, [, v]) => s + parseFloat(v), 0);
   const netPnlVal = parseFloat(entry.pnl || 0) - parseFloat(entry.commissions || 0);
-  return `MISTAKE COST ATTRIBUTION: ${rows.map(([tag, v]) => `${tag}: $${parseFloat(v).toFixed(0)}`).join(", ")} — Total attributed: $${total.toFixed(0)} (vs net P&L of ${netPnlVal >= 0 ? "+" : ""}$${netPnlVal.toFixed(0)})${entry.mistakeCostNotes ? ` · Notes: ${entry.mistakeCostNotes}` : ""}\n`;
+  return `MISTAKE COST ATTRIBUTION: ${rows.map(([tag, v]) => `${tag}: $${parseFloat(v).toFixed(0)}`).join(", ")} — Total attributed: $${total.toFixed(0)} (vs net P&L of ${netPnlVal >= 0 ? "+" : "-"}$${netPnlVal >= 0 ? netPnlVal.toFixed(0) : (-netPnlVal).toFixed(0)})${entry.mistakeCostNotes ? ` · Notes: ${entry.mistakeCostNotes}` : ""}\n`;
 })()}
 TRADE STATISTICS:
   Total trades: ${trades.length}
@@ -2411,7 +2439,7 @@ Keep each section tight. No filler. Maximum value per word. Total response shoul
           ].map(s => (
             <div key={s.label} style={{ flex: 1, textAlign: "center" }}>
               <div style={{ fontSize: 18, marginBottom: 6 }}>{s.icon}</div>
-              <div style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, marginBottom: 3, letterSpacing: "0.05em" }}>{s.label}</div>
+              <div style={{ fontSize: 10, color: "#3b82f6", fontWeight: 600, marginBottom: 3, letterSpacing: "0.05em" }}>{s.label}</div>
               <div style={{ fontSize: 9, color: "#1e3a5f", lineHeight: 1.5 }}>{s.desc}</div>
             </div>
           ))}
@@ -2425,7 +2453,7 @@ function ChartScreenshotDetailView({ screenshots }) {
   const [lightbox, setLightbox] = useState(null);
   return (
     <div style={{ marginTop: 20, background: "#0f1729", border: "1px solid #1e293b", borderRadius: 6, padding: "14px 16px" }}>
-      <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>CHART SCREENSHOTS <span style={{ color: "#64748b", fontWeight: 400 }}>· {screenshots.length}</span></div>
+      <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 12 }}>CHART SCREENSHOTS <span style={{ color: "#64748b", fontWeight: 400 }}>· {screenshots.length}</span></div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {screenshots.map((s, i) => (
           <div key={s.id || i} onClick={() => setLightbox(s.src)}
@@ -2676,7 +2704,7 @@ Rewritten summary:` }],
           <button
             onClick={() => resetRewrite(fieldKey)}
             title="Remove this AI rewrite"
-            style={{ background: "transparent", border: "none", color: "#64748b", fontSize: 10, cursor: "pointer", padding: "2px 4px", fontFamily: "inherit", letterSpacing: "0.04em", lineHeight: 1, transition: "color .15s" }}
+            style={{ background: "transparent", border: "none", color: "#3b82f6", fontSize: 10, cursor: "pointer", padding: "2px 4px", fontFamily: "inherit", letterSpacing: "0.04em", lineHeight: 1, transition: "color .15s" }}
             onMouseEnter={e => e.currentTarget.style.color = "#f87171"}
             onMouseLeave={e => e.currentTarget.style.color = "#334155"}>
             ✕
@@ -2687,24 +2715,37 @@ Rewritten summary:` }],
   };
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-        <div>
-          <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.1em" }}>{new Date(entry.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long" }).toUpperCase()}</div>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 34, color: "#e2e8f0", letterSpacing: "0.1em" }}>{entry.date}</div>
-        </div>
-        <div style={{ flex: 1 }} />
-        {entry.pnl !== "" && (
-          <div style={{ textAlign: "right" }}>
-            <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 2 }}>NET P&L</div>
-            <div style={{ fontSize: 36, color: pnlColor(netPnl(entry)), fontWeight: 500 }}>{fmtPnl(netPnl(entry))}</div>
-            {(parseFloat(entry.commissions)) ? (
-              <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 3, lineHeight: 1.6 }}>
-                <span style={{ color: "#94a3b8" }}>gross {fmtPnl(entry.pnl)}</span>
-                {parseFloat(entry.commissions) > 0 && <span style={{ color: "#f87171" }}> − ${parseFloat(entry.commissions).toFixed(2)} fees</span>}
-              </div>
-            ) : null}
+      {/* ── Day page header ── */}
+      <div style={{ marginBottom: 24 }}>
+        {/* Gradient rule + title */}
+        <div style={{ height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", borderRadius: 1, marginBottom: 12 }} />
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16 }}>
+          {/* Left: weekday + date in journal gradient style */}
+          <div>
+            <div style={{ fontSize: 9, color: "#818cf8", letterSpacing: "0.25em", marginBottom: 4 }}>
+              {new Date(entry.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long" }).toUpperCase()}
+            </div>
+            <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 36, letterSpacing: "0.12em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1 }}>
+              {(() => { const d = new Date(entry.date + "T12:00:00"); return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }).toUpperCase(); })()}
+            </div>
+            <div className="helper-text" style={{ marginTop: 4 }}>DAILY REVIEW · CAPTURE · ANALYSE · GROW</div>
           </div>
-        )}
+          {/* Right: NET P&L card with gradient border */}
+          {entry.pnl !== "" && (
+            <div style={{ position: "relative", padding: 1, borderRadius: 7, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", flexShrink: 0 }}>
+              <div style={{ background: "#070d1a", borderRadius: 6, padding: "12px 20px", textAlign: "right", minWidth: 140 }}>
+                <div style={{ fontSize: 9, color: "#818cf8", letterSpacing: "0.15em", marginBottom: 4 }}>NET P&L</div>
+                <div style={{ fontSize: 34, color: pnlColor(netPnl(entry)), fontWeight: 700, lineHeight: 1, letterSpacing: "0.02em" }}>{fmtPnl(netPnl(entry))}</div>
+                {parseFloat(entry.commissions) > 0 && (
+                  <div style={{ fontSize: 9, color: "#334155", marginTop: 4, lineHeight: 1.6 }}>
+                    gross {fmtPnl(entry.pnl)}
+                    <span style={{ color: "#475569" }}> − ${parseFloat(entry.commissions).toFixed(2)} fees</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
         {(entry.instruments?.length ? entry.instruments : entry.instrument ? [entry.instrument] : []).map(sym => (
@@ -2725,7 +2766,7 @@ Rewritten summary:` }],
       </div>
       {a && (
         <div style={{ marginBottom: 20 }}>
-          <AnalyticsPanel a={a} trades={entry.parsedTrades || []} pnlColor={pnlColor} fmtPnl={fmtPnl} analyticsTab={atab} setAnalyticsTab={setAtab} totalFees={parseFloat(entry.commissions) || 0} dangerLine={dangerLine} />
+          <AnalyticsPanel a={a} trades={entry.parsedTrades || []} pnlColor={pnlColor} fmtPnl={fmtPnl} analyticsTab={atab} setAnalyticsTab={setAtab} totalFees={parseFloat(entry.commissions) || 0} dangerLine={dangerLine} rawCsvFile={entry.rawCsvFile || null} />
         </div>
       )}
       {/* Journal Recap */}
@@ -2755,7 +2796,7 @@ Rewritten summary:` }],
                     <div style={{ fontSize: 10, color: "#f87171", letterSpacing: "0.12em", marginBottom: 10 }}>⚠️ SESSION MISTAKES FLAGGED</div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {entry.sessionMistakes.map(m => (
-                        <span key={m} style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11, background: "#1f0606", border: "1px solid #7f1d1d", color: "#f87171" }}>{m}</span>
+                        <span key={m} style={{ padding: "4px 10px", borderRadius: 20, fontSize: 11, background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", color: "#f87171" }}>{m}</span>
                       ))}
                     </div>
                     {/* Feature 4: Mistake cost attribution display */}
@@ -2816,7 +2857,7 @@ Rewritten summary:` }],
             {(entry.bestTrade || entry.worstTrade) && (
               <div style={{ display: "grid", gridTemplateColumns: entry.bestTrade && entry.worstTrade ? "1fr 1fr" : "1fr", gap: 10 }}>
                 {entry.bestTrade && (
-                  <div style={{ background: "#061f0f", border: "1px solid #166534", borderRadius: 6, padding: "14px 16px" }}>
+                  <div style={{ background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 6, padding: "14px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <div style={{ fontSize: 10, color: "#4ade80", letterSpacing: "0.12em" }}>✅ BEST TRADE</div>
                       <RewriteBtn fieldKey="bestTrade" text={entry.bestTrade} />
@@ -2825,7 +2866,7 @@ Rewritten summary:` }],
           </div>
           )}
                 {entry.worstTrade && (
-                  <div style={{ background: "#1f0606", border: "1px solid #7f1d1d", borderRadius: 6, padding: "14px 16px" }}>
+                  <div style={{ background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", borderRadius: 6, padding: "14px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <div style={{ fontSize: 10, color: "#f87171", letterSpacing: "0.12em" }}>❌ WORST TRADE / MISTAKE</div>
                       <RewriteBtn fieldKey="worstTrade" text={entry.worstTrade} />
@@ -2843,7 +2884,7 @@ Rewritten summary:` }],
                 {entry.lessonsLearned && (
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.1em" }}>LESSONS LEARNED</div>
+                      <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em" }}>LESSONS LEARNED</div>
                       <RewriteBtn fieldKey="lessonsLearned" text={entry.lessonsLearned} />
                     </div>
                     <div style={{ fontSize: 13, color: rewrites.lessonsLearned && !showOriginal.lessonsLearned ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.lessonsLearned && !showOriginal.lessonsLearned ? "italic" : "normal" }}>{rewrites.lessonsLearned && !showOriginal.lessonsLearned ? rewrites.lessonsLearned : entry.lessonsLearned}</div>
@@ -2852,7 +2893,7 @@ Rewritten summary:` }],
                 {entry.mistakes && (
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.1em" }}>MISTAKES TO AVOID</div>
+                      <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em" }}>MISTAKES TO AVOID</div>
                       <RewriteBtn fieldKey="mistakes" text={entry.mistakes} />
                     </div>
                     <div style={{ fontSize: 13, color: rewrites.mistakes && !showOriginal.mistakes ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.mistakes && !showOriginal.mistakes ? "italic" : "normal" }}>{rewrites.mistakes && !showOriginal.mistakes ? rewrites.mistakes : entry.mistakes}</div>
@@ -2861,7 +2902,7 @@ Rewritten summary:` }],
                 {entry.improvements && (
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.1em" }}>AREAS FOR IMPROVEMENT</div>
+                      <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em" }}>AREAS FOR IMPROVEMENT</div>
                       <RewriteBtn fieldKey="improvements" text={entry.improvements} />
                     </div>
                     <div style={{ fontSize: 13, color: rewrites.improvements && !showOriginal.improvements ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.improvements && !showOriginal.improvements ? "italic" : "normal" }}>{rewrites.improvements && !showOriginal.improvements ? rewrites.improvements : entry.improvements}</div>
@@ -2931,7 +2972,7 @@ Rewritten summary:` }],
                       { label: "PLAN FOR TOMORROW", value: entry.tomorrow },
                     ].filter(f => f.value?.trim()).map(f => (
                       <div key={f.label}>
-                        <div style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>{f.label}</div>
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>{f.label}</div>
                         <div style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{f.value}</div>
                       </div>
                     ))}
@@ -2956,19 +2997,20 @@ Rewritten summary:` }],
       <DailyAIAnalysis entry={entry} a={a} ai={ai} priorPlan={priorPlan} />
 
       {hasNotes && onRecap && (
-        <div style={{ marginTop: 20, background: "#0a0e1a", border: "1px solid #1e3a5f", borderRadius: 6, overflow: "hidden" }}>
+        <div style={{ marginTop: 20, background: "#0a0e1a", border: "1px solid #1e3a5f", borderRadius: 6, overflow: "hidden", position: "relative" }}>
+          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
           <div style={{ padding: "14px 20px", background: "#0a1628", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <div style={{ fontSize: 12, color: "#93c5fd", letterSpacing: "0.1em", fontWeight: 600 }}>✦ AI WEEKLY & MONTHLY RECAP</div>
-              <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>Patterns, lessons & coaching insights across your journal</div>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>✦ AI WEEKLY & MONTHLY RECAP</div>
+              <div style={{ fontSize: 9, color: "#475569", marginTop: 3, letterSpacing: "0.1em" }}>ANALYSE · REFLECT · IMPROVE</div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => onRecap("weekly")}
-                style={{ background: "#1d4ed8", color: "white", border: "none", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s" }}>
+                style={{ background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", color: "#070d1a", border: "none", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 700, transition: "all .15s" }}>
                 ANALYSE WEEK →
               </button>
               <button onClick={() => onRecap("monthly")}
-                style={{ background: "#1d4ed8", color: "white", border: "none", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s" }}>
+                style={{ background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", color: "#070d1a", border: "none", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 700, transition: "all .15s" }}>
                 ANALYSE MONTH →
               </button>
             </div>
@@ -2979,11 +3021,20 @@ Rewritten summary:` }],
   );
 }
 
-function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, netPnl: calcNetPnlProp, gradeColor, calcAnalytics }) {
+function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, netPnl: calcNetPnlProp, gradeColor, calcAnalytics, calendarNotes = {}, saveCalNote = () => {} }) {
   const calcNetPnl = calcNetPnlProp;
   const [year, mon] = month.split("-").map(Number);
-  const [collapsed, setCollapsed] = useState({ pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false });
-  const toggleSection = (key) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("tj-collapse-cal-v1") || "{}");
+      return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, ...saved };
+    } catch { return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false }; }
+  });
+  const toggleSection = (key) => setCollapsed(prev => {
+    const next = { ...prev, [key]: !prev[key] };
+    try { localStorage.setItem("tj-collapse-cal-v1", JSON.stringify(next)); } catch {}
+    return next;
+  });
   const SectionHeader = ({ label, skey, summary }) => (
     <div onClick={() => toggleSection(skey)}
       style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none", padding: "7px 12px", borderRadius: 4, marginBottom: collapsed[skey] ? 0 : 8, background: collapsed[skey] ? "#0f1729" : "transparent", border: `1px solid ${collapsed[skey] ? "#1e3a5f" : "transparent"}`, transition: "all .15s" }}>
@@ -3052,35 +3103,112 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
 
           <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 16 }}>
 
-            {/* P&L Summary */}
+            {/* P&L + Trade Statistics — combined */}
             <div>
-              <SectionHeader label="P&L SUMMARY" skey="pnl" summary={<span style={{ color: pnlColor(monthPnL), fontWeight: 600 }}>{fmtPnl(monthPnL)} net</span>} />
+              <SectionHeader label="P&L SUMMARY & TRADE STATISTICS" skey="pnl"
+                summary={<span style={{ color: pnlColor(monthPnL), fontWeight: 600 }}>{fmtPnl(monthPnL)} net{monthAnalytics ? ` · ${monthAnalytics.total} trades` : ""}</span>} />
               {!collapsed.pnl && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                {[
-                  { l: "GROSS P&L", v: fmtPnl(monthGross), c: pnlColor(monthGross) },
-                  { l: "TOTAL FEES", v: monthFees > 0 ? `-$${monthFees.toFixed(2)}` : "—", c: monthFees > 0 ? "#f87171" : "#94a3b8" },
-                  { l: "NET P&L", v: fmtPnl(monthPnL), c: pnlColor(monthPnL), hi: true },
-                  { l: "DAY WIN RATE", v: monthEntries.length ? `${Math.round(monthWins / monthEntries.length * 100)}%` : "—", c: monthWins / monthEntries.length >= 0.5 ? "#4ade80" : "#f87171" },
-                  { l: "WIN DAYS", v: monthWins, c: "#4ade80" },
-                  { l: "LOSS DAYS", v: monthLoss, c: "#f87171" },
-                  ...(monthAnalytics ? [
-                    { l: "LARGEST WIN DAY", v: fmtPnl(Math.max(...monthEntries.map(e => netPnl(e)))), c: "#4ade80" },
-                    { l: "LARGEST LOSS DAY", v: fmtPnl(Math.min(...monthEntries.map(e => netPnl(e)))), c: "#f87171" },
-                    { l: "MAX DRAWDOWN", v: `$${monthAnalytics.maxDD.toFixed(2)}`, c: "#f87171" },
-                  ] : []),
-                ].map(s => (
-                  <div key={s.l} style={{ background: s.hi ? "#0d1f3c" : "#0f1729", border: `1px solid ${s.hi ? "#1e3a5f" : "#1e293b"}`, borderRadius: 4, padding: "10px 12px" }}>
-                    <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
-                    <div style={{ fontSize: 16, color: s.c, fontWeight: s.hi ? 700 : 500 }}>{s.v}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 1, background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 6, overflow: "hidden" }}>
+
+                  {/* Row 1: Money — the month's financial result */}
+                  <div style={{ padding: "12px 14px 10px", borderBottom: "1px solid #0f1729" }}>
+                    <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.15em", marginBottom: 8 }}>FINANCIALS</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8 }}>
+                      {/* Net P&L — hero stat */}
+                      <div style={{ background: "linear-gradient(135deg,rgba(56,189,248,0.1),rgba(129,140,248,0.12),rgba(192,132,252,0.08))", border: "1px solid rgba(129,140,248,0.25)", borderRadius: 5, padding: "12px 14px", position: "relative", overflow: "hidden" }}>
+                        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
+                        <div style={{ fontSize: 8, color: "#818cf8", letterSpacing: "0.12em", marginBottom: 4 }}>NET P&L</div>
+                        <div style={{ fontSize: 24, color: pnlColor(monthPnL), fontWeight: 700, lineHeight: 1 }}>{fmtPnl(monthPnL)}</div>
+                        {monthFees > 0 && <div style={{ fontSize: 9, color: "#475569", marginTop: 3 }}>gross {fmtPnl(monthGross)}</div>}
+                      </div>
+                      <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>GROSS P&L</div>
+                        <div style={{ fontSize: 15, color: pnlColor(monthGross), fontWeight: 600 }}>{fmtPnl(monthGross)}</div>
+                      </div>
+                      <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>FEES</div>
+                        <div style={{ fontSize: 15, color: "#475569", fontWeight: 400 }}>{monthFees > 0 ? `-$${monthFees.toFixed(2)}` : "—"}</div>
+                      </div>
+                      {monthAnalytics ? (
+                        <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>MAX DRAWDOWN</div>
+                          <div style={{ fontSize: 15, color: "#f87171", fontWeight: 600 }}>-${monthAnalytics.maxDD.toFixed(0)}</div>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
-                ))}
-              </div>
+
+                  {/* Row 2: Quality — how well you traded */}
+                  <div style={{ padding: "10px 14px 10px", borderBottom: "1px solid #0f1729" }}>
+                    <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.15em", marginBottom: 8 }}>PERFORMANCE QUALITY</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+                      <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
+                        <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>DAY WIN RATE</div>
+                        <div style={{ fontSize: 15, color: monthEntries.length && monthWins / monthEntries.length >= 0.5 ? "#4ade80" : "#f87171", fontWeight: 600 }}>
+                          {monthEntries.length ? `${Math.round(monthWins / monthEntries.length * 100)}%` : "—"}
+                        </div>
+                        <div style={{ fontSize: 9, color: "#334155", marginTop: 2 }}>{monthWins}W · {monthLoss}L</div>
+                      </div>
+                      {monthAnalytics && <>
+                        <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>TRADE WIN RATE</div>
+                          <div style={{ fontSize: 15, color: monthAnalytics.winRate >= 50 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{monthAnalytics.winRate.toFixed(0)}%</div>
+                          <div style={{ fontSize: 9, color: "#334155", marginTop: 2 }}>{monthAnalytics.winners}W · {monthAnalytics.losers}L</div>
+                        </div>
+                        <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>PROFIT FACTOR</div>
+                          {monthAnalytics.profitFactor >= 1 ? (
+                            <div style={{ fontSize: 15, fontWeight: 700, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+                              {monthAnalytics.profitFactor ? monthAnalytics.profitFactor.toFixed(2) : "—"}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 15, color: "#f87171", fontWeight: 600 }}>{monthAnalytics.profitFactor ? monthAnalytics.profitFactor.toFixed(2) : "—"}</div>
+                          )}
+                        </div>
+                        <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>AVG WIN / LOSS</div>
+                          <div style={{ fontSize: 12, fontWeight: 600 }}>
+                            <span style={{ color: "#4ade80" }}>{fmtPnl(monthAnalytics.avgWin)}</span>
+                            <span style={{ color: "#334155" }}> / </span>
+                            <span style={{ color: "#f87171" }}>{fmtPnl(monthAnalytics.avgLoss)}</span>
+                          </div>
+                        </div>
+                        <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>TOTAL TRADES</div>
+                          <div style={{ fontSize: 15, color: "#e2e8f0", fontWeight: 600 }}>{monthAnalytics.total}</div>
+                          <div style={{ fontSize: 9, color: "#334155", marginTop: 2 }}>{monthAnalytics.avgQty.toFixed(1)} avg cts</div>
+                        </div>
+                      </>}
+                    </div>
+                  </div>
+
+                  {/* Row 3: Trade detail — the underlying numbers */}
+                  {monthAnalytics && (
+                    <div style={{ padding: "10px 14px 12px" }}>
+                      <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.15em", marginBottom: 8 }}>TRADE DETAIL</div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
+                        {[
+                          { l: "LARGEST WIN", v: fmtPnl(monthAnalytics.largestWin), c: "#4ade80" },
+                          { l: "LARGEST LOSS", v: fmtPnl(monthAnalytics.largestLoss), c: "#f87171" },
+                          { l: "BEST WIN DAY", v: fmtPnl(Math.max(...monthEntries.map(e => netPnl(e)))), c: "#4ade80" },
+                          { l: "WORST LOSS DAY", v: fmtPnl(Math.min(...monthEntries.map(e => netPnl(e)))), c: "#f87171" },
+                          { l: "WIN STREAK", v: `${monthAnalytics.maxConsecWins} trades`, c: "#4ade80" },
+                          { l: "LOSS STREAK", v: `${monthAnalytics.maxConsecLoss} trades`, c: "#f87171" },
+                        ].map(s => (
+                          <div key={s.l} style={{ background: "#0a0e1a", border: "1px solid #0f1729", borderRadius: 4, padding: "8px 10px" }}>
+                            <div style={{ fontSize: 8, color: "#334155", letterSpacing: "0.08em", marginBottom: 3 }}>{s.l}</div>
+                            <div style={{ fontSize: 13, color: s.c, fontWeight: 600 }}>{s.v}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
       {/* Calendar grid header */}
-      <div style={{ fontSize: 22, color: "#93c5fd", letterSpacing: "0.08em", fontWeight: 700, fontFamily: "'Bebas Neue', sans-serif", marginBottom: 12 }}>
+      <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, letterSpacing: "0.08em", fontWeight: 700, marginBottom: 12, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
         {(() => { const [y, m] = month.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase(); })()}
       </div>
 
@@ -3088,7 +3216,10 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 3 }}>
         {DAYS.map(d => (
           <div key={d} style={{ textAlign: "center", fontSize: 12, letterSpacing: "0.08em", padding: "6px 0", fontWeight: 600,
-            color: d === "SAT" || d === "SUN" ? "#475569" : "#94a3b8" }}>{d}</div>
+            ...(d === "SAT" || d === "SUN"
+              ? { color: "#334155" }
+              : { background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }
+            ) }}>{d}</div>
         ))}
       </div>
 
@@ -3110,7 +3241,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
           let bgColor = "#0a0e1a";
           let borderColor = "#1e293b";
           if (hasEntry) {
-            bgColor = n > 0 ? "#061f0f" : n < 0 ? "#1f0606" : "#0f1729";
+            bgColor = n > 0 ? "rgba(16,63,33,0.55)" : n < 0 ? "rgba(63,16,16,0.5)" : "#0f1729";
             borderColor = n > 0 ? "#166534" : n < 0 ? "#7f1d1d" : "#1e293b";
           } else if (isWeekend) {
             bgColor = "#060810";
@@ -3119,23 +3250,28 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
             bgColor = "#060810";
             borderColor = "#0f1420";
           }
-          if (isToday) borderColor = "#3b82f6";
+          // isToday gets gradient outline instead of blue border — applied inline below
 
           return (
             <div key={dateStr}
               onClick={() => hasEntry ? onDayClick(entry) : (!isWeekend && isPast || dateStr === today) ? onNewDay(dateStr) : null}
               style={{
                 background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 4,
-                padding: "12px 10px", minHeight: 148, position: "relative",
+                padding: "10px 10px 8px", minHeight: 148, position: "relative",
+                display: "flex", flexDirection: "column",
                 cursor: hasEntry ? "pointer" : (!isWeekend && (isPast || dateStr === today)) ? "pointer" : "default",
                 transition: "all .15s", opacity: isWeekend && !hasEntry ? 0.3 : isFuture && !isWeekend ? 0.5 : 1,
+                ...(isToday ? { outline: "2px solid transparent", boxShadow: "0 0 0 2px #818cf8, 0 0 0 3px rgba(56,189,248,0.4), 0 0 0 4px rgba(192,132,252,0.3)" } : {}),
               }}
               onMouseEnter={e => { if (hasEntry || (!isWeekend && (isPast || dateStr === today))) e.currentTarget.style.borderColor = hasEntry ? (n > 0 ? "#22c55e" : n < 0 ? "#ef4444" : "#3b82f6") : "#475569"; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = borderColor; }}
             >
               {/* Row 1: day number + emoji + grade */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ fontSize: 17, fontWeight: 700, color: isToday ? "#3b82f6" : hasEntry ? "#e2e8f0" : isWeekend ? "#475569" : "#94a3b8" }}>{day}</span>
+                <span style={{ fontSize: 17, fontWeight: 700, ...(isToday
+                    ? { background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }
+                    : { color: hasEntry ? "#e2e8f0" : isWeekend ? "#475569" : "#94a3b8" }
+                  ) }}>{day}</span>
                 {entry?.grade && (
                   <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                     {(entry.moods?.length ? entry.moods : entry.mood ? [entry.mood] : []).map(m => (
@@ -3155,18 +3291,32 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                   {/* Trades + Win Rate */}
                   {entry.parsedTrades?.length > 0 && (() => {
                     const wins = entry.parsedTrades.filter(t => t.pnl > 0).length;
-                    const wr = Math.round(wins / entry.parsedTrades.length * 100);
+                    const losses = entry.parsedTrades.filter(t => t.pnl < 0).length;
+                    const gross = entry.parsedTrades.reduce((s,t) => t.pnl>0?s+t.pnl:s, 0);
+                    const grossLoss = entry.parsedTrades.reduce((s,t) => t.pnl<0?s+Math.abs(t.pnl):s, 0);
+                    const pf = grossLoss > 0 ? (gross/grossLoss) : gross > 0 ? null : null;
                     return (
                       <>
-                        <div style={{ fontSize: 10, color: "#94a3b8", lineHeight: 1.5 }}>{entry.parsedTrades.length} trades</div>
-                        <div style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171", lineHeight: 1.5 }}>{wr}% WR</div>
+                        <div style={{ fontSize: 10, lineHeight: 1.5 }}>
+                          <span style={{ color: "#4ade80" }}>W{wins}</span>
+                          <span style={{ color: "#475569" }}> / </span>
+                          <span style={{ color: "#f87171" }}>L{losses}</span>
+                          <span style={{ color: "#475569" }}> · {entry.parsedTrades.length}T</span>
+                        </div>
+                        {pf !== null && (
+                          pf >= 1 ? (
+                            <div style={{ fontSize: 10, fontWeight: 700, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1.4 }}>PF {pf.toFixed(2)}</div>
+                          ) : (
+                            <div style={{ fontSize: 10, color: "#f87171", lineHeight: 1.4 }}>PF {pf.toFixed(2)}</div>
+                          )
+                        )}
                       </>
                     );
                   })()}
-                  {/* Instruments — bottom right */}
-                  <div style={{ position: "absolute", bottom: 7, right: 7, display: "flex", gap: 3, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  {/* Instruments — in flow, bottom of entry content */}
+                  <div style={{ marginTop: 4, display: "flex", gap: 3, flexWrap: "wrap" }}>
                     {(entry.instruments?.length ? entry.instruments : entry.instrument ? [entry.instrument] : []).map(sym => (
-                      <span key={sym} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 2, background: "#1e3a5f33", color: "#64748b", border: "1px solid #1e3a5f55", letterSpacing: "0.04em" }}>{sym}</span>
+                      <span key={sym} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 2, background: "#1e3a5f33", color: "#3b82f6", border: "1px solid #1e3a5f55", letterSpacing: "0.04em" }}>{sym}</span>
                     ))}
                     {!entry.grade && (entry.moods?.length ? entry.moods : entry.mood ? [entry.mood] : []).map(m => (
                       <span key={m} style={{ fontSize: 10 }}>{m.split(" ").pop()}</span>
@@ -3176,6 +3326,39 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               ) : !isWeekend && (isPast || dateStr === today) ? (
                 <div style={{ fontSize: 9, color: "#1e293b", marginTop: 6, textAlign: "center" }}>+ add</div>
               ) : null}
+              {/* Note area — auto-resize driven by live value via scrollHeight */}
+              <div style={{ marginTop: "auto", paddingTop: 8, marginTop: 8, borderTop: calendarNotes[dateStr] ? "1px solid #1e293b" : "1px solid transparent" }}
+                onClick={e => e.stopPropagation()}>
+                <textarea
+                  value={calendarNotes[dateStr] || ""}
+                  onChange={e => {
+                    e.stopPropagation();
+                    saveCalNote(dateStr, e.target.value);
+                    // Auto-resize: collapse to 1px then expand to scrollHeight
+                    e.target.style.height = "20px";
+                    e.target.style.height = e.target.scrollHeight + "px";
+                    // Show/hide separator based on live value
+                    e.target.parentNode.style.borderTopColor = e.target.value ? "#1e293b" : "transparent";
+                  }}
+                  onClick={e => e.stopPropagation()}
+                  placeholder={isWeekend ? "weekend plan…" : "notes…"}
+                  style={{ width: "100%", fontSize: 10, color: "#64748b", background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px" }}
+                  onFocus={e => {
+                    e.currentTarget.style.color = "#94a3b8";
+                    e.currentTarget.parentNode.style.borderTopColor = "rgba(129,140,248,0.4)";
+                    // Expand to full content on focus
+                    e.currentTarget.style.height = "20px";
+                    e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
+                  }}
+                  onBlur={e => {
+                    e.currentTarget.style.color = "#64748b";
+                    const val = e.currentTarget.value;
+                    e.currentTarget.parentNode.style.borderTopColor = val ? "#1e293b" : "transparent";
+                    // Shrink back to 1 row if empty, keep height if has content
+                    if (!val) { e.currentTarget.style.height = "20px"; }
+                  }}
+                />
+              </div>
             </div>
           );
         })}
@@ -3183,8 +3366,8 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
 
       {/* Legend */}
       <div style={{ display: "flex", gap: 16, marginTop: 12, fontSize: 10, color: "#64748b" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: "#061f0f", border: "1px solid #166534" }} /> Win day</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: "#1f0606", border: "1px solid #7f1d1d" }} /> Loss day</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: "rgba(16,63,33,0.55)", border: "1px solid #166534" }} /> Win day</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d" }} /> Loss day</div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, border: "1px solid #3b82f6" }} /> Today</div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}><div style={{ width: 8, height: 8, borderRadius: 2, background: "#0a0e1a", border: "1px solid #334155", opacity: 0.4 }} /> Weekend / no trade</div>
       </div>
@@ -3216,35 +3399,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
           </div>
         );
       })()}
-            {/* Trade Statistics */}
-            {monthAnalytics && (
-              <div>
-                <SectionHeader label="TRADE STATISTICS" skey="trades" summary={<span>{monthAnalytics.total} trades · <span style={{ color: monthAnalytics.winRate >= 50 ? "#4ade80" : "#f87171" }}>{monthAnalytics.winRate.toFixed(0)}% WR</span></span>} />
-                {!collapsed.trades && (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                  {[
-                    { l: "TOTAL TRADES", v: monthAnalytics.total, c: "#e2e8f0" },
-                    { l: "WINNERS", v: monthAnalytics.winners, c: "#4ade80" },
-                    { l: "LOSERS", v: monthAnalytics.losers, c: "#f87171" },
-                    { l: "WIN RATE", v: `${monthAnalytics.winRate.toFixed(1)}%`, c: monthAnalytics.winRate >= 50 ? "#4ade80" : "#f87171" },
-                    { l: "PROFIT FACTOR", v: monthAnalytics.profitFactor ? monthAnalytics.profitFactor.toFixed(2) : "—", c: monthAnalytics.profitFactor >= 1 ? "#4ade80" : "#f87171" },
-                    { l: "AVG CONTRACT SIZE", v: `${monthAnalytics.avgQty.toFixed(1)} cts`, c: "#e2e8f0" },
-                    { l: "AVG WIN", v: fmtPnl(monthAnalytics.avgWin), c: "#4ade80" },
-                    { l: "AVG LOSS", v: fmtPnl(monthAnalytics.avgLoss), c: "#f87171" },
-                    { l: "MAX WIN STREAK", v: `${monthAnalytics.maxConsecWins} trades`, c: "#4ade80" },
-                    { l: "MAX LOSS STREAK", v: `${monthAnalytics.maxConsecLoss} trades`, c: "#f87171" },
-                    { l: "LARGEST WIN", v: fmtPnl(monthAnalytics.largestWin), c: "#4ade80" },
-                    { l: "LARGEST LOSS", v: fmtPnl(monthAnalytics.largestLoss), c: "#f87171" },
-                  ].map(s => (
-                    <div key={s.l} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "10px 12px" }}>
-                      <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
-                      <div style={{ fontSize: 16, color: s.c, fontWeight: 500 }}>{s.v}</div>
-                    </div>
-                  ))}
-                </div>
-                )}
-              </div>
-            )}
+
 
             {/* Performance by Time of Day */}
             {monthAnalytics && (() => {
@@ -3272,7 +3427,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                             <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                               <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
                               <span style={{ fontSize: 10, letterSpacing: 0 }}><span style={{ letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{s.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{s.trades - s.wins}</span></span></span>
-                              <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : ""}${s.pnl.toFixed(2)}</span>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(2)}</span>
                             </div>
                           </div>
                           <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
@@ -3341,7 +3496,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                               {hasData ? (
                                 <>
                                   <div style={{ fontSize: 13, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", marginBottom: 4 }}>
-                                    {s.pnl >= 0 ? "+" : ""}${Math.abs(s.pnl).toFixed(0)}
+                                    {s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(0)}
                                   </div>
                                   <div style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171", marginBottom: 3 }}>{wr}% WR</div>
                                   <div style={{ fontSize: 9, color: "#64748b" }}>
@@ -3378,7 +3533,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                             <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
                             <span style={{ fontSize: 10, letterSpacing: 0 }}><span style={{ letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{s.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{s.trades - s.wins}</span></span></span>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : ""}${s.pnl.toFixed(2)}</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(2)}</span>
                           </div>
                         </div>
                         <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
@@ -3414,7 +3569,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                   {!collapsed.mistakes && (
                     <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
                       {cleanSessions > 0 && (
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: sorted.length ? 10 : 0, padding: "6px 10px", background: "#061f0f", border: "1px solid #166534", borderRadius: 4 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: sorted.length ? 10 : 0, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
                           <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Executed the Plan</span>
                           <span style={{ fontSize: 12, fontWeight: 600, color: "#4ade80" }}>{cleanSessions} day{cleanSessions !== 1 ? "s" : ""}</span>
                         </div>
@@ -3527,7 +3682,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                               <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mood}</span>
                               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                                 <span style={{ fontSize: 9, color: "#94a3b8" }}>{s.sessions} session{s.sessions !== 1 ? "s" : ""} · {wr}% WR</span>
-                                <span style={{ fontSize: 11, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 70, textAlign: "right" }}>{avg >= 0 ? "+" : ""}${avg.toFixed(0)} avg</span>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 70, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
                               </div>
                             </div>
                             <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
@@ -3551,7 +3706,193 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                   )}
                 </div>
               );
-            })()}
+              })()}
+              {/* TREND RECAP */}
+              {monthEntries.length >= 3 && (() => {
+                const tradWR = tradeWinRate !== null ? tradeWinRate : null;
+                const dayWR = monthEntries.length ? Math.round(monthWins / monthEntries.length * 100) : 0;
+                const pf = monthAnalytics?.profitFactor;
+                const allMistakes = {};
+                let mistakeSessions = 0;
+                for (const e of monthEntries) {
+                  const ms = (e.sessionMistakes || []).filter(m => m !== "No Mistakes — Executed the Plan ✓");
+                  if (ms.length) mistakeSessions++;
+                  for (const m of ms) allMistakes[m] = (allMistakes[m] || 0) + 1;
+                }
+                const topMistake = Object.entries(allMistakes).sort((a,b) => b[1]-a[1])[0];
+                const mistakeRate = Math.round(mistakeSessions / monthEntries.length * 100);
+                const netTrend = (() => {
+                  const half = Math.floor(monthEntries.length / 2);
+                  const sorted = [...monthEntries].sort((a,b) => a.date.localeCompare(b.date));
+                  const firstHalf = sorted.slice(0, half).reduce((s,e) => s + netPnl(e), 0);
+                  const secondHalf = sorted.slice(half).reduce((s,e) => s + netPnl(e), 0);
+                  return secondHalf > firstHalf ? "improving" : secondHalf < firstHalf ? "declining" : "flat";
+                })();
+                const trendColor = netTrend === "improving" ? "#4ade80" : netTrend === "declining" ? "#f87171" : "#94a3b8";
+                return (
+                  <div>
+                    <SectionHeader label="TREND RECAP" skey="trendrecap"
+                      summary={<span style={{ color: trendColor }}>{netTrend.toUpperCase()}</span>} />
+                    {!collapsed.trendrecap && (
+                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 14 }}>
+                          {[
+                            { l: "DAY WIN RATE", v: `${dayWR}%`, c: dayWR >= 50 ? "#4ade80" : "#f87171" },
+                            { l: "TRADE WIN RATE", v: tradWR !== null ? `${tradWR}%` : "—", c: tradWR !== null ? (tradWR >= 50 ? "#4ade80" : "#f87171") : "#64748b" },
+                            { l: "PROFIT FACTOR", v: pf != null ? (typeof pf === "number" ? pf.toFixed(2) : pf) : "—", c: pf != null && typeof pf === "number" ? (pf >= 1 ? "#4ade80" : "#f87171") : "#64748b" },
+                            { l: "MISTAKE RATE", v: `${mistakeRate}%`, c: mistakeRate > 50 ? "#f87171" : mistakeRate > 25 ? "#f59e0b" : "#4ade80" },
+                            { l: "MISTAKE TYPES", v: Object.keys(allMistakes).length || "—", c: "#94a3b8" },
+                            { l: "P&L TREND", v: netTrend.toUpperCase(), c: trendColor },
+                          ].map(s => (
+                            <div key={s.l} style={{ background: "#0a0e1a", borderRadius: 4, padding: "8px 10px" }}>
+                              <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 3 }}>{s.l}</div>
+                              <div style={{ fontSize: 14, color: s.c, fontWeight: 600 }}>{s.v}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {topMistake && (
+                          <div style={{ background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", borderRadius: 4, padding: "8px 12px", fontSize: 11, color: "#f87171" }}>
+                            ⚠ Most frequent mistake: <strong>{topMistake[0]}</strong> ({topMistake[1]}× · {Math.round(topMistake[1]/monthEntries.length*100)}% of sessions)
+                          </div>
+                        )}
+                        <div style={{ marginTop: 10, fontSize: 10, color: "#64748b", lineHeight: 1.7 }}>
+                          <span style={{ color: "#3b82f6" }}>💡 </span>
+                          {netTrend === "improving" ? "Second half of month outperformed first — momentum building." :
+                           netTrend === "declining" ? "Performance declined through the month — review fatigue or rule drift." :
+                           "Consistent performance across the month."}
+                          {pf != null && typeof pf === "number" && pf < 1 && " Profit factor below 1 — exits need review."}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* TIME OF DAY HEATMAP */}
+              {allMonthTrades.length > 0 && (() => {
+                // Group trades by hour of day using sellTime
+                const byHour = {};
+                for (const t of allMonthTrades) {
+                  const timeStr = t.sellTime || t.buyTime || "";
+                  if (!timeStr) continue;
+                  const parts = timeStr.replace(/[^0-9:]/g, "").split(":");
+                  let hour = null;
+                  if (parts.length >= 2) hour = parseInt(parts[0]);
+                  else if (timeStr.length >= 4 && !timeStr.includes(":")) hour = parseInt(timeStr.slice(0,2));
+                  if (hour === null || isNaN(hour) || hour < 0 || hour > 23) continue;
+                  if (!byHour[hour]) byHour[hour] = { trades: 0, pnl: 0, wins: 0 };
+                  byHour[hour].trades++;
+                  byHour[hour].pnl += t.pnl || 0;
+                  if ((t.pnl || 0) > 0) byHour[hour].wins++;
+                }
+                const hours = Object.keys(byHour).map(Number).sort((a,b) => a-b);
+                if (hours.length === 0) return null;
+                const maxAbs = Math.max(...hours.map(h => Math.abs(byHour[h].pnl)));
+                const fmt12 = h => { const ap = h < 12 ? "AM" : "PM"; const h12 = h % 12 || 12; return `${h12}${ap}`; };
+                return (
+                  <div>
+                    <SectionHeader label="TIME OF DAY" skey="timeofday"
+                      summary={<span style={{ color: "#64748b" }}>{hours.length} active hour{hours.length !== 1 ? "s" : ""}</span>} />
+                    {!collapsed.timeofday && (
+                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
+                        <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginBottom: 12 }}>
+                          {hours.map(h => {
+                            const d = byHour[h];
+                            const pct = maxAbs > 0 ? Math.abs(d.pnl) / maxAbs : 0;
+                            const isPos = d.pnl >= 0;
+                            const opacity = 0.2 + pct * 0.8;
+                            const bg = isPos ? `rgba(74,222,128,${opacity})` : `rgba(248,113,113,${opacity})`;
+                            const wr = d.trades ? Math.round(d.wins / d.trades * 100) : 0;
+                            return (
+                              <div key={h} title={`${fmt12(h)}: ${d.trades} trades, ${wr}% WR, $${d.pnl.toFixed(0)}`}
+                                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: "default" }}>
+                                <div style={{ width: 36, height: 36, borderRadius: 4, background: bg, border: `1px solid ${isPos ? "rgba(74,222,128,0.3)" : "rgba(248,113,113,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                                  <span style={{ fontSize: 9, color: isPos ? "#4ade80" : "#f87171", fontWeight: 600 }}>{d.trades}</span>
+                                </div>
+                                <span style={{ fontSize: 8, color: "#475569", letterSpacing: "0.05em" }}>{fmt12(h)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {(() => {
+                          const bestH = hours.reduce((best, h) => byHour[h].pnl > byHour[best].pnl ? h : best, hours[0]);
+                          const worstH = hours.reduce((worst, h) => byHour[h].pnl < byHour[worst].pnl ? h : worst, hours[0]);
+                          const bestWR = byHour[hours.reduce((b,h) => (byHour[h].trades >= 2 && byHour[h].wins/byHour[h].trades > byHour[b].wins/byHour[b].trades) ? h : b, hours[0])];
+                          return (
+                            <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.7, background: "#0a0e1a", borderRadius: 4, padding: "8px 12px" }}>
+                              <span style={{ color: "#3b82f6" }}>💡 </span>
+                              Best hour: <span style={{ color: "#4ade80" }}>{fmt12(bestH)}</span> ({byHour[bestH].trades} trades · ${byHour[bestH].pnl.toFixed(0)}).
+                              {byHour[worstH].pnl < 0 && <> Worst: <span style={{ color: "#f87171" }}>{fmt12(worstH)}</span> (${byHour[worstH].pnl.toFixed(0)}).</>}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* MISTAKE CROSS-REFERENCE */}
+              {monthEntries.length > 0 && (() => {
+                const mistakePerf = {};
+                for (const e of monthEntries) {
+                  const ms = (e.sessionMistakes || []).filter(m => m !== "No Mistakes — Executed the Plan ✓");
+                  if (ms.length === 0) continue;
+                  const pnl = netPnl(e);
+                  for (const m of ms) {
+                    if (!mistakePerf[m]) mistakePerf[m] = { sessions: 0, totalPnl: 0, wins: 0, cleanPnl: 0, cleanSessions: 0 };
+                    mistakePerf[m].sessions++;
+                    mistakePerf[m].totalPnl += pnl;
+                    if (pnl > 0) mistakePerf[m].wins++;
+                  }
+                }
+                // Also compute avg P&L on clean sessions for comparison
+                const cleanSessions = monthEntries.filter(e => e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓"));
+                const cleanAvg = cleanSessions.length ? cleanSessions.reduce((s,e) => s + netPnl(e), 0) / cleanSessions.length : null;
+                const entries2 = Object.entries(mistakePerf).sort((a,b) => a[1].totalPnl - b[1].totalPnl);
+                if (entries2.length === 0) return null;
+                return (
+                  <div>
+                    <SectionHeader label="MISTAKE IMPACT" skey="mistakeimpact"
+                      summary={<span style={{ color: "#64748b" }}>{entries2.length} patterns tracked</span>} />
+                    {!collapsed.mistakeimpact && (
+                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
+                        {cleanAvg !== null && (
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
+                            <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Clean session avg</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "#4ade80" }}>{cleanAvg >= 0 ? "+" : "-"}${Math.abs(cleanAvg).toFixed(0)}</span>
+                          </div>
+                        )}
+                        {entries2.map(([mistake, d]) => {
+                          const avg = d.sessions ? d.totalPnl / d.sessions : 0;
+                          const wr = d.sessions ? Math.round(d.wins / d.sessions * 100) : 0;
+                          const delta = cleanAvg !== null ? avg - cleanAvg : null;
+                          return (
+                            <div key={mistake} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #1e293b" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                                <span style={{ fontSize: 11, color: "#e2e8f0", flex: 1 }}>{mistake}</span>
+                                <span style={{ fontSize: 10, color: "#64748b", marginLeft: 8 }}>{d.sessions}× · {wr}% WR</span>
+                              </div>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                <div style={{ flex: 1, background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
+                                  <div style={{ width: `${Math.min(Math.abs(avg) / Math.max(...entries2.map(([,x]) => Math.abs(x.totalPnl/x.sessions))) * 100, 100)}%`, height: "100%", background: avg >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                                </div>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: avg >= 0 ? "#4ade80" : "#f87171", minWidth: 60, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
+                                {delta !== null && <span style={{ fontSize: 10, color: delta < -50 ? "#f87171" : delta < 0 ? "#f59e0b" : "#4ade80", minWidth: 55, textAlign: "right" }}>{delta >= 0 ? "+" : "-"}${Math.abs(delta).toFixed(0)} vs clean</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.7 }}>
+                          <span style={{ color: "#3b82f6" }}>💡 </span>
+                          Sessions with mistakes are compared to your clean-session average. Negative delta = performance drag from that pattern.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
 
           </div>
         </div>
@@ -3658,7 +3999,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
           return (
             <div key={wk} style={{ background: "#0a0e1a", border: `1px solid ${isPos ? "#166534" : wNet < 0 ? "#7f1d1d" : "#1e293b"}`, borderRadius: 6, overflow: "hidden" }}>
               {/* Week header */}
-              <div style={{ padding: "14px 18px", background: isPos ? "#061f0f" : wNet < 0 ? "#1f0606" : "#0f1729", display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center" }}>
+              <div style={{ padding: "14px 18px 14px 15px", background: isPos ? "#061f0f" : wNet < 0 ? "#1f0606" : "#0f1729", display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center", borderLeft: "3px solid transparent", borderImage: "linear-gradient(180deg,#38bdf8,#818cf8,#c084fc) 1" }}>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                     <span style={{ fontSize: 11, color: isPos ? "#4ade80" : wNet < 0 ? "#f87171" : "#93c5fd", letterSpacing: "0.1em", fontWeight: 600 }}>WEEK {weekNum}</span>
@@ -3666,7 +4007,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                   </div>
                   <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
                     <div>
-                      <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 2 }}>TRADING DAYS</div>
+                      <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>TRADING DAYS</div>
                       <div style={{ fontSize: 12, color: "#e2e8f0" }}>
                         <span style={{ color: "#4ade80" }}>{wWinDays}W</span>
                         <span style={{ color: "#475569" }}> / </span>
@@ -3676,7 +4017,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                     </div>
                     {wA && <>
                       <div>
-                        <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 2 }}>TRADES</div>
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>TRADES</div>
                         <div style={{ fontSize: 12, color: "#e2e8f0" }}>
                           <span style={{ color: "#4ade80" }}>{wA.winners}W</span>
                           <span style={{ color: "#475569" }}> / </span>
@@ -3684,11 +4025,11 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                         </div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 2 }}>WIN RATE</div>
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>WIN RATE</div>
                         <div style={{ fontSize: 12, color: wA.winRate >= 50 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{wA.winRate.toFixed(0)}%</div>
                       </div>
                       {wA.profitFactor && <div>
-                        <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 2 }}>PROFIT FACTOR</div>
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>PROFIT FACTOR</div>
                         <div style={{ fontSize: 12, color: wA.profitFactor >= 1 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{wA.profitFactor.toFixed(2)}</div>
                       </div>}
                     </>}
@@ -3697,16 +4038,16 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                 <div style={{ display: "flex", gap: 20, alignItems: "flex-end", textAlign: "right" }}>
                   {wFees > 0 && <>
                     <div>
-                      <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 2 }}>GROSS</div>
+                      <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>GROSS</div>
                       <div style={{ fontSize: 13, color: "#94a3b8" }}>{fmtPnl(wGross)}</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 2 }}>FEES</div>
+                      <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>FEES</div>
                       <div style={{ fontSize: 13, color: "#f87171" }}>−${wFees.toFixed(0)}</div>
                     </div>
                   </>}
                   <div>
-                    <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 2 }}>NET P&L</div>
+                    <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>NET P&L</div>
                     <div style={{ fontSize: 22, color: pnlColor(wNet), fontWeight: 700, lineHeight: 1 }}>{fmtPnl(wNet)}</div>
                   </div>
                 </div>
@@ -3735,7 +4076,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                         {e.bias && <span style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: e.bias === "Bullish" ? "#052e16" : e.bias === "Bearish" ? "#450a0a" : "#1e1b4b", color: e.bias === "Bullish" ? "#4ade80" : e.bias === "Bearish" ? "#f87171" : "#a5b4fc" }}>{e.bias}</span>}
                         {dayA && <span style={{ fontSize: 10, color: "#94a3b8" }}><span style={{ color: "#4ade80" }}>{dayA.winners}W</span> / <span style={{ color: "#f87171" }}>{dayA.losers}L</span> · <span style={{ color: dayA.winRate >= 50 ? "#4ade80" : "#f87171" }}>{dayA.winRate.toFixed(0)}%</span></span>}
                         {isClean && <span style={{ fontSize: 9, color: "#4ade80", background: "#052e16", border: "1px solid #166534", padding: "1px 6px", borderRadius: 2 }}>✓ Clean</span>}
-                        {!isClean && mistakeCount > 0 && <span style={{ fontSize: 9, color: "#f87171", background: "#1f0606", border: "1px solid #7f1d1d", padding: "1px 6px", borderRadius: 2 }}>⚠ {mistakeCount} mistake{mistakeCount !== 1 ? "s" : ""}</span>}
+                        {!isClean && mistakeCount > 0 && <span style={{ fontSize: 9, color: "#f87171", background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", padding: "1px 6px", borderRadius: 2 }}>⚠ {mistakeCount} mistake{mistakeCount !== 1 ? "s" : ""}</span>}
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontSize: 15, color: pnlColor(dayNet), fontWeight: 700 }}>{fmtPnl(dayNet)}</div>
@@ -3784,9 +4125,9 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                     {/* Mistake Frequency */}
                     {(mistakeSorted.length > 0 || cleanDays > 0) && (
                       <div style={{ background: "#0a0e1a", borderRadius: 4, padding: "10px 12px" }}>
-                        <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 8 }}>MISTAKE FREQUENCY</div>
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 8 }}>MISTAKE FREQUENCY</div>
                         {cleanDays > 0 && (
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: mistakeSorted.length ? 6 : 0, padding: "4px 8px", background: "#061f0f", border: "1px solid #166534", borderRadius: 3 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: mistakeSorted.length ? 6 : 0, padding: "4px 8px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 3 }}>
                             <span style={{ fontSize: 10, color: "#4ade80" }}>✓ Clean days</span>
                             <span style={{ fontSize: 10, fontWeight: 600, color: "#4ade80" }}>{cleanDays}</span>
                           </div>
@@ -3808,7 +4149,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                     {/* Mood vs Performance */}
                     {moodSorted.length > 0 && (
                       <div style={{ background: "#0a0e1a", borderRadius: 4, padding: "10px 12px" }}>
-                        <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 8 }}>MOOD VS P&L</div>
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 8 }}>MOOD VS P&L</div>
                         {moodSorted.map(([mood, s]) => {
                           const avg = s.pnl / s.sessions;
                           const isPos = avg >= 0;
@@ -3816,7 +4157,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                             <div key={mood} style={{ marginBottom: 6 }}>
                               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
                                 <span style={{ fontSize: 10, color: "#e2e8f0" }}>{mood}</span>
-                                <span style={{ fontSize: 10, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171" }}>{avg >= 0 ? "+" : ""}${avg.toFixed(0)}</span>
+                                <span style={{ fontSize: 10, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)}</span>
                               </div>
                               <div style={{ background: "#0f1729", borderRadius: 2, height: 3 }}>
                                 <div style={{ width: `${Math.abs(avg) / maxMoodAvg * 100}%`, height: "100%", background: isPos ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
@@ -3920,16 +4261,26 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
         <div>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: "#e2e8f0", letterSpacing: "0.1em" }}>PERFORMANCE OVERVIEW</div>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>PERFORMANCE OVERVIEW</div>
           <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>Cumulative results by month · click any month to expand full breakdown</div>
         </div>
         {/* Year selector */}
         <div style={{ display: "flex", gap: 6 }}>
           {years.map(y => (
-            <button key={y} onClick={() => { setSelectedYear(y); setExpandedMonth(null); }}
-              style={{ padding: "5px 12px", borderRadius: 3, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.05em", transition: "all .15s", background: selectedYear === y ? "#1e3a5f" : "transparent", border: `1px solid ${selectedYear === y ? "#3b82f6" : "#1e293b"}`, color: selectedYear === y ? "#93c5fd" : "#94a3b8" }}>
-              {y}
-            </button>
+            selectedYear === y ? (
+              <button key={y} onClick={() => { setSelectedYear(y); setExpandedMonth(null); }}
+                style={{ padding: "5px 12px", borderRadius: 3, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.05em", transition: "all .15s", background: "#1e3a5f", border: "1px solid #3b82f6", color: "#93c5fd", position: "relative", overflow: "hidden" }}>
+                <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
+                {y}
+              </button>
+            ) : (
+              <span key={y} style={{ display: "inline-block", padding: 1, borderRadius: 4, background: "linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))" }}>
+                <button onClick={() => { setSelectedYear(y); setExpandedMonth(null); }}
+                  style={{ display: "block", background: "#070d1a", color: "#64748b", border: "none", padding: "4px 11px", borderRadius: 2, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.05em" }}>
+                  {y}
+                </button>
+              </span>
+            )
           ))}
         </div>
       </div>
@@ -3937,10 +4288,20 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
       {/* Period selector */}
       <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
         {Object.entries(PERIOD_LABELS).map(([key, label]) => (
-          <button key={key} onClick={() => { setPeriod(key); setExpandedMonth(null); }}
-            style={{ padding: "6px 14px", borderRadius: 3, fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: period === key ? "#1e3a5f" : "transparent", border: `1px solid ${period === key ? "#3b82f6" : "#1e293b"}`, color: period === key ? "#93c5fd" : "#94a3b8" }}>
-            {label}
-          </button>
+          period === key ? (
+            <button key={key} onClick={() => { setPeriod(key); setExpandedMonth(null); }}
+              style={{ padding: "6px 14px", borderRadius: 3, fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: "#1e3a5f", border: "1px solid #3b82f6", color: "#93c5fd", position: "relative", overflow: "hidden" }}>
+              <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 1, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
+              {label}
+            </button>
+          ) : (
+            <span key={key} style={{ display: "inline-block", padding: 1, borderRadius: 4, background: "linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))" }}>
+              <button onClick={() => { setPeriod(key); setExpandedMonth(null); }}
+                style={{ display: "block", background: "#070d1a", color: "#64748b", border: "none", padding: "5px 13px", borderRadius: 2, fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.06em" }}>
+                {label}
+              </button>
+            </span>
+          )
         ))}
       </div>
 
@@ -3952,13 +4313,13 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
             {[
               { l: "NET P&L", v: fmtPnl(periodNet), c: pnlColor(periodNet), hi: true },
               { l: "GROSS P&L", v: fmtPnl(periodGross), c: pnlColor(periodGross) },
-              { l: "TOTAL FEES", v: periodFees > 0 ? `-$${periodFees.toFixed(0)}` : "—", c: "#f87171" },
+              { l: "TOTAL FEES", v: periodFees > 0 ? `-$${periodFees.toFixed(0)}` : "—", c: "#475569", small: true },
               { l: "WIN DAYS", v: `${periodWinDays}/${periodLossDays}`, c: "#e2e8f0" },
               { l: "TOTAL TRADES", v: periodTrades.length, c: "#e2e8f0" },
               { l: "WIN RATE", v: periodA ? `${periodA.winRate.toFixed(1)}%` : "—", c: periodA?.winRate >= 50 ? "#4ade80" : "#f87171" },
             ].map(s => (
               <div key={s.l}>
-                <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 4 }}>{s.l}</div>
+                <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 4 }}>{s.l}</div>
                 <div style={{ fontSize: 15, color: s.c, fontWeight: s.hi ? 700 : 500 }}>{s.v}</div>
               </div>
             ))}
@@ -3973,7 +4334,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
       )}
 
       {/* ── MONTH GRID — immediately after Full Year Summary ── */}
-      <div style={{ fontSize: 22, color: "#93c5fd", letterSpacing: "0.08em", fontWeight: 700, fontFamily: "'Bebas Neue', sans-serif", marginBottom: 12 }}>
+      <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, letterSpacing: "0.08em", fontWeight: 700, marginBottom: 12, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
         {PERIOD_LABELS[period]} · {selectedYear}
       </div>
       {/* Month grid */}
@@ -3982,15 +4343,22 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
           const hasData = monthEntries.length > 0;
           const isExpanded = expandedMonth === monthStr;
           const isFuture = monthStr > `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+          const isCurrentMonth = monthStr === `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
 
           return (
             <div key={monthStr}
               onClick={() => hasData && setExpandedMonth(isExpanded ? null : monthStr)}
-              style={{ background: hasData ? (netTotal > 0 ? "#061f0f" : netTotal < 0 ? "#1f0606" : "#0f1729") : isFuture ? "#060810" : "#0a0e1a", border: `1px solid ${isExpanded ? "#3b82f6" : hasData ? (netTotal > 0 ? "#166534" : netTotal < 0 ? "#7f1d1d" : "#1e293b") : "#0f1729"}`, borderRadius: 6, padding: "16px 18px", minHeight: hasData ? 130 : undefined, cursor: hasData ? "pointer" : "default", transition: "all .15s", opacity: isFuture ? 0.4 : 1 }}
+              style={{ background: hasData ? (netTotal > 0 ? "rgba(16,63,33,0.55)" : netTotal < 0 ? "rgba(63,16,16,0.5)" : "#0f1729") : isFuture ? "#060810" : "#0a0e1a", border: `1px solid ${isExpanded ? "#3b82f6" : hasData ? (netTotal > 0 ? "#166534" : netTotal < 0 ? "#7f1d1d" : "#1e293b") : "#0f1729"}`, borderRadius: 6, padding: "16px 18px", minHeight: hasData ? 130 : undefined, cursor: hasData ? "pointer" : "default", transition: "all .15s", opacity: isFuture ? 0.4 : 1, position: "relative", overflow: "hidden",
+                ...(isCurrentMonth ? { boxShadow: "0 0 0 2px #818cf8, 0 0 0 3px rgba(56,189,248,0.4), 0 0 0 4px rgba(192,132,252,0.3)" } : {}) }}
               onMouseEnter={e => { if (hasData) e.currentTarget.style.borderColor = netTotal > 0 ? "#22c55e" : netTotal < 0 ? "#ef4444" : "#3b82f6"; }}
               onMouseLeave={e => { if (hasData) e.currentTarget.style.borderColor = isExpanded ? "#3b82f6" : netTotal > 0 ? "#166534" : netTotal < 0 ? "#7f1d1d" : "#1e293b"; }}>
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: hasData ? 10 : 0 }}>
-                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: hasData ? "#e2e8f0" : "#1e3a5f", letterSpacing: "0.1em" }}>{MONTH_NAMES[mi]}</div>
+                {hasData ? (
+                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: "0.1em", background: netTotal > 0 ? "linear-gradient(135deg,#4ade80,#38bdf8)" : netTotal < 0 ? "linear-gradient(135deg,#f87171,#818cf8)" : "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>{MONTH_NAMES[mi]}</div>
+              ) : (
+                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, color: "#1e3a5f", letterSpacing: "0.1em" }}>{MONTH_NAMES[mi]}</div>
+              )}
                 {isExpanded && <span style={{ fontSize: 9, color: "#3b82f6" }}>▴</span>}
                 {!isExpanded && hasData && <span style={{ fontSize: 9, color: "#64748b" }}>▾</span>}
               </div>
@@ -4117,7 +4485,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
                     {[
                       { l: "GROSS P&L", v: fmtPnl(mGross), c: pnlColor(mGross) },
-                      { l: "TOTAL FEES", v: mFees > 0 ? `-$${mFees.toFixed(2)}` : "—", c: mFees > 0 ? "#f87171" : "#94a3b8" },
+                      { l: "TOTAL FEES", v: mFees > 0 ? `-$${mFees.toFixed(2)}` : "—", c: "#475569", small: true },
                       { l: "NET P&L", v: fmtPnl(mNet), c: pnlColor(mNet), hi: true },
                       { l: "DAY WIN RATE", v: me.length ? `${Math.round(mWins / me.length * 100)}%` : "—", c: mWins / me.length >= 0.5 ? "#4ade80" : "#f87171" },
                       { l: "WIN DAYS", v: mWins, c: "#4ade80" },
@@ -4129,7 +4497,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                       ] : []),
                     ].map(s => (
                       <div key={s.l} style={{ background: s.hi ? "#0d1f3c" : "#0f1729", border: `1px solid ${s.hi ? "#1e3a5f" : "#1e293b"}`, borderRadius: 4, padding: "10px 12px" }}>
-                        <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
                         <div style={{ fontSize: 16, color: s.c, fontWeight: s.hi ? 700 : 500 }}>{s.v}</div>
                       </div>
                     ))}
@@ -4158,7 +4526,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                         { l: "LARGEST LOSS", v: fmtPnl(a.largestLoss), c: "#f87171" },
                       ].map(s => (
                         <div key={s.l} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "10px 12px" }}>
-                          <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
+                          <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
                           <div style={{ fontSize: 16, color: s.c, fontWeight: 500 }}>{s.v}</div>
                         </div>
                       ))}
@@ -4190,7 +4558,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                                 <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                                   <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
                                   <span style={{ fontSize: 10, letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{s.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{s.trades - s.wins}</span></span>
-                                  <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : ""}${s.pnl.toFixed(2)}</span>
+                                  <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(2)}</span>
                                 </div>
                               </div>
                               <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
@@ -4222,7 +4590,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                               <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                                 <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
                                 <span style={{ fontSize: 10, letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{s.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{s.trades - s.wins}</span></span>
-                                <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : ""}${s.pnl.toFixed(2)}</span>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(2)}</span>
                               </div>
                             </div>
                             <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
@@ -4257,7 +4625,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                       {!isCollapsed(expandedMonth, "mistakes") && (
                         <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
                           {cleanDays > 0 && (
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: sorted.length ? 10 : 0, padding: "6px 10px", background: "#061f0f", border: "1px solid #166534", borderRadius: 4 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: sorted.length ? 10 : 0, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
                               <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Executed the Plan</span>
                               <span style={{ fontSize: 12, fontWeight: 600, color: "#4ade80" }}>{cleanDays} day{cleanDays !== 1 ? "s" : ""}</span>
                             </div>
@@ -4317,7 +4685,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                                   <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mood}</span>
                                   <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                                     <span style={{ fontSize: 9, color: "#94a3b8" }}>{s.sessions} session{s.sessions !== 1 ? "s" : ""} · {wr}% WR</span>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 70, textAlign: "right" }}>{avg >= 0 ? "+" : ""}${avg.toFixed(0)} avg</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 70, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
                                   </div>
                                 </div>
                                 <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
@@ -4499,7 +4867,7 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
     const durationSummary = Object.entries(periodDurBuckets).filter(([,d])=>d.t>0).map(([k,d])=>`${k}: ${d.t} trades ${Math.round(d.w/d.t*100)}% WR $${d.pnl.toFixed(0)}`).join(" | ") || "none";
     // Session breakdown across period
     const periodSess = {};
-    const _getSess = (sellTime) => { if (!sellTime) return "Unknown"; const p=sellTime.split(" ")[1]||sellTime; const [h,m]=(p.split(":")).map(Number); const mins=h*60+m; return mins<360?"Asian":mins<570?"London":mins<720?"NY Open":mins<900?"Afternoon Deadzone":mins<960?"Power Hour":"After Hours"; };
+    const _getSess = (sellTime) => { if (!sellTime) return "Unknown"; const spIdx=sellTime.indexOf(" "); const p=(spIdx!==-1?sellTime.slice(spIdx+1):sellTime).trim(); const cp=p.split(":"); let h,m; if(cp.length>=2){h=+cp[0];m=+cp[1];}else if(/^\d{6}$/.test(p)){h=+p.slice(0,2);m=+p.slice(2,4);}else if(/^\d{4}$/.test(p)){h=+p.slice(0,2);m=+p.slice(2,4);}else{return "Unknown";} const mins=h*60+m; return mins<360?"Asian":mins<570?"London":mins<720?"NY Open":mins<900?"Afternoon Deadzone":mins<960?"Power Hour":"After Hours"; };
     for (const t of allTrades) { const k=_getSess(t.sellTime); if(!periodSess[k])periodSess[k]={trades:0,pnl:0,wins:0}; periodSess[k].trades++; periodSess[k].pnl+=t.pnl; if(t.pnl>0)periodSess[k].wins++; }
     const periodSessionSummary = Object.entries(periodSess).filter(([,d])=>d.trades>0).sort((a,b)=>b[1].pnl-a[1].pnl).map(([k,d])=>`${k}: ${d.trades} trades ${Math.round(d.wins/d.trades*100)}% WR $${d.pnl.toFixed(2)}`).join(" | ") || "none";
     // Symbol breakdown across period
@@ -4770,9 +5138,12 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 20 }}>
-        <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: "#93c5fd", letterSpacing: "0.08em", fontWeight: 700 }}>🤖 AI RECAP</span>
-        <span style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.1em" }}>POWERED BY CLAUDE</span>
+      <div style={{ background: "linear-gradient(135deg,rgba(56,189,248,0.1),rgba(129,140,248,0.12),rgba(192,132,252,0.08))", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 6, padding: "14px 18px", marginBottom: 20, position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>🤖 AI RECAP</span>
+          <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.15em" }}>ANALYSE · REFLECT · IMPROVE</span>
+        </div>
       </div>
 
       {entries.length === 0 ? (
@@ -4786,7 +5157,11 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid #1e293b", flexShrink: 0 }}>
               {["weekly", "monthly"].map(m => (
                 <button key={m} onClick={() => { setRecapMode(m); setSelectedPeriod(null); setSummary(""); }}
-                  style={{ padding: "10px 0", fontFamily: "inherit", fontSize: 10, letterSpacing: "0.08em", cursor: "pointer", border: "none", background: recapMode === m ? "#1e3a5f" : "transparent", color: recapMode === m ? "#93c5fd" : "#94a3b8", textTransform: "uppercase", transition: "all .15s" }}>
+                  style={{ position: "relative", padding: "10px 0", fontFamily: "inherit", fontSize: 10, letterSpacing: "0.08em", cursor: "pointer", border: "none", overflow: "hidden",
+                    background: recapMode === m ? "#0a1628" : "transparent",
+                    color: recapMode === m ? "#818cf8" : "#334155",
+                    textTransform: "uppercase", transition: "all .15s" }}>
+                  {recapMode === m && <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />}
                   {m}
                 </button>
               ))}
@@ -4805,7 +5180,7 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
                 const isLoading = loading && selectedPeriod === p;
                 return (
                   <div key={p}
-                    style={{ padding: "12px 14px", borderBottom: "1px solid #0f1729", background: isSelected ? "#0a1628" : "transparent", borderLeft: isSelected ? "2px solid #3b82f6" : "2px solid transparent", transition: "all .15s" }}
+                    style={{ padding: "12px 14px", borderBottom: "1px solid #0f1729", background: isSelected ? "#0a1628" : "transparent", borderLeft: isSelected ? "2px solid transparent" : "2px solid transparent", borderImage: isSelected ? "linear-gradient(180deg,#38bdf8,#818cf8,#c084fc) 1" : "none", transition: "all .15s" }}
                     onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "#0d1526"; }}
                     onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? "#0a1628" : "transparent"; }}>
                     <div style={{ fontSize: 10, color: isSelected ? "#93c5fd" : "#94a3b8", marginBottom: 4, letterSpacing: "0.05em" }}>{periodLabel(p)}</div>
@@ -4817,7 +5192,10 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
                     <button
                       onClick={() => generateSummary(p)}
                       disabled={isLoading}
-                      style={{ width: "100%", padding: "7px 10px", borderRadius: 4, fontFamily: "inherit", fontSize: 10, letterSpacing: "0.06em", cursor: isLoading ? "not-allowed" : "pointer", transition: "all .15s", background: isLoading ? "transparent" : isGenerated ? "transparent" : "#1d4ed8", border: isLoading ? "1px solid #1e293b" : isGenerated ? "1px solid #1e293b" : "none", color: isLoading ? "#475569" : isGenerated ? "#94a3b8" : "white" }}>
+                      style={{ width: "100%", padding: "7px 10px", borderRadius: 4, fontFamily: "inherit", fontSize: 10, letterSpacing: "0.06em", cursor: isLoading ? "not-allowed" : "pointer", transition: "all .15s",
+                        background: isLoading ? "transparent" : isGenerated ? "transparent" : "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)",
+                        border: isLoading ? "1px solid #1e293b" : isGenerated ? "1px solid #1e293b" : "none",
+                        color: isLoading ? "#475569" : isGenerated ? "#94a3b8" : "#070d1a", fontWeight: isGenerated ? 400 : 700 }}>
                       {isLoading ? "ANALYSING..." : isGenerated ? "↺ REGENERATE" : `ANALYSE ${recapMode === "weekly" ? "WEEK" : "MONTH"} →`}
                     </button>
                   </div>
@@ -4839,7 +5217,7 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
                 {/* Period header */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid #1e293b" }}>
                   <div>
-                    <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 4 }}>{recapMode.toUpperCase()} RECAP</div>
+                    <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>{recapMode.toUpperCase()} RECAP</div>
                     <div style={{ fontSize: 15, color: "#e2e8f0", fontWeight: 600 }}>{periodLabel(selectedPeriod)}</div>
                   </div>
                   {(() => {
@@ -4849,9 +5227,9 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
                     const wr = es.length ? Math.round(wins / es.length * 100) : 0;
                     return (
                       <div style={{ display: "flex", gap: 16, textAlign: "right" }}>
-                        <div><div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em" }}>NET P&L</div><div style={{ fontSize: 16, fontWeight: 700, color: pnl >= 0 ? "#4ade80" : "#f87171" }}>{pnl >= 0 ? "+" : ""}${Math.abs(pnl).toLocaleString("en-US", { maximumFractionDigits: 0 })}</div></div>
-                        <div><div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em" }}>DAYS</div><div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>{es.length}</div></div>
-                        <div><div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em" }}>WIN RATE</div><div style={{ fontSize: 16, fontWeight: 700, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}%</div></div>
+                        <div><div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em" }}>NET P&L</div><div style={{ fontSize: 16, fontWeight: 700, color: pnl >= 0 ? "#4ade80" : "#f87171" }}>{pnl >= 0 ? "+" : ""}${Math.abs(pnl).toLocaleString("en-US", { maximumFractionDigits: 0 })}</div></div>
+                        <div><div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em" }}>DAYS</div><div style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>{es.length}</div></div>
+                        <div><div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em" }}>WIN RATE</div><div style={{ fontSize: 16, fontWeight: 700, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}%</div></div>
                       </div>
                     );
                   })()}
@@ -4928,7 +5306,7 @@ function MistakesDropdown({ selected, onChange }) {
         <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "#0f1729", border: "1px solid #1e3a5f", borderRadius: 6, zIndex: 50, overflow: "hidden", boxShadow: "0 8px 24px rgba(0,0,0,0.5)" }}>
           {selected.length > 0 && (
             <div style={{ padding: "6px 12px", borderBottom: "1px solid #0a0e1a", display: "flex", justifyContent: "flex-end" }}>
-              <button onClick={() => onChange([])} style={{ background: "transparent", border: "none", color: "#64748b", fontSize: 10, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em" }}>CLEAR ALL</button>
+              <button onClick={() => onChange([])} style={{ background: "transparent", border: "none", color: "#3b82f6", fontSize: 10, cursor: "pointer", fontFamily: "inherit", letterSpacing: "0.05em" }}>CLEAR ALL</button>
             </div>
           )}
           {/* No Mistakes option — first, styled green */}
@@ -5221,8 +5599,8 @@ function QuotesView() {
       {/* ── PAGE HEADER ── */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 20 }}>
         <div>
-          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, color:"#93c5fd", letterSpacing:"0.1em", lineHeight:1 }}>TRADER QUOTES</div>
-          <div style={{ fontSize:9, color:"#64748b", letterSpacing:"0.12em", marginTop:4 }}>{quotes.length} QUOTES SAVED</div>
+          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:22, letterSpacing:"0.1em", lineHeight:1, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>TRADER QUOTES</div>
+          <div style={{ fontSize:9, color:"#3b82f6", letterSpacing:"0.12em", marginTop:4 }}>{quotes.length} QUOTES SAVED</div>
         </div>
         <button onClick={openAdd} style={{ background:"#1d4ed8", color:"white", border:"none", padding:"9px 20px", borderRadius:4, fontFamily:"inherit", fontSize:11, cursor:"pointer", letterSpacing:"0.08em" }}>+ ADD QUOTE</button>
       </div>
@@ -5335,7 +5713,7 @@ function QuotesView() {
       {activeCat !== "All" && filtered.length > 0 && (
         <div style={{ marginBottom: 28 }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-            <div style={{ fontSize:9, color:"#64748b", letterSpacing:"0.14em" }}>
+            <div style={{ fontSize:9, color:"#3b82f6", letterSpacing:"0.14em" }}>
               {activeCat.toUpperCase()} · {pageStart + 1}–{Math.min(pageStart + 3, filtered.length)} OF {filtered.length}
             </div>
             {(canPrev || canNext) && (
@@ -5397,7 +5775,7 @@ function QuotesView() {
             </select>
           </div>
           <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
-            <button onClick={cancelForm} style={{ background:"transparent", border:"1px solid #1e293b", color:"#64748b", padding:"7px 16px", borderRadius:4, fontFamily:"inherit", fontSize:10, cursor:"pointer", letterSpacing:"0.06em" }}>CANCEL</button>
+            <button onClick={cancelForm} style={{ background:"transparent", border:"1px solid #1e293b", color:"#3b82f6", padding:"7px 16px", borderRadius:4, fontFamily:"inherit", fontSize:10, cursor:"pointer", letterSpacing:"0.06em" }}>CANCEL</button>
             <button onClick={submitForm} style={{ background:"#1d4ed8", color:"white", border:"none", padding:"7px 18px", borderRadius:4, fontFamily:"inherit", fontSize:10, cursor:"pointer", letterSpacing:"0.06em" }}>{editId?"UPDATE":"SAVE QUOTE"}</button>
           </div>
         </div>
@@ -5419,7 +5797,7 @@ function QuotesView() {
                 </div>
                 <div style={{ display:"flex", alignItems:"center", gap:7 }}>
                   <div style={{ width:12, height:1, background:"#1e293b" }}/>
-                  <span style={{ fontSize:9, color:"#64748b", letterSpacing:"0.1em", fontFamily:"'DM Mono',monospace", fontStyle:"normal" }}>{q.author.toUpperCase()}</span>
+                  <span style={{ fontSize:9, color:"#3b82f6", letterSpacing:"0.1em", fontFamily:"'DM Mono',monospace", fontStyle:"normal" }}>{q.author.toUpperCase()}</span>
                 </div>
                 <div style={{ position:"absolute", top:8, right:8, display:"flex", gap:3 }}>
                   <button onClick={()=>openEdit(q)} style={{ background:"transparent",border:"none",color:"#0f1e30",fontSize:10,cursor:"pointer",padding:"1px 3px",transition:"color .15s",fontFamily:"inherit" }}
@@ -5432,7 +5810,7 @@ function QuotesView() {
           </div>
           {filtered.length > 12 && (
             <div style={{ textAlign:"center", marginTop:12 }}>
-              <button onClick={()=>setShowAll(p=>!p)} style={{ background:"transparent", border:"1px solid #0f1729", color:"#64748b", padding:"7px 20px", borderRadius:4, fontFamily:"inherit", fontSize:10, cursor:"pointer", letterSpacing:"0.08em", transition:"all .15s" }}
+              <button onClick={()=>setShowAll(p=>!p)} style={{ background:"transparent", border:"1px solid #0f1729", color:"#3b82f6", padding:"7px 20px", borderRadius:4, fontFamily:"inherit", fontSize:10, cursor:"pointer", letterSpacing:"0.08em", transition:"all .15s" }}
                 onMouseEnter={e=>{e.currentTarget.style.borderColor="#1e3a5f";e.currentTarget.style.color="#94a3b8";}}
                 onMouseLeave={e=>{e.currentTarget.style.borderColor="#0f1729";e.currentTarget.style.color="#334155";}}>
                 {showAll ? "SHOW LESS ▲" : `SHOW ALL ${filtered.length} ▼`}
@@ -5541,7 +5919,7 @@ function CertificatesTab({ certs, setCerts, certLightbox, setCertLightbox }) {
             <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: GOLD, letterSpacing: "0.1em", lineHeight: 1 }}>
               🎖 CERTIFICATES & ACHIEVEMENTS
             </div>
-            <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.14em", marginTop: 4 }}>
+            <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.14em", marginTop: 4 }}>
               {certs.length === 0 ? "PASTE · DRAG & DROP · OR UPLOAD YOUR PROP FIRM CERTIFICATES" : `${certs.length} CERTIFICATE${certs.length !== 1 ? "S" : ""} · PASTE, DRAG, OR CLICK UPLOAD TO ADD MORE`}
             </div>
           </div>
@@ -5585,7 +5963,7 @@ function CertificatesTab({ certs, setCerts, certLightbox, setCertLightbox }) {
       {/* ── ACTION BUTTONS ── */}
       <div style={{ display: "flex", gap: 8, marginBottom: certs.length ? 28 : 0 }}>
         <button className="cert-upload-btn" onClick={() => fileInputRef.current?.click()}
-          style={{ background: "transparent", border: "1px solid #1e293b", color: "#64748b", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.1em", transition: "all .18s" }}>
+          style={{ background: "transparent", border: "1px solid #1e293b", color: "#3b82f6", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.1em", transition: "all .18s" }}>
           ↑ UPLOAD FILE
         </button>
         <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileInput} style={{ display: "none" }} />
@@ -5770,7 +6148,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
 
               {/* Header row: count + active/all toggle */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.12em" }}>
+                <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.12em" }}>
                   {activeAccounts.length} ACTIVE{archivedAccounts.length > 0 ? ` · ${archivedAccounts.length} ARCHIVED` : ""} · CLICK ANY CARD TO OPEN
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -5855,7 +6233,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
 
                       {/* P&L hero */}
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.12em", marginBottom: 4, textTransform: "uppercase" }}>{isArchJ ? "Final P&L" : isEvalJ ? "Eval Net P&L" : "Funded Net P&L"}</div>
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.12em", marginBottom: 4, textTransform: "uppercase" }}>{isArchJ ? "Final P&L" : isEvalJ ? "Eval Net P&L" : "Funded Net P&L"}</div>
                         <div style={{ fontSize: 28, fontWeight: 700, color: isArchJ ? "#64748b" : pnlColor, letterSpacing: "-0.01em", lineHeight: 1 }}>
                           {netPnlJ >= 0 ? "+" : ""}{fmt$(netPnlJ)}
                         </div>
@@ -5868,7 +6246,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                       {!isArchJ && (
                         <div>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                            <span style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>DRAWDOWN USED</span>
+                            <span style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em" }}>DRAWDOWN USED</span>
                             <span style={{ fontSize: 13, fontWeight: 600, color: ddColor, fontFamily: "'DM Mono',monospace" }}>{ddPct.toFixed(0)}%</span>
                           </div>
                           <PctBar pct={ddPct} color="#3b82f6" warn={50} danger={75} />
@@ -5892,7 +6270,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
             {archivedAccounts.length > 0 && !showArchived && (
               <div style={{ marginTop: 8 }}>
                 <button onClick={() => setShowArchived(true)}
-                  style={{ width: "100%", background: "transparent", border: "1px dashed #1e293b", borderRadius: 6, padding: "10px 16px", color: "#475569", fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.12em", textTransform: "uppercase", transition: "all .15s" }}
+                  style={{ width: "100%", background: "transparent", border: "1px dashed #1e293b", borderRadius: 6, padding: "10px 16px", color: "#3b82f6", fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.12em", textTransform: "uppercase", transition: "all .15s" }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = "#f87171"; e.currentTarget.style.color = "#f87171"; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#475569"; }}>
                   ✕ View Graveyard · {archivedAccounts.length} archived account{archivedAccounts.length !== 1 ? "s" : ""}
@@ -5959,7 +6337,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                       { label: "NOTE (optional)", key: "note", type: "text", placeholder: "e.g. 1st payout" },
                     ].map(f => (
                       <div key={f.key}>
-                        <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 5, textTransform: "uppercase" }}>{f.label}</div>
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 5, textTransform: "uppercase" }}>{f.label}</div>
                         <input type={f.type} value={payoutForm[f.key]} placeholder={f.placeholder}
                           onChange={e => setPayoutForm(p => ({ ...p, [f.key]: e.target.value }))}
                           style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "#060810", border: "1px solid #1e293b", borderRadius: 5, color: "#e2e8f0", fontFamily: "inherit", fontSize: 12 }} />
@@ -5982,7 +6360,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                       Account moves to the Graveyard. It stays in your records but disappears from the Active dashboard. Capture why it ended.
                     </div>
                     <div>
-                      <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 6, textTransform: "uppercase" }}>BREACH TYPE</div>
+                      <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 6, textTransform: "uppercase" }}>BREACH TYPE</div>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                         {[{id:"maxLoss",label:"Max Loss Hit"},{id:"dailyLoss",label:"Daily Loss"},{id:"slow_bleed",label:"Slow Bleed"},{id:"manual",label:"Manual Close"}].map(bt => (
                           <button key={bt.id} onClick={() => setArchiveForm(f => ({...f, breachType: bt.id}))}
@@ -5993,14 +6371,14 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                       </div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 5, textTransform: "uppercase" }}>EVAL / CHALLENGE COST ($)</div>
+                      <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 5, textTransform: "uppercase" }}>EVAL / CHALLENGE COST ($)</div>
                       <input type="number" value={archiveForm.evalCost} placeholder="e.g. 150"
                         onChange={e => setArchiveForm(f => ({...f, evalCost: e.target.value}))}
                         style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "#060810", border: "1px solid #1e293b", borderRadius: 5, color: "#e2e8f0", fontFamily: "inherit", fontSize: 12 }} />
                       <div style={{ fontSize: 9, color: "#475569", marginTop: 4 }}>Shows up in your cumulative business expenses.</div>
                     </div>
                     <div>
-                      <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 5, textTransform: "uppercase" }}>POST-MORTEM (what happened?)</div>
+                      <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 5, textTransform: "uppercase" }}>POST-MORTEM (what happened?)</div>
                       <textarea value={archiveForm.postMortem} rows={4} placeholder="e.g. Averaged down on a counter-trend trade after NFP. Ignored the daily loss limit."
                         onChange={e => setArchiveForm(f => ({...f, postMortem: e.target.value}))}
                         style={{ width: "100%", boxSizing: "border-box", padding: "9px 12px", background: "#060810", border: "1px solid #1e293b", borderRadius: 5, color: "#e2e8f0", fontFamily: "inherit", fontSize: 12, resize: "vertical" }} />
@@ -6063,7 +6441,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                         { l: "CONSISTENCY", v: `${ps.evalStats.consistencyPct.toFixed(0)}%`, c: ps.evalStats.consistencyPct > cfg.eval.consistencyRule ? "#f87171" : "#4ade80" },
                       ].map(s => (
                         <div key={s.l} style={{ background: "#060b18", borderRadius: 4, padding: "7px 10px" }}>
-                          <div style={{ fontSize: 8, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 3 }}>{s.l}</div>
+                          <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 3 }}>{s.l}</div>
                           <div style={{ fontSize: 13, color: s.c }}>{s.v}</div>
                         </div>
                       ))}
@@ -6085,7 +6463,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                         { l: "MIN/DAY", v: fmt$(cfg.funded.minDailyProfit), c: "#94a3b8" },
                       ].map(s => (
                         <div key={s.l} style={{ background: "#060b18", borderRadius: 4, padding: "7px 10px" }}>
-                          <div style={{ fontSize: 8, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 3 }}>{s.l}</div>
+                          <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 3 }}>{s.l}</div>
                           <div style={{ fontSize: 13, color: s.c }}>{s.v}</div>
                         </div>
                       ))}
@@ -6118,7 +6496,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                       { l: "ACCOUNT SIZE", v: fmt$(cfg.accountSize), c: "#94a3b8" },
                     ].map(s => (
                       <div key={s.l} style={{ background: s.hi ? "#0f1a2e" : "#060b18", border: `1px solid ${s.hi ? "#1e3a5f" : "#0f1729"}`, borderRadius: 4, padding: "10px 12px" }}>
-                        <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 4 }}>{s.l}</div>
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 4 }}>{s.l}</div>
                         <div style={{ fontSize: 16, color: s.c, fontWeight: s.hi ? 600 : 400 }}>{s.v}</div>
                       </div>
                     ))}
@@ -6226,7 +6604,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                     </div>
                     {totalEvalCosts > 0 && (
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.12em", marginBottom: 4 }}>EVAL COSTS (EXPENSES)</div>
+                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.12em", marginBottom: 4 }}>EVAL COSTS (EXPENSES)</div>
                         <div style={{ fontSize: 18, color: "#f87171", fontFamily: "'DM Mono',monospace" }}>-{fmt$(totalEvalCosts)}</div>
                         <div style={{ fontSize: 9, color: "#475569", marginTop: 3 }}>Net: <span style={{ color: totalWithdrawnAll - totalEvalCosts >= 0 ? "#4ade80" : "#f87171" }}>{fmt$(totalWithdrawnAll - totalEvalCosts)}</span></div>
                       </div>
@@ -6246,7 +6624,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                     { l: "TRADING DAYS", v: totalDays, c: "#e2e8f0" },
                   ].map(s => (
                     <div key={s.l} style={{ background: "#060b18", borderRadius: 5, padding: "10px 12px", border: "1px solid #0f1729" }}>
-                      <div style={{ fontSize: 8, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
+                      <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
                       <div style={{ fontSize: s.big ? 18 : 14, color: s.c, fontWeight: s.big ? 700 : 500, fontFamily: "'DM Mono',monospace" }}>{s.v}</div>
                     </div>
                   ))}
@@ -6258,7 +6636,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
                     { l: "TOTAL FEES PAID", v: totalFees > 0 ? `-${fmt$(totalFees)}` : "—", c: "#f87171" },
                   ].map(s => (
                     <div key={s.l} style={{ background: "#060b18", borderRadius: 5, padding: "8px 10px", border: "1px solid #0f1729" }}>
-                      <div style={{ fontSize: 8, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 3 }}>{s.l}</div>
+                      <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 3 }}>{s.l}</div>
                       <div style={{ fontSize: 12, color: s.c, fontFamily: "'DM Mono',monospace" }}>{s.v}</div>
                     </div>
                   ))}
@@ -6308,7 +6686,7 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
               {/* Per-account bars */}
               {accountStats.length > 1 && (
                 <div style={{ background: "#070d1a", border: "1px solid #1e293b", borderRadius: 6, padding: "14px 16px" }}>
-                  <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 10 }}>P&L BY ACCOUNT</div>
+                  <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 10 }}>P&L BY ACCOUNT</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {accountStats.map(({ journal: j, allTrades, winRate, netPnl, avgWin, avgLoss, jEntries }) => {
                       const maxAbsPnl = Math.max(...accountStats.map(a => Math.abs(a.netPnl)), 1);
@@ -6439,7 +6817,7 @@ function RiskCalcPanel() {
 
         const Stat = ({ label, value, color = "#e2e8f0", sub, big }) => (
           <div style={{ background: "#060b18", border: "1px solid #0f1e30", borderRadius: 6, padding: big ? "14px 16px" : "10px 14px" }}>
-            <div style={{ fontSize: 8, color: "#94a3b8", letterSpacing: "0.12em", marginBottom: big ? 6 : 4, textTransform: "uppercase" }}>{label}</div>
+            <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.12em", marginBottom: big ? 6 : 4, textTransform: "uppercase" }}>{label}</div>
             <div style={{ fontSize: big ? 22 : 15, color, fontWeight: big ? 700 : 500, fontFamily: "'DM Mono',monospace", letterSpacing: "0.02em" }}>{value}</div>
             {sub && <div style={{ fontSize: 9, color: "#64748b", marginTop: 4 }}>{sub}</div>}
           </div>
@@ -6447,7 +6825,7 @@ function RiskCalcPanel() {
 
         const InputRow = ({ label, value, onChange, placeholder, prefix, suffix, type = "number", min }) => (
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <label style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase" }}>{label}</label>
+            <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase" }}>{label}</label>
             <div style={{ display: "flex", alignItems: "center", background: "#060b18", border: "1px solid #1e293b", borderRadius: 4, overflow: "hidden" }}>
               {prefix && <span style={{ padding: "0 10px", fontSize: 11, color: "#64748b", borderRight: "1px solid #1e293b", lineHeight: "34px" }}>{prefix}</span>}
               <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} min={min}
@@ -6511,7 +6889,7 @@ function RiskCalcPanel() {
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 {/* Instrument selector */}
                 <div>
-                  <label style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>INSTRUMENT</label>
+                  <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>INSTRUMENT</label>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {FUTURES_SPECS.map(s => (
                       <button key={s.sym} onClick={() => setTicker(s.sym)}
@@ -6527,7 +6905,7 @@ function RiskCalcPanel() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <InputRow label="Stop (ticks)" value={stopTicks} onChange={setStopTicks} placeholder="4" suffix="ticks" />
                   <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <label style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase" }}>Stop (points)</label>
+                    <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase" }}>Stop (points)</label>
                     <div style={{ background: "#060b18", border: "1px solid #0f1729", borderRadius: 4, padding: "7px 12px", fontSize: 13, color: "#64748b", fontFamily: "'DM Mono',monospace" }}>
                       {ticks > 0 ? `${(ticks * spec.tick).toFixed(2)} pts` : "—"}
                     </div>
@@ -6543,7 +6921,7 @@ function RiskCalcPanel() {
 
                 {contracts > 0 && (
                   <div style={{ background: "#070d1a", border: "1px solid #0f1729", borderRadius: 6, padding: "14px 16px" }}>
-                    <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.12em", marginBottom: 12 }}>REWARD TARGETS · {contracts} CONTRACT{contracts !== 1 ? "S" : ""}</div>
+                    <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.12em", marginBottom: 12 }}>REWARD TARGETS · {contracts} CONTRACT{contracts !== 1 ? "S" : ""}</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
                       <Stat label="1R Target" value={`$${actualRisk.toLocaleString()}`} color="#fbbf24" sub={`${(ticks).toFixed(0)} ticks`} />
                       <Stat label="2R Target" value={`$${reward2x.toLocaleString()}`} color="#4ade80" sub={`${(ticks*2).toFixed(0)} ticks`} />
@@ -6554,7 +6932,7 @@ function RiskCalcPanel() {
 
                 {/* Quick presets */}
                 <div style={{ background: "#070d1a", border: "1px solid #0f1729", borderRadius: 6, padding: "12px 14px" }}>
-                  <div style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em", marginBottom: 2 }}>COMMON STOP SIZES · {spec.sym}</div>
+                  <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 2 }}>COMMON STOP SIZES · {spec.sym}</div>
                   <div style={{ fontSize: 9, color: "#475569", marginBottom: 10, lineHeight: 1.5 }}>Click any preset to load it. Each button shows: <strong style={{color:"#64748b"}}>ticks · $ per contract · max contracts</strong> at your risk settings.</div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {[2, 4, 6, 8, 10, 12, 16, 20].map(t => {
@@ -6589,7 +6967,7 @@ function RiskCalcPanel() {
 
                 {shares > 0 && (
                   <div style={{ background: "#070d1a", border: "1px solid #0f1729", borderRadius: 6, padding: "14px 16px" }}>
-                    <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.12em", marginBottom: 12 }}>REWARD TARGETS · {shares.toLocaleString()} SHARES</div>
+                    <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.12em", marginBottom: 12 }}>REWARD TARGETS · {shares.toLocaleString()} SHARES</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
                       {[
                         { r: "1R", mult: 1, c: "#fbbf24" },
@@ -6628,7 +7006,7 @@ function RiskCalcPanel() {
           <div style={{ background: "rgba(7,13,26,0.8)", border: "1px solid #1e293b", borderRadius: 8, overflow: "hidden" }}>
             <div style={{ display: "grid", gridTemplateColumns: "72px 1fr 80px 90px 90px 90px", padding: "8px 14px", background: "#060810", borderBottom: "1px solid #1e293b" }}>
               {["SYMBOL","NAME","TICK","TICK $","PT $","MULTIPLIER"].map(h => (
-                <div key={h} style={{ fontSize: 8, color: "#64748b", letterSpacing: "0.1em" }}>{h}</div>
+                <div key={h} style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em" }}>{h}</div>
               ))}
             </div>
             {[
@@ -6655,7 +7033,7 @@ function RiskCalcPanel() {
           </div>
           {/* Verification examples */}
           <div style={{ background: "rgba(7,13,26,0.8)", border: "1px solid #1e293b", borderRadius: 8, padding: "16px 18px" }}>
-            <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.14em", marginBottom: 10, textTransform: "uppercase" }}>🔍 P&L VERIFICATION EXAMPLES</div>
+            <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.14em", marginBottom: 10, textTransform: "uppercase" }}>🔍 P&L VERIFICATION EXAMPLES</div>
             {[
               { sym:"ES",  ex:"Long 2 @ 5280.00 → 5282.50  =  (2.50 pts × 2 cts × $50)  = +$250.00" },
               { sym:"MES", ex:"Long 5 @ 5280.00 → 5281.00  =  (1.00 pt  × 5 cts × $5)   = +$25.00" },
@@ -6782,7 +7160,7 @@ function ReferenceView() {
   };
 
   const SECTIONS = [
-    { id: "sessions", label: "SESSION MAP" },
+    { id: "sessions", label: "🗺 SESSION MAP" },
     { id: "risk",    label: "⚡ RISK CALC" },
 
     { id: "links",   label: "🔗 RESOURCE LINKS" },
@@ -6853,21 +7231,36 @@ function ReferenceView() {
 
       {/* ── PAGE HEADER ── */}
       <div style={{ marginBottom:24, animation:"refFadeIn .35s ease" }}>
-
-        <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:28, color:"#e2e8f0", letterSpacing:"0.1em", lineHeight:1 }}>
-          TRADING <span style={{ color:"#00ff88" }}>SESSIONS</span>
-        </div>
-        <div style={{ fontSize:10, color:"#64748b", letterSpacing:"0.1em", marginTop:6 }}>EASTERN TIME ZONE — NORTH AMERICAN TRADER</div>
+        <div style={{ height:2, background:"linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", borderRadius:1, marginBottom:14 }} />
+        <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:32, letterSpacing:"0.12em", background:"linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text", lineHeight:1 }}>✦ TRADING SESSIONS</div>
+        <div style={{ fontFamily:"'DM Mono',monospace", fontSize:8, color:"#334155", letterSpacing:"0.25em", marginTop:4 }}>SESSIONS · REMINDERS · RISK · LINKS · ALBUM · QUOTES</div>
       </div>
 
       {/* ── SECTION TABS ── */}
       <div style={{ display:"flex", gap:6, marginBottom:20, flexWrap:"wrap" }}>
-        {SECTIONS.map(s => (
-          <button key={s.id} className="ref-sec-btn" onClick={() => setActiveSection(s.id)}
-            style={{ padding:"8px 18px", borderRadius:4, fontFamily:"inherit", fontSize:11, cursor:"pointer", letterSpacing:"0.06em", transition:"all .15s", background: activeSection===s.id?"#0a1628":"transparent", border:`1px solid ${activeSection===s.id?"#3b82f6":"#1e293b"}`, color: activeSection===s.id?"#93c5fd":"#94a3b8" }}>
-            {s.label}
-          </button>
-        ))}
+        {SECTIONS.map(s => {
+          const _fc = [...s.label][0];
+          const emoji = _fc.codePointAt(0) > 127 ? _fc : null;
+          const text  = emoji ? s.label.slice(_fc.length).trim() : s.label;
+          const isActive = activeSection === s.id;
+          return isActive ? (
+            <button key={s.id} className="ref-sec-btn" onClick={() => setActiveSection(s.id)}
+              style={{ position:"relative", padding:"9px 20px", borderRadius:6, fontFamily:"inherit", fontSize:13, cursor:"pointer", letterSpacing:"0.06em", transition:"all .15s", display:"flex", alignItems:"center", gap:6, overflow:"hidden",
+                background:"rgba(10,18,32,0.95)", border:"1px solid #1e3a5f", color:"#e2e8f0" }}>
+              <span style={{ position:"absolute", bottom:0, left:0, right:0, height:2, background:"linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)", borderRadius:"0 0 5px 5px" }} />
+              {emoji && <span style={{ fontSize:15, filter:"saturate(4) brightness(1.4)" }}>{emoji}</span>}
+              {text}
+            </button>
+          ) : (
+            <span key={s.id} style={{ display:"inline-block", padding:1, borderRadius:7, background:"linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))" }}>
+              <button className="ref-sec-btn" onClick={() => setActiveSection(s.id)}
+                style={{ display:"flex", alignItems:"center", gap:6, background:"#070d1a", color:"#64748b", border:"none", padding:"8px 19px", borderRadius:6, fontFamily:"inherit", fontSize:13, cursor:"pointer", letterSpacing:"0.06em", transition:"all .15s", whiteSpace:"nowrap" }}>
+                {emoji && <span style={{ fontSize:15, filter:"saturate(4) brightness(1.4)" }}>{emoji}</span>}
+                {text}
+              </button>
+            </span>
+          );
+        })}
       </div>
 
       {/* ════════════════════════════════════════════════
@@ -6876,15 +7269,29 @@ function ReferenceView() {
       {activeSection === "sessions" && (
         <div style={{ animation:"refFadeIn .3s ease" }}>
           <div style={{ display:"flex", gap:6, marginBottom:18 }}>
-            {[["map","🗺 SESSION MAP"],["reminders","📌 REMINDERS"]].map(([id,label]) => (
-              <button key={id} onClick={() => setSessInnerTab(id)}
-                style={{ padding:"7px 16px", borderRadius:4, fontFamily:"inherit", fontSize:11, cursor:"pointer", letterSpacing:"0.06em", transition:"all .15s",
-                  background: sessInnerTab===id ? "#0a1628" : "transparent",
-                  border: `1px solid ${sessInnerTab===id ? "#3b82f6" : "#1e293b"}`,
-                  color: sessInnerTab===id ? "#93c5fd" : "#94a3b8" }}>
-                {label}
-              </button>
-            ))}
+            {[
+              ["map",       "🗺", "SESSION MAP", "hue-rotate(180deg) saturate(4) brightness(1.5)"],
+              ["reminders", "📌", "REMINDERS",   "hue-rotate(340deg) saturate(5) brightness(1.4)"],
+            ].map(([id, emoji, text, emojiFilter]) => {
+              const isSel = sessInnerTab === id;
+              return isSel ? (
+                <button key={id} onClick={() => setSessInnerTab(id)}
+                  style={{ position:"relative", padding:"5px 13px", borderRadius:4, fontFamily:"inherit", fontSize:10, cursor:"pointer", letterSpacing:"0.07em", transition:"all .15s", display:"flex", alignItems:"center", gap:5, overflow:"hidden",
+                    background:"rgba(10,18,32,0.95)", border:"1px solid #1e3a5f", color:"#93c5fd" }}>
+                  <span style={{ position:"absolute", bottom:0, left:0, right:0, height:1, background:"linear-gradient(90deg,#38bdf8,#c084fc)", borderRadius:"0 0 3px 3px" }} />
+                  <span style={{ fontSize:12, filter: emojiFilter }}>{emoji}</span>
+                  {text}
+                </button>
+              ) : (
+                <span key={id} style={{ display:"inline-block", padding:1, borderRadius:5, background:"linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))" }}>
+                  <button onClick={() => setSessInnerTab(id)}
+                    style={{ display:"flex", alignItems:"center", gap:5, background:"#070d1a", color:"#64748b", border:"none", padding:"4px 12px", borderRadius:3, fontFamily:"inherit", fontSize:10, cursor:"pointer", letterSpacing:"0.07em", whiteSpace:"nowrap" }}>
+                    <span style={{ fontSize:12, filter: emojiFilter }}>{emoji}</span>
+                    {text}
+                  </button>
+                </span>
+              );
+            })}
           </div>
 
           {sessInnerTab === "map" && <>
@@ -6893,7 +7300,7 @@ function ReferenceView() {
           <div style={{ background:"#060b18", border:"1px solid #0f1e30", borderRadius:8, padding:"22px 24px 20px", marginBottom:20, position:"relative", overflow:"hidden" }}>
             {/* Top accent bar */}
             <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:"linear-gradient(90deg, #00aaff, #00ff88, #ff8c00)" }}/>
-            <div style={{ fontSize:9, color:"#64748b", letterSpacing:"0.15em", marginBottom:18 }}>⏱ 24-HOUR SESSION MAP (EST) — 6PM TO 5PM NEXT DAY</div>
+            <div style={{ fontSize:9, color:"#3b82f6", letterSpacing:"0.15em", marginBottom:18 }}>⏱ 24-HOUR SESSION MAP (EST) — 6PM TO 5PM NEXT DAY</div>
 
             {/* Tick ruler */}
             <div style={{ position:"relative", height:26, marginBottom:4 }}>
@@ -6975,7 +7382,7 @@ function ReferenceView() {
           {/* NY teaser card */}
           {/* NEW YORK SESSION — inline below session map */}
           <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize:9, color:"#64748b", letterSpacing:"0.15em", marginBottom:12 }}>🗽 NEW YORK SESSION WINDOWS</div>
+            <div style={{ fontSize:9, color:"#3b82f6", letterSpacing:"0.15em", marginBottom:12 }}>🗽 NEW YORK SESSION WINDOWS</div>
 
           <div style={{ background:"#060b18", border:"1px solid rgba(0,255,136,0.18)", borderRadius:8, padding:"22px 24px", marginBottom:20, position:"relative", overflow:"hidden" }}>
             <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:"#00ff88", opacity:0.5 }}/>
@@ -7007,11 +7414,11 @@ function ReferenceView() {
 
           {/* NEWS EVENTS — merged into Session Map */}
           <div style={{ marginTop: 20 }}>
-            <div style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.15em", marginBottom: 12 }}>📅 HIGH VOLUME NEWS EVENTS</div>
+            <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.15em", marginBottom: 12 }}>📅 HIGH VOLUME NEWS EVENTS</div>
 
           <div style={{ background:"#060b18", border:"1px solid #0f1e30", borderRadius:8, padding:"22px 24px", position:"relative", overflow:"hidden" }}>
             <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:"linear-gradient(90deg,#ff8c00,#ffd700)" }}/>
-            <div style={{ fontSize:10, color:"#64748b", letterSpacing:"0.15em", marginBottom:18 }}>📅 HIGH VOLUME NEWS EVENTS — WATCH THESE</div>
+            <div style={{ fontSize:10, color:"#3b82f6", letterSpacing:"0.15em", marginBottom:18 }}>📅 HIGH VOLUME NEWS EVENTS — WATCH THESE</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
               {EVENTS.map(ev => (
                 <div key={ev.name} className="ref-card" style={{ display:"flex", alignItems:"center", gap:12, background:"rgba(0,0,0,0.25)", border:"1px solid #0f1e30", borderRadius:8, padding:"12px 14px" }}>
@@ -7056,7 +7463,7 @@ function ReferenceView() {
 
           {/* Quick reference grid */}
           <div style={{ background:"#060b18", border:"1px solid #0f1e30", borderRadius:8, padding:"18px 22px" }}>
-            <div style={{ fontSize:9, color:"#64748b", letterSpacing:"0.15em", marginBottom:14 }}>QUICK REFERENCE</div>
+            <div style={{ fontSize:9, color:"#3b82f6", letterSpacing:"0.15em", marginBottom:14 }}>QUICK REFERENCE</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
               {[
                 { label:"BEST SESSION",      value:"NY Open 9:30 AM–12 PM",   c:"#00ff88" },
@@ -7069,7 +7476,7 @@ function ReferenceView() {
                 { label:"ASIA SESSION",      value:"6:00 PM – 3:00 AM EST",   c:"#00aaff" },
               ].map(item => (
                 <div key={item.label} style={{ background:"rgba(0,0,0,0.25)", border:"1px solid #0a1220", borderRadius:6, padding:"10px 14px" }}>
-                  <div style={{ fontSize:8, color:"#64748b", letterSpacing:"0.12em", marginBottom:4 }}>{item.label}</div>
+                  <div style={{ fontSize:8, color:"#3b82f6", letterSpacing:"0.12em", marginBottom:4 }}>{item.label}</div>
                   <div style={{ fontFamily:"'Share Tech Mono',monospace", fontSize:12, color:item.c }}>{item.value}</div>
                 </div>
               ))}
@@ -7078,7 +7485,7 @@ function ReferenceView() {
 
           {/* Pre-session checklist */}
           <div style={{ background:"#060b18", border:"1px solid #0f1e30", borderRadius:8, padding:"18px 22px" }}>
-            <div style={{ fontSize:9, color:"#64748b", letterSpacing:"0.15em", marginBottom:14 }}>✅ PRE-SESSION CHECKLIST</div>
+            <div style={{ fontSize:9, color:"#3b82f6", letterSpacing:"0.15em", marginBottom:14 }}>✅ PRE-SESSION CHECKLIST</div>
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
               {[
                 "Check economic calendar for 8:30 AM news before market open",
@@ -7126,7 +7533,7 @@ function ReferenceView() {
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>NAME *</label>
+                <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em" }}>NAME *</label>
                 <input
                   type="text" placeholder="e.g. TradingView, Investopedia..."
                   value={linkForm.name}
@@ -7135,7 +7542,7 @@ function ReferenceView() {
                 />
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>CATEGORY</label>
+                <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em" }}>CATEGORY</label>
                 <select value={linkForm.cat} onChange={e => setLinkForm(p => ({ ...p, cat: e.target.value }))}
                   style={{ fontSize: 12, padding: "7px 10px" }}>
                   {LINK_CATS.map(c => <option key={c} value={c}>{c}</option>)}
@@ -7143,7 +7550,7 @@ function ReferenceView() {
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
-              <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>URL *</label>
+              <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em" }}>URL *</label>
               <input
                 type="text" placeholder="https://..."
                 value={linkForm.url}
@@ -7152,7 +7559,7 @@ function ReferenceView() {
               />
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
-              <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>SHORT DESCRIPTION <span style={{ color: "#475569" }}>(optional)</span></label>
+              <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em" }}>SHORT DESCRIPTION <span style={{ color: "#475569" }}>(optional)</span></label>
               <input
                 type="text" placeholder="What is this for?"
                 value={linkForm.desc}
@@ -7249,13 +7656,13 @@ function ReferenceView() {
                             ) : (
                               <>
                                 <button onClick={() => handleEditLink(link)}
-                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 3, fontFamily: "inherit", cursor: "pointer", background: "transparent", border: "1px solid #1e293b", color: "#64748b", transition: "all .15s", letterSpacing: "0.04em" }}
+                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 3, fontFamily: "inherit", cursor: "pointer", background: "transparent", border: "1px solid #1e293b", color: "#3b82f6", transition: "all .15s", letterSpacing: "0.04em" }}
                                   onMouseEnter={e => { e.target.style.borderColor = "#3b82f6"; e.target.style.color = "#93c5fd"; }}
                                   onMouseLeave={e => { e.target.style.borderColor = "#1e293b"; e.target.style.color = "#64748b"; }}>
                                   EDIT
                                 </button>
                                 <button onClick={() => setConfirmDeleteLink(link.id)}
-                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 3, fontFamily: "inherit", cursor: "pointer", background: "transparent", border: "1px solid #1e293b", color: "#64748b", transition: "all .15s", letterSpacing: "0.04em" }}
+                                  style={{ fontSize: 10, padding: "3px 10px", borderRadius: 3, fontFamily: "inherit", cursor: "pointer", background: "transparent", border: "1px solid #1e293b", color: "#3b82f6", transition: "all .15s", letterSpacing: "0.04em" }}
                                   onMouseEnter={e => { e.target.style.borderColor = "#7f1d1d"; e.target.style.color = "#f87171"; }}
                                   onMouseLeave={e => { e.target.style.borderColor = "#1e293b"; e.target.style.color = "#64748b"; }}>
                                   ✕
@@ -7308,18 +7715,18 @@ function ReferenceView() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", maxWidth: 560 }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>TITLE</label>
+                      <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em" }}>TITLE</label>
                       <input type="text" placeholder="e.g. MES breakout setup" value={albumForm.title} onChange={e => setAlbumForm(p => ({ ...p, title: e.target.value }))}
                         style={{ fontSize: 12, padding: "7px 10px" }} autoFocus />
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>CAPTION / NOTE</label>
+                      <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em" }}>CAPTION / NOTE</label>
                       <input type="text" placeholder="What does this chart show?" value={albumForm.caption} onChange={e => setAlbumForm(p => ({ ...p, caption: e.target.value }))}
                         style={{ fontSize: 12, padding: "7px 10px" }} />
                     </div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.1em" }}>TYPE</label>
+                    <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em" }}>TYPE</label>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       {ALBUM_CATS.map(cat => (
                         <button key={cat.id} type="button" onClick={() => setAlbumForm(p => ({ ...p, type: cat.id }))}
@@ -7442,7 +7849,7 @@ function ReferenceView() {
                         <div style={{ fontSize: 9, color: "#334155", marginBottom: 8 }}>{new Date(img.addedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
                         <div style={{ display: "flex", gap: 6 }}>
                           <button onClick={() => { setAlbumEditing(img.id); setAlbumForm({ title: img.title, caption: img.caption || "", type: img.type || "chart" }); }}
-                            style={{ flex: 1, background: "transparent", border: "1px solid #1e293b", color: "#64748b", padding: "4px 0", borderRadius: 3, fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.04em", transition: "all .15s" }}
+                            style={{ flex: 1, background: "transparent", border: "1px solid #1e293b", color: "#3b82f6", padding: "4px 0", borderRadius: 3, fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.04em", transition: "all .15s" }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.color = "#93c5fd"; }}
                             onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#64748b"; }}>
                             EDIT
@@ -7508,10 +7915,10 @@ function ReferenceView() {
   );
 }
 // ─────────────────────────────────────────────────────────────────────────────
-const DURATION_HARD_LIMIT_SECS = 28800; // 8h intraday cap
+const DURATION_HARD_LIMIT_SECS = 0; // No hard duration cap — overnight trades allowed
 
 const validateTradesHard = (trades, allowOvernight = false) => {
-  const limit = allowOvernight ? 86400 : DURATION_HARD_LIMIT_SECS;
+  const limit = 0; // Duration no longer used as a rejection criterion
   const accepted = [], rejected = [];
   const seen = new Set();
   for (const t of trades) {
@@ -7520,7 +7927,7 @@ const validateTradesHard = (trades, allowOvernight = false) => {
     if (!Number.isFinite(t.qty) || t.qty <= 0) reasons.push("Invalid qty");
     if (!Number.isFinite(t.pnl)) reasons.push("Non-finite P&L");
     // Price=0 is a soft issue (IBKR may omit prices when P&L is provided directly)
-    if (t.durationSecs > limit) reasons.push(`Duration ${(t.durationSecs/3600).toFixed(1)}h > ${limit/3600}h limit`);
+    // Duration cap removed — overnight/multi-day trades are valid
     const h = [t.symbol, t.buyTime, t.sellTime, t.qty, t.buyPrice, t.sellPrice].join("|");
     if (seen.has(h)) reasons.push("Duplicate");
     else seen.add(h);
@@ -7586,7 +7993,7 @@ function ParseReviewModal({ data, onConfirm, onCancel }) {
   );
 
   const ColHdr = () => (
-    <div style={{ display: "grid", gridTemplateColumns: "90px 40px 48px 80px 80px 80px 70px", gap: 8, fontSize: 9, color: "#64748b", letterSpacing: "0.08em", marginBottom: 4 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "90px 40px 48px 80px 80px 80px 70px", gap: 8, fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 4 }}>
       <span>SYMBOL</span><span>QTY</span><span>DIR</span><span>BUY</span><span>SELL</span><span>P&L</span><span>DUR</span>
     </div>
   );
@@ -7700,7 +8107,7 @@ function ParseReviewModal({ data, onConfirm, onCancel }) {
 
           {/* Warning if > 50% hard rejected */}
           {hardRejected.length > (hardRejected.length + flagged.length + clean.length) / 2 && (
-            <div style={{ background: "#1f0606", border: "1px solid #7f1d1d", borderRadius: 4, padding: "10px 14px", fontSize: 11, color: "#f87171" }}>
+            <div style={{ background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", borderRadius: 4, padding: "10px 14px", fontSize: 11, color: "#f87171" }}>
               ⚠ More than half of parsed trades were auto-rejected. Check that your export includes both entry and exit fills.
             </div>
           )}
@@ -7762,12 +8169,21 @@ export default function TradingJournal() {
   const [saved, setSaved] = useState(false);
   const [filterMonth, setFilterMonth] = useState("");
   const [tab, setTab] = useState("session");
+  const [sessionInnerTab, setSessionInnerTab] = useState("session");
   const [importRaw, setImportRaw] = useState("");
   const [importError, setImportError] = useState("");
   const [importSuccess, setImportSuccess] = useState(false);
   const [analyticsTab, setAnalyticsTab] = useState("overview");
   const [listMode, setListMode] = useState("calendar");
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
+  const [calendarNotes, setCalendarNotes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("tj-cal-notes-v1") || "{}"); } catch { return {}; }
+  });
+  const saveCalNote = (dateStr, text) => {
+    const updated = { ...calendarNotes, [dateStr]: text };
+    setCalendarNotes(updated);
+    try { localStorage.setItem("tj-cal-notes-v1", JSON.stringify(updated)); } catch {}
+  };
   const [headerQuotes, setHeaderQuotes] = useState(() => { const s=[...SEED_QUOTES].sort(()=>Math.random()-0.5); return [s[0],s[1],s[2]].filter(Boolean); });
 
   // AI settings (local only)
@@ -8073,15 +8489,17 @@ export default function TradingJournal() {
     // Navigate to list — set calendar to the saved entry's month so it appears immediately
     const savedMonth = entry.date ? entry.date.slice(0, 7) : calMonth; // "2026-03"
     setCalMonth(savedMonth);
-    setListMode("calendar");
+    setListMode("list");
     setView("list");
+    setSortNewest(true);
     setActiveEntry(null);
     setForm(emptyEntry());
     setTab("session");
+    setSessionInnerTab("session");
     setImportRaw(""); setImportError(""); setImportSuccess(false);
     setCsvFileName(""); setCsvConfirmPending(null);
     setSaving(false);
-    setTimeout(() => setSaved(false), 1500);
+    setTimeout(() => setSaved(false), 500);
   };
 
   const handleDelete = async (id) => {
@@ -8097,13 +8515,23 @@ export default function TradingJournal() {
     return prior ? { plan: prior.tomorrow, reinforceRule: prior.reinforceRule, date: prior.date } : null;
   };
 
-  const openNew = () => { setForm(emptyEntry()); setActiveEntry(null); setTab("session"); setImportRaw(""); setImportError(""); setImportSuccess(false); setCsvFileName(""); setCsvConfirmPending(null); setAnalyticsTab("overview"); setView("new"); };
-  const openEdit = (entry) => { setForm({ ...entry }); setActiveEntry(entry); setTab("session"); setImportRaw(entry.rawTradeData || ""); setImportError(""); setImportSuccess(false); setCsvFileName(entry.rawCsvFile?.name || ""); setCsvConfirmPending(null); setAnalyticsTab("overview"); setView("new"); };
+  const openNew = () => { setForm(emptyEntry()); setActiveEntry(null); setTab("session"); setSessionInnerTab("session"); setImportRaw(""); setImportError(""); setImportSuccess(false); setCsvFileName(""); setCsvConfirmPending(null); setAnalyticsTab("overview"); setView("new"); };
+  const openEdit = (entry) => { setForm({ ...entry }); setActiveEntry(entry); setTab("session"); setSessionInnerTab("session"); setImportRaw(entry.rawTradeData || ""); setImportError(""); setImportSuccess(false); setCsvFileName(entry.rawCsvFile?.name || ""); setCsvConfirmPending(null); setAnalyticsTab("overview"); setView("new"); };
   const viewDetail = (entry) => { setActiveEntry(entry); setView("detail"); };
 
   const f = (field, val) => setForm(p => ({ ...p, [field]: val }));
   const pnlColor = (n) => { const v = parseFloat(n); return isNaN(v) ? "#e2e8f0" : v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#e2e8f0"; };
-  const gradeColor = (g) => { if (!g) return "#94a3b8"; if (g.startsWith("A")) return "#4ade80"; if (g.startsWith("B")) return "#60a5fa"; if (g.startsWith("C")) return "#facc15"; return "#f87171"; };
+  const gradeColor = (g) => {
+    if (!g) return "#94a3b8";
+    const s = g.toUpperCase();
+    if (s === "A+" || s === "A")  return "#4ade80"; // bright green
+    if (s === "A-")               return "#86efac"; // light green
+    if (s === "B+" || s === "B")  return "#bef264"; // lime
+    if (s === "B-")               return "#d9f99d"; // pale lime
+    if (s === "C+" || s === "C")  return "#fde047"; // yellow
+    if (s === "C-")               return "#fb923c"; // orange
+    return "#f87171";             // red for D and below
+  };
   const fmtPnl = (n) => { const v = parseFloat(n); if (isNaN(v)) return "-"; return `${v >= 0 ? "+" : "-"}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
 
   const months = [...new Set(entries.map(e => e.date?.slice(0, 7)))].sort().reverse();
@@ -8151,41 +8579,64 @@ export default function TradingJournal() {
     return map;
   }, [entries]);
 
+  // Global trade analytics across ALL entries
+  const globalAnalytics = useMemo(() => {
+    const allTrades = entries.flatMap(e => e.parsedTrades || []);
+    if (!allTrades.length) return null;
+    return calcAnalytics(allTrades, true);
+  }, [entries]);
+
+  // Total account balance = starting capital + cumulative net P&L
+  const totalAccountBalance = useMemo(() => {
+    if (!activeJournal?.config?.startingBalance) return null;
+    const cum = entries.reduce((s, e) => s + (parseFloat(e.pnl || 0) - parseFloat(e.commissions || 0)), 0);
+    return activeJournal.config.startingBalance + cum;
+  }, [entries, activeJournal]);
+
   // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortNewest, setSortNewest] = useState(true);
+  const [listSubTab, setListSubTab] = useState("journal"); // "journal" | "csv"
+  const [csvDatePreset, setCsvDatePreset] = useState("all"); // "all"|"today"|"week"|"month"|"custom"
+  const [csvDateFrom, setCsvDateFrom] = useState("");
+  const [csvDateTo, setCsvDateTo] = useState("");
   const [searchField, setSearchField] = useState("all"); // "all" | "notes" | "instruments" | "grade" | "mistakes"
   const filteredAndSearched = useMemo(() => {
-    if (!searchQuery.trim()) return filtered;
-    const q = searchQuery.toLowerCase();
-    return filtered.filter(e => {
-      if (searchField === "all" || searchField === "instruments") {
-        const instrs = (e.instruments?.length ? e.instruments : e.instrument ? [e.instrument] : []).join(" ").toLowerCase();
-        if (instrs.includes(q)) return true;
-      }
-      if (searchField === "all" || searchField === "grade") {
-        if ((e.grade || "").toLowerCase().includes(q)) return true;
-      }
-      if (searchField === "all" || searchField === "notes") {
-        const noteText = [e.marketNotes, e.lessonsLearned, e.mistakes, e.improvements, e.bestTrade, e.worstTrade, e.rules, e.tomorrow, e.reinforceRule].filter(Boolean).join(" ").toLowerCase();
-        if (noteText.includes(q)) return true;
-      }
-      if (searchField === "all" || searchField === "mistakes") {
-        const mText = (e.sessionMistakes || []).join(" ").toLowerCase();
-        if (mText.includes(q)) return true;
-      }
-      if (searchField === "all") {
-        if ((e.bias || "").toLowerCase().includes(q)) return true;
-        if ((e.date || "").includes(q)) return true;
-      }
-      return false;
-    });
-  }, [filtered, searchQuery, searchField]);
+    let result = filtered;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = filtered.filter(e => {
+        if (searchField === "all" || searchField === "instruments") {
+          const instrs = (e.instruments?.length ? e.instruments : e.instrument ? [e.instrument] : []).join(" ").toLowerCase();
+          if (instrs.includes(q)) return true;
+        }
+        if (searchField === "all" || searchField === "grade") {
+          if ((e.grade || "").toLowerCase().includes(q)) return true;
+        }
+        if (searchField === "all" || searchField === "notes") {
+          const noteText = [e.marketNotes, e.lessonsLearned, e.mistakes, e.improvements, e.bestTrade, e.worstTrade, e.rules, e.tomorrow, e.reinforceRule].filter(Boolean).join(" ").toLowerCase();
+          if (noteText.includes(q)) return true;
+        }
+        if (searchField === "all" || searchField === "mistakes") {
+          const mText = (e.sessionMistakes || []).join(" ").toLowerCase();
+          if (mText.includes(q)) return true;
+        }
+        if (searchField === "all") {
+          if ((e.bias || "").toLowerCase().includes(q)) return true;
+          if ((e.date || "").includes(q)) return true;
+        }
+        return false;
+      });
+    }
+    return sortNewest
+      ? [...result].sort((a, b) => b.date.localeCompare(a.date))
+      : [...result].sort((a, b) => a.date.localeCompare(b.date));
+  }, [filtered, searchQuery, searchField, sortNewest]);
 
   const TABS = [
     { id: "session", label: "Session" },
     { id: "import", label: "Import Trades" },
     { id: "analysis", label: "Analysis", disabled: !form.parsedTrades?.length },
-    { id: "lessons", label: "Lessons" },
     { id: "tomorrow", label: "Tomorrow" },
   ];
 
@@ -8367,7 +8818,7 @@ export default function TradingJournal() {
     <>
     <div style={{ fontFamily: "'Space Grotesk','DM Mono',sans-serif", background: "#0a0e1a", minHeight: "100vh", color: "#e2e8f0" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&family=Bodoni+Moda:ital,wght@1,900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&family=Bodoni+Moda:ital,wght@1,900&family=Cinzel:wght@700;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
         html,body{width:100%;margin:0;padding:0}*{box-sizing:border-box;margin:0;padding:0}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0a0e1a}::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px}
         textarea,input,select{background:#0f1729!important;color:#e2e8f0!important;border:1px solid #1e3a5f!important;border-radius:4px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:13px;width:100%;outline:none;transition:border-color .2s;resize:vertical}
@@ -8382,63 +8833,106 @@ export default function TradingJournal() {
         .pill:hover:not(.sel){border-color:#334155;color:#e2e8f0}
         @keyframes qotdFade { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
         @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        .helper-text { font-family:"DM Mono",monospace; font-size:8px; color:#64748b; letter-spacing:0.25em; margin-top:4px; }
       `}</style>
 
       {/* Header */}
-      <div style={{ borderBottom: "1px solid #1e293b", padding: "10px 32px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#0a0e1a", zIndex: 10, overflow: "visible" }}>
+      <div style={{ borderBottom: "1px solid #1e293b", padding: "0 32px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#0a0e1a", zIndex: 10, overflow: "visible", height: 64 }}>
 
-        {/* LEFT: AyeOh signature — clickable home, with settings trigger */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative", flexShrink: 0, overflow: "visible" }}>
+        {/* LEFT: C4 signature — AyeOh + rule + TRADING JOURNAL horizontal + tagline */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, overflow: "visible" }}>
           <div onClick={() => { setView("list"); setActiveEntry(null); setListMode("calendar"); }}
-            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0, cursor: "pointer", userSelect: "none", paddingBottom: 4 }}
+            style={{ display: "flex", alignItems: "center", gap: 14, cursor: "pointer", userSelect: "none", overflow: "visible" }}
             onMouseEnter={e => e.currentTarget.querySelector(".ayeoh-sig").style.opacity = "0.75"}
             onMouseLeave={e => e.currentTarget.querySelector(".ayeoh-sig").style.opacity = "1"}>
-            <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-              <div className="ayeoh-sig" style={{ fontFamily: "'Bodoni Moda',serif", fontSize: 32, fontWeight: 900, fontStyle: "italic", letterSpacing: "0.04em", lineHeight: 1.2, background: "linear-gradient(135deg, #38bdf8 0%, #818cf8 55%, #c084fc 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", transition: "opacity .15s", paddingBottom: 2 }}>AyeOh</div>
-              <div style={{ width: 1, height: 28, background: "linear-gradient(180deg, transparent, #334155, transparent)", margin: "0 10px", flexShrink: 0 }} />
-              <div style={{ display: "flex", flexDirection: "column", gap: 2, justifyContent: "center" }}>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: "#38bdf8", letterSpacing: "0.25em", opacity: 0.8 }}>TRADING</div>
-                <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: "#38bdf8", letterSpacing: "0.25em", opacity: 0.8 }}>JOURNAL</div>
-              </div>
+            <div className="ayeoh-sig" style={{ fontFamily: "'Cinzel',serif", fontSize: 26, fontWeight: 900, fontStyle: "normal", letterSpacing: "0.12em", lineHeight: 1, background: "linear-gradient(135deg,#38bdf8 0%,#818cf8 55%,#c084fc 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", transition: "opacity .15s", flexShrink: 0 }}>AYEOH</div>
+            <div style={{ width: 1, height: 32, background: "linear-gradient(180deg,transparent,#334155,transparent)", flexShrink: 0 }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: "#38bdf8", letterSpacing: "0.3em", whiteSpace: "nowrap", opacity: 0.9 }}>TRADING JOURNAL</div>
+              <div style={{ height: 1.5, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", borderRadius: 1 }} />
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, letterSpacing: "0.22em", whiteSpace: "nowrap", background: "linear-gradient(135deg,rgba(56,189,248,0.6),rgba(129,140,248,0.6),rgba(192,132,252,0.6))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>CAPTURE · ANALYSE · GROW</div>
             </div>
           </div>
-          {/* Settings trigger */}
+          {/* Settings — tiny, unobtrusive */}
           <button
             onClick={() => { setShowSettings(true); setSettingsTab("backup"); setImportMsg(null); }}
             title="Settings"
-            style={{ background: "transparent", border: "none", color: "#1e293b", fontSize: 14, cursor: "pointer", padding: "0 4px", lineHeight: 1, fontFamily: "inherit", transition: "color .15s" }}
-            onMouseEnter={e => e.currentTarget.style.color = "#475569"}
-            onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>
-            ⋯
+            style={{ background: "transparent", border: "none", color: "#818cf8", fontSize: 15, cursor: "pointer", padding: "2px 4px", lineHeight: 1, fontFamily: "inherit", transition: "color .15s", flexShrink: 0 }}
+            onMouseEnter={e => e.currentTarget.style.color = "#c084fc"}
+            onMouseLeave={e => e.currentTarget.style.color = "#818cf8"}>
+            ⚙
           </button>
+        </div>
+
+        {/* CENTRE: Market structure SVG art */}
+        <div style={{ flex: 1, alignSelf: "stretch", display: "flex", alignItems: "stretch", padding: "0 16px", overflow: "hidden", minWidth: 0 }}>
+          <svg width="100%" height="100%" viewBox="0 0 500 64" preserveAspectRatio="none" style={{ display: "block", width: "100%", height: "100%" }}>
+            <defs>
+              <linearGradient id="navLine" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#38bdf8" stopOpacity="0"/>
+                <stop offset="10%" stopColor="#38bdf8" stopOpacity="1"/>
+                <stop offset="42%" stopColor="#818cf8" stopOpacity="1"/>
+                <stop offset="58%" stopColor="#818cf8" stopOpacity="1"/>
+                <stop offset="90%" stopColor="#c084fc" stopOpacity="1"/>
+                <stop offset="100%" stopColor="#c084fc" stopOpacity="0"/>
+              </linearGradient>
+              <linearGradient id="navFill" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="#818cf8" stopOpacity="0.16"/>
+                <stop offset="100%" stopColor="#818cf8" stopOpacity="0"/>
+              </linearGradient>
+            </defs>
+            {/* Area fill — bottom-anchored polygon */}
+            <polygon points="15,62 55,44 85,56 130,28 165,40 210,12 248,26 285,2 325,18 360,34 392,42 435,24 490,36 490,64 15,64" fill="url(#navFill)"/>
+            {/* Main price path — peaks at y=2, troughs at y=62 */}
+            <polyline points="15,62 55,44 85,56 130,28 165,40 210,12 248,26 285,2 325,18 360,34 392,42 435,24 490,36" fill="none" stroke="url(#navLine)" strokeWidth="3.5" strokeLinejoin="round" strokeLinecap="round"/>
+            {/* Support dashed */}
+            <line x1="50" y1="54" x2="500" y2="54" stroke="#38bdf8" strokeWidth="1" strokeDasharray="7 5" opacity="0.4"/>
+            {/* Resistance dashed */}
+            <line x1="0" y1="10" x2="400" y2="10" stroke="#c084fc" strokeWidth="1" strokeDasharray="7 5" opacity="0.4"/>
+            {/* Labels */}
+
+
+            {/* Peak marker */}
+            <circle cx="285" cy="2" r="5" fill="#818cf8" opacity="1"/>
+            <circle cx="285" cy="2" r="11" fill="none" stroke="#818cf8" strokeWidth="1.5" opacity="0.4"/>
+            <circle cx="285" cy="2" r="17" fill="none" stroke="#818cf8" strokeWidth="0.6" opacity="0.15"/>
+          </svg>
         </div>
 
         {/* RIGHT: Nav buttons */}
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
-          {view === "list" && propJournals.length > 0 && <button onClick={() => { setPropDashTab("overview"); setView("propdash"); }} style={{ background: "transparent", color: "#f59e0b", border: "1px solid #92400e", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.05em" }}>🏆 PROP DASHBOARD</button>}
-          {(view === "list" || view === "recap") && <button onClick={() => setView("recap")} style={{ background: view === "recap" ? "#1e3a5f" : "transparent", color: view === "recap" ? "#93c5fd" : "#94a3b8", border: `1px solid ${view === "recap" ? "#3b82f6" : "#1e293b"}`, padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.05em" }}>🤖 AI RECAP</button>}
-          {view === "list" && <button onClick={openNew} style={{ background: "#1d4ed8", color: "white", border: "none", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.05em" }}>+ NEW ENTRY</button>}
-          {view === "recap" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>← BACK</button>}
-          {view === "quotes" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>← BACK</button>}
-          {view === "reference" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>← BACK</button>}
-          {view === "propdash" && <button onClick={() => setView("list")} style={{ background: "transparent", color: "#f59e0b", border: "1px solid #92400e", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>← BACK</button>}
+          {view === "list" && propJournals.length > 0 && <button onClick={() => { setPropDashTab("overview"); setView("propdash"); }} style={{ background: "rgba(120,53,15,0.15)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.35)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>🏆 PROP DASHBOARD</button>}
+          {(view === "list" || view === "recap") && (
+            <span style={{ display:"inline-block", padding:1, borderRadius:7, background: view === "recap" ? "linear-gradient(135deg,#7c3aed,#a855f7,#818cf8)" : "linear-gradient(135deg,#1e1b4b,#2e1065)", flexShrink:0 }}>
+              <button onClick={() => setView("recap")} style={{ display:"block", background: view === "recap" ? "#0d0a1a" : "#070d1a", color: view === "recap" ? "#c4b5fd" : "#475569", border:"none", padding:"9px 21px", borderRadius:6, fontFamily:"inherit", fontSize:13, cursor:"pointer", letterSpacing:"0.06em", fontWeight:700, whiteSpace:"nowrap" }}>🤖 AI RECAP</button>
+            </span>
+          )}
+          {view === "list" && (
+            <span style={{ display:"inline-block", padding:1, borderRadius:7, background:"linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", flexShrink:0 }}>
+              <button onClick={openNew} style={{ display:"block", background:"#070d1a", color:"#e2e8f0", border:"none", padding:"9px 21px", borderRadius:6, fontFamily:"inherit", fontSize:13, cursor:"pointer", letterSpacing:"0.06em", fontWeight:700, whiteSpace:"nowrap" }}>+ NEW ENTRY</button>
+            </span>
+          )}
+          {view === "recap" && <button onClick={() => setView("list")} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>}
+          {view === "quotes" && <button onClick={() => setView("list")} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>}
+          {view === "reference" && <button onClick={() => setView("list")} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>}
+          {view === "propdash" && <button onClick={() => setView("list")} style={{ background: "rgba(120,53,15,0.1)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>← BACK</button>}
           {view === "new" && <>
-            <button onClick={() => { setView("list"); setActiveEntry(null); }} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>CANCEL</button>
-            <button onClick={handleSave} disabled={saving} style={{ background: "#1d4ed8", color: "white", border: "none", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", textTransform: "uppercase" }}>{saving ? "SAVING..." : saved ? "✓ SAVED" : activeEntry ? "✓ UPDATE" : "+ APPLY"}</button>
+            <button onClick={() => { setView("list"); setActiveEntry(null); }} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>CANCEL</button>
+            <button onClick={handleSave} disabled={saving} style={{ background: "#0a0e1a", color: "#4ade80", border: "1px solid rgba(74,222,128,0.4)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 700, boxShadow: "0 0 0 1px rgba(74,222,128,0.15)" }}>{saving ? "SAVING..." : saved ? "✓ SAVED" : activeEntry ? "✓ UPDATE" : "+ APPLY"}</button>
           </>}
           {view === "detail" && <>
-            <button onClick={() => { setView("list"); setConfirmDeleteEntry(false); }} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "9px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer" }}>← BACK</button>
-            <button onClick={() => { openEdit(activeEntry); setConfirmDeleteEntry(false); }} style={{ background: "transparent", color: "#94a3b8", border: "1px solid #1e293b", padding: "11px 24px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>EDIT</button>
+            <button onClick={() => { setView("list"); setConfirmDeleteEntry(false); }} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "9px 18px", borderRadius: 6, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>
+            <button onClick={() => { openEdit(activeEntry); setConfirmDeleteEntry(false); }} style={{ background: "rgba(10,18,32,0.5)", color: "#64748b", border: "1px solid #1e293b", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>EDIT</button>
             {confirmDeleteEntry ? (
               <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <span style={{ fontSize: 11, color: "#f87171", letterSpacing: "0.06em" }}>Delete this entry?</span>
                 <button onClick={() => { handleDelete(activeEntry.id); setConfirmDeleteEntry(false); }}
-                  style={{ background: "#450a0a", border: "1px solid #7f1d1d", color: "#f87171", padding: "11px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em" }}>YES DELETE</button>
+                  style={{ background: "rgba(127,29,29,0.25)", border: "1px solid rgba(248,113,113,0.35)", color: "#f87171", padding: "10px 18px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 700 }}>YES DELETE</button>
                 <button onClick={() => setConfirmDeleteEntry(false)}
-                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "11px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em" }}>CANCEL</button>
+                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#475569", padding: "10px 18px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>CANCEL</button>
               </span>
             ) : (
-              <button onClick={() => setConfirmDeleteEntry(true)} style={{ background: "transparent", color: "#ef4444", border: "1px solid #450a0a", padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>DELETE</button>
+              <button onClick={() => setConfirmDeleteEntry(true)} style={{ background: "transparent", color: "#f87171", border: "1px solid rgba(248,113,113,0.25)", padding: "10px 20px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>DELETE</button>
             )}
           </>}
         </div>
@@ -8903,12 +9397,39 @@ export default function TradingJournal() {
               ) : (
                 <div
                   onClick={() => switchJournal(j.id)}
-                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "14px 20px", cursor: "pointer", borderBottom: `3px solid ${isActive ? "#3b82f6" : "transparent"}`, background: "transparent", transition: "all .15s", whiteSpace: "nowrap" }}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: isActive ? "10px 18px" : "14px 20px", cursor: "pointer", borderBottom: isActive ? "none" : "3px solid transparent", background: "transparent", transition: "all .15s", whiteSpace: "nowrap", position: "relative" }}
                   onMouseEnter={e => { if (!isActive) e.currentTarget.style.borderBottomColor = "#1e3a5f"; }}
                   onMouseLeave={e => { if (!isActive) e.currentTarget.style.borderBottomColor = "transparent"; }}>
-                  <span style={{ fontSize: 13, color: isActive ? "#93c5fd" : "#64748b", letterSpacing: "0.06em", fontWeight: isActive ? 600 : 400 }}>
-                    {j.type === JOURNAL_TYPES.PROP ? "🏆" : "💼"} {j.name.toUpperCase()}
-                  </span>
+                  {isActive ? (
+                    <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 10,
+                      background: "rgba(56,189,248,0.04)", border: "1px solid rgba(56,189,248,0.2)",
+                      borderRadius: 6, padding: "8px 16px",
+                      outline: "1px solid rgba(192,132,252,0.08)", outlineOffset: 3 }}>
+                      {/* All 4 corner brackets */}
+                      <div style={{ position:"absolute", top:-1, left:-1, width:20, height:3, background:"linear-gradient(90deg,#38bdf8,transparent)" }} />
+                      <div style={{ position:"absolute", top:-1, left:-1, width:3, height:20, background:"linear-gradient(180deg,#38bdf8,transparent)" }} />
+                      <div style={{ position:"absolute", top:-1, right:-1, width:20, height:3, background:"linear-gradient(90deg,transparent,#818cf8)" }} />
+                      <div style={{ position:"absolute", top:-1, right:-1, width:3, height:20, background:"linear-gradient(180deg,#818cf8,transparent)" }} />
+                      <div style={{ position:"absolute", bottom:-1, left:-1, width:20, height:3, background:"linear-gradient(90deg,#818cf8,transparent)" }} />
+                      <div style={{ position:"absolute", bottom:-1, left:-1, width:3, height:20, background:"linear-gradient(180deg,transparent,#818cf8)" }} />
+                      <div style={{ position:"absolute", bottom:-1, right:-1, width:20, height:3, background:"linear-gradient(90deg,transparent,#c084fc)" }} />
+                      <div style={{ position:"absolute", bottom:-1, right:-1, width:3, height:20, background:"linear-gradient(180deg,transparent,#c084fc)" }} />
+                      <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                        <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, letterSpacing:"0.28em", background:"linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>
+                          {j.type === JOURNAL_TYPES.PROP ? "🏆 PROP" : "💼 PERSONAL"}
+                        </div>
+                        <div style={{ fontFamily:"'Cinzel',serif", fontWeight:900, fontSize:20, letterSpacing:"0.08em",
+                          background:"linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)",
+                          WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text", lineHeight:1.1 }}>
+                          {j.name.toUpperCase()}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 13, color: "#334155", letterSpacing: "0.06em", fontWeight: 400 }}>
+                      {j.type === JOURNAL_TYPES.PROP ? "🏆" : "💼"} {j.name.toUpperCase()}
+                    </span>
+                  )}
                   {isActive && (
                     <button onClick={e => { e.stopPropagation(); setRenamingId(j.id); setRenameValue(j.name); }}
                       style={{ background: "#1e293b", border: "1px solid #334155", color: "#94a3b8", padding: "2px 7px", borderRadius: 3, fontSize: 10, cursor: "pointer", fontFamily: "inherit", lineHeight: 1.4, transition: "all .15s", marginLeft: 2 }}
@@ -8958,13 +9479,13 @@ export default function TradingJournal() {
 
               {/* Header */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, color: isPropType ? "#f59e0b" : "#93c5fd", letterSpacing: "0.12em" }}>NEW JOURNAL</div>
+                <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, letterSpacing: "0.12em", color: isPropType ? "#f59e0b" : "transparent", background: isPropType ? "transparent" : "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: isPropType ? "unset" : "text", WebkitTextFillColor: isPropType ? "unset" : "transparent", backgroundClip: isPropType ? "unset" : "text" }}>NEW JOURNAL</div>
                 <button onClick={close} style={{ background: "transparent", border: "none", color: "#64748b", fontSize: 16, cursor: "pointer" }}>✕</button>
               </div>
 
               {/* Name */}
               <div style={{ marginBottom: 20 }}>
-                <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", display: "block", marginBottom: 6 }}>JOURNAL NAME</label>
+                <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", display: "block", marginBottom: 6 }}>JOURNAL NAME</label>
                 <input autoFocus placeholder="e.g. Lucid 50K Flex, Questrade TFSA…"
                   value={newJournalName} onChange={e => setNewJournalName(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && createJournal()}
@@ -8973,7 +9494,7 @@ export default function TradingJournal() {
 
               {/* Type picker */}
               <div style={{ marginBottom: 24 }}>
-                <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", display: "block", marginBottom: 10 }}>ACCOUNT TYPE</label>
+                <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", display: "block", marginBottom: 10 }}>ACCOUNT TYPE</label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                   {[
                     { type: JOURNAL_TYPES.PERSONAL, emoji: "💼", label: "Personal", sub: "Cash, Margin, TFSA/RRSP — your own capital" },
@@ -8993,7 +9514,7 @@ export default function TradingJournal() {
               {newJournalType === JOURNAL_TYPES.PERSONAL && (
                 <div style={{ background: "#060b18", border: "1px solid #1e293b", borderRadius: 8, padding: "16px 18px", marginBottom: 20 }}>
                   <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 14 }}>💼 PERSONAL ACCOUNT SETUP</div>
-                  <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.08em", display: "block", marginBottom: 6 }}>STARTING BALANCE ($)</label>
+                  <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.08em", display: "block", marginBottom: 6 }}>STARTING BALANCE ($)</label>
                   <input type="number" placeholder="e.g. 10000" value={newJournalConfig.startingBalance || ""}
                     onChange={e => setNewJournalConfig(c => ({ ...c, startingBalance: parseFloat(e.target.value) || 0 }))}
                     style={{ width: "100%", boxSizing: "border-box" }} />
@@ -9009,13 +9530,13 @@ export default function TradingJournal() {
                   <div style={{ background: "#060b18", border: "1px solid #92400e", borderRadius: 8, padding: "16px 18px" }}>
                     <div style={{ fontSize: 10, color: "#f59e0b", letterSpacing: "0.1em", marginBottom: 14 }}>🏆 PROP FIRM</div>
                     <div style={{ marginBottom: 12 }}>
-                      <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.08em", display: "block", marginBottom: 6 }}>FIRM NAME</label>
+                      <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.08em", display: "block", marginBottom: 6 }}>FIRM NAME</label>
                       <input value={newJournalConfig.firmName || "Lucid Trading"}
                         onChange={e => setNewJournalConfig(c => ({ ...c, firmName: e.target.value }))}
                         style={{ width: "100%", boxSizing: "border-box" }} />
                     </div>
                     <div>
-                      <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.08em", display: "block", marginBottom: 8 }}>ACCOUNT SIZE</label>
+                      <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.08em", display: "block", marginBottom: 8 }}>ACCOUNT SIZE</label>
                       <div style={{ display: "flex", gap: 8 }}>
                         {PROP_ACCOUNT_SIZES.map(s => (
                           <button key={s} onClick={() => setNewJournalConfig(c => ({ ...defaultPropConfig(s), firmName: c.firmName }))}
@@ -9039,7 +9560,7 @@ export default function TradingJournal() {
                         { key: "minTradingDays", label: "MIN TRADING DAYS", path: "eval" },
                       ].map(({ key, label, path }) => (
                         <div key={key}>
-                          <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.08em", display: "block", marginBottom: 5 }}>{label}</label>
+                          <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", display: "block", marginBottom: 5 }}>{label}</label>
                           <input type="number" value={newJournalConfig[path]?.[key] ?? ""}
                             onChange={e => setNewJournalConfig(c => ({ ...c, [path]: { ...c[path], [key]: parseFloat(e.target.value) || 0 } }))} />
                         </div>
@@ -9060,7 +9581,7 @@ export default function TradingJournal() {
                         { key: "daysToPayout", label: "DAYS TO PAYOUT", path: "funded" },
                       ].map(({ key, label, path }) => (
                         <div key={key}>
-                          <label style={{ fontSize: 9, color: "#64748b", letterSpacing: "0.08em", display: "block", marginBottom: 5 }}>{label}</label>
+                          <label style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", display: "block", marginBottom: 5 }}>{label}</label>
                           <input type="number" value={newJournalConfig[path]?.[key] ?? ""}
                             onChange={e => setNewJournalConfig(c => ({ ...c, [path]: { ...c[path], [key]: parseFloat(e.target.value) || 0 } }))} />
                         </div>
@@ -9110,11 +9631,11 @@ export default function TradingJournal() {
                     {/* Ghost quote mark */}
                     <div style={{ position: "absolute", right: isHero ? 14 : 8, top: isHero ? 2 : -2, fontFamily: "Georgia,serif", fontSize: isHero ? 140 : 100, color: cs.accent, opacity: 0.07, lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>"</div>
                     {/* Label */}
-                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 11, color: cs.accent, letterSpacing: "0.3em", marginBottom: isHero ? 20 : 14, opacity: 0.85 }}>{cs.label}</div>
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: isHero ? 14 : 13, color: cs.accent, letterSpacing: "0.3em", marginBottom: isHero ? 20 : 14, opacity: 0.9 }}>{cs.label}</div>
                     {/* Category pill */}
                     <div style={{ display: "inline-block", fontSize: 9, color: cs.accent, background: `${cs.accent}18`, border: `1px solid ${cs.accent}33`, padding: "3px 11px", borderRadius: 20, letterSpacing: "0.12em", marginBottom: isHero ? 18 : 14 }}>{q.category.toUpperCase()}</div>
                     {/* Quote text */}
-                    <div style={{ fontFamily: "Georgia,'Times New Roman',serif", fontStyle: "italic", fontSize: isHero ? cs.textSize + 2 : cs.textSize + 1, color: isHero ? "#e2e8f0" : "#c8ddf0", lineHeight: 1.85, marginBottom: isHero ? 24 : 18, position: "relative", zIndex: 1 }}>
+                    <div style={{ fontFamily: "Georgia,'Times New Roman',serif", fontStyle: "italic", fontSize: isHero ? cs.textSize + 2 : cs.textSize + 3, color: isHero ? "#e2e8f0" : "#c8ddf0", lineHeight: 1.85, marginBottom: isHero ? 24 : 18, position: "relative", zIndex: 1 }}>
                       "{q.text}"
                     </div>
                     {/* Divider + Author */}
@@ -9131,45 +9652,90 @@ export default function TradingJournal() {
 
       <div style={{ width: "100%", padding: "28px 40px" }}>
         {/* LIST */}
-        {view === "list" && (<>
+        {view === "list" && (<div>
           {filtered.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,280px))", gap: 12, marginBottom: 24, justifyContent: "center" }}>
-              {[
-                { l: "TOTAL P&L", v: `${totalPnL >= 0 ? "+" : ""}$${Math.abs(totalPnL).toLocaleString("en-US", { maximumFractionDigits: 0 })}`, c: pnlColor(totalPnL) },
-                { l: "WIN DAYS", v: `${winDays} / ${filtered.length}`, c: "#4ade80" },
-                { l: "LOSS DAYS", v: lossDays, c: "#f87171" },
-                { l: "DAY WIN RATE", v: `${filtered.length ? Math.round(winDays / filtered.length * 100) : 0}%`, c: filtered.length ? (winDays / filtered.length >= 0.5 ? "#4ade80" : "#f87171") : "#94a3b8" },
-              ].map(s => (
-                <div key={s.l} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "12px 16px" }}>
-                  <div style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 4 }}>{s.l}</div>
-                  <div style={{ fontSize: 20, color: s.c, fontWeight: 500 }}>{s.v}</div>
+            <div style={{ marginBottom: 24 }}>
+              {/* Row 1 — Total P&L prominent + Account Balance */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div style={{ background: "linear-gradient(135deg,rgba(56,189,248,0.12),rgba(129,140,248,0.14),rgba(192,132,252,0.09))", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 6, padding: "14px 20px", position: "relative", overflow: "hidden", backdropFilter: "blur(8px)" }}>
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
+                  <div style={{ fontSize: 10, color: "#818cf8", letterSpacing: "0.12em", marginBottom: 4 }}>TOTAL NET P&L</div>
+                  <div style={{ fontSize: 28, color: pnlColor(totalPnL), fontWeight: 700, letterSpacing: "0.02em" }}>{totalPnL >= 0 ? "+" : "-"}${Math.abs(totalPnL).toLocaleString("en-US", { maximumFractionDigits: 0 })}</div>
+                  <div style={{ fontSize: 10, color: "#334155", marginTop: 2 }}>{filtered.length} trading days · {winDays}W {filtered.length - winDays}L</div>
                 </div>
-              ))}
+                <div style={{ background: "linear-gradient(135deg,rgba(192,132,252,0.12),rgba(129,140,248,0.14),rgba(56,189,248,0.09))", border: "1px solid rgba(192,132,252,0.3)", borderRadius: 6, padding: "14px 20px", position: "relative", overflow: "hidden", backdropFilter: "blur(8px)" }}>
+                  <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#c084fc,#818cf8,#38bdf8)" }} />
+                  <div style={{ fontSize: 10, color: "#818cf8", letterSpacing: "0.12em", marginBottom: 4 }}>ACCOUNT BALANCE</div>
+                  {totalAccountBalance !== null ? (
+                    <>
+                      <div style={{ fontSize: 28, color: totalAccountBalance > (activeJournal?.config?.startingBalance || 0) ? "#4ade80" : totalAccountBalance < (activeJournal?.config?.startingBalance || 0) ? "#f87171" : "#e2e8f0", fontWeight: 700 }}>${totalAccountBalance.toLocaleString("en-US", { maximumFractionDigits: 0 })}</div>
+                      <div style={{ fontSize: 10, color: "#334155", marginTop: 2 }}>started ${activeJournal?.config?.startingBalance?.toLocaleString("en-US", { maximumFractionDigits: 0 }) || "—"}</div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 13, color: "#334155", marginTop: 6 }}>Set starting capital in journal settings</div>
+                  )}
+                </div>
+              </div>
+              {/* Row 2 — Trade statistics */}
+              {globalAnalytics && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 8 }}>
+                  {[
+                    { l: "TRADE WIN RATE", v: `${Math.round(globalAnalytics.winRate)}%`, c: globalAnalytics.winRate >= 50 ? "#4ade80" : "#f87171" },
+                    { l: "PROFIT FACTOR", v: globalAnalytics.profitFactor != null ? (typeof globalAnalytics.profitFactor === "number" ? globalAnalytics.profitFactor.toFixed(2) : globalAnalytics.profitFactor) : "—", c: globalAnalytics.profitFactor != null && globalAnalytics.profitFactor >= 1 ? "#4ade80" : "#f87171" },
+                    { l: "EXPECTANCY", v: globalAnalytics.expectancy != null ? `${globalAnalytics.expectancy >= 0 ? "+" : ""}$${Math.abs(globalAnalytics.expectancy * Math.abs(globalAnalytics.avgLoss || 1)).toFixed(0)}` : "—", c: globalAnalytics.expectancy != null && globalAnalytics.expectancy >= 0 ? "#4ade80" : "#f87171" },
+                    { l: "MAX DRAWDOWN", v: globalAnalytics.maxDD != null ? `-$${Math.abs(globalAnalytics.maxDD).toFixed(0)}` : "—", c: "#f87171" },
+                    { l: "AVG WIN / LOSS", v: globalAnalytics.avgWin && globalAnalytics.avgLoss ? `$${Math.abs(globalAnalytics.avgWin).toFixed(0)} / $${Math.abs(globalAnalytics.avgLoss).toFixed(0)}` : "—", c: "#94a3b8" },
+                    { l: "TOTAL TRADES", v: globalAnalytics.total || filtered.length, c: "#e2e8f0" },
+                  ].map(s => (
+                    <div key={s.l} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "8px 10px" }}>
+                      <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 3 }}>{s.l}</div>
+                      <div style={{ fontSize: 13, color: s.c, fontWeight: 600 }}>{s.v}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {/* View toggle + month nav */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
               {[["calendar","📅 MONTHLY PERFORMANCE"],["list","📋 TRADE LIST"],["weekly","📈 WEEKLY PERFORMANCE"],["performance","📊 ANNUAL/QUARTERLY PERFORMANCE"]].map(([m, label]) => (
-                <button key={m} onClick={() => setListMode(m)}
-                  style={{ padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: listMode === m ? "#1e3a5f" : "transparent", border: `1px solid ${listMode === m ? "#3b82f6" : "#1e293b"}`, color: listMode === m ? "#93c5fd" : "#94a3b8", whiteSpace: "nowrap" }}>
-                  {label}
-                </button>
+                listMode === m ? (
+                  <button key={m} onClick={() => setListMode(m)}
+                    style={{ position: "relative", padding: "11px 20px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", whiteSpace: "nowrap", overflow: "hidden",
+                      background: "rgba(10,18,32,0.95)", border: "1px solid #1e3a5f", color: "#e2e8f0" }}>
+                    <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)", borderRadius: "0 0 5px 5px" }} />
+                    {label}
+                  </button>
+                ) : (
+                  <span key={m} style={{ display: "inline-block", padding: 1, borderRadius: 7, background: "linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))", flexShrink: 0 }}>
+                    <button onClick={() => setListMode(m)}
+                      style={{ display: "block", background: "#070d1a", color: "#64748b", border: "none", padding: "10px 19px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", whiteSpace: "nowrap" }}>
+                      {label}
+                    </button>
+                  </span>
+                )
               ))}
-              <button onClick={() => setView("reference")}
-                style={{ padding: "11px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", whiteSpace: "nowrap" }}>
-                📊 REFERENCE
-              </button>
+              <span style={{ display: "inline-block", padding: 1, borderRadius: 7, background: "linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))", flexShrink: 0 }}>
+                <button onClick={() => setView("reference")}
+                  style={{ display: "block", background: "#070d1a", color: "#64748b", border: "none", padding: "10px 19px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", whiteSpace: "nowrap" }}>
+                  📊 REFERENCE
+                </button>
+              </span>
 
               {listMode === "calendar" ? (
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <button onClick={() => { const [y, m] = calMonth.split("-").map(Number); const d = new Date(y, m - 2, 1); setCalMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }}
-                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "11px 16px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>‹</button>
+                <span style={{ display:"inline-block", padding:1, borderRadius:5, background:"linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))" }}>
+                  <button onClick={() => { const [y, m] = calMonth.split("-").map(Number); const d = new Date(y, m - 2, 1); setCalMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }}
+                    style={{ display:"block", background:"#070d1a", color:"#64748b", border:"none", padding:"10px 15px", borderRadius:4, fontFamily:"inherit", fontSize:13, cursor:"pointer" }}>‹</button>
+                </span>
                 <span style={{ fontSize: 13, color: "#e2e8f0", letterSpacing: "0.08em", minWidth: 130, textAlign: "center", fontWeight: 500 }}>
                   {(() => { const [y, m] = calMonth.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase(); })()}
                 </span>
-                <button onClick={() => { const [y, m] = calMonth.split("-").map(Number); const d = new Date(y, m, 1); setCalMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }}
-                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "11px 16px", borderRadius: 4, fontFamily: "inherit", fontSize: 13, cursor: "pointer" }}>›</button>
+                <span style={{ display:"inline-block", padding:1, borderRadius:5, background:"linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))" }}>
+                  <button onClick={() => { const [y, m] = calMonth.split("-").map(Number); const d = new Date(y, m, 1); setCalMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }}
+                    style={{ display:"block", background:"#070d1a", color:"#64748b", border:"none", padding:"10px 15px", borderRadius:4, fontFamily:"inherit", fontSize:13, cursor:"pointer" }}>›</button>
+                </span>
               </div>
             ) : listMode === "performance" || listMode === "weekly" ? null : (
               months.length > 1 && (
@@ -9189,7 +9755,13 @@ export default function TradingJournal() {
             </div>
           ) : listMode === "calendar" ? (
             <>
-              <div style={{ fontSize: 22, color: "#93c5fd", letterSpacing: "0.08em", fontWeight: 700, fontFamily: "'Bebas Neue', sans-serif", marginBottom: 14 }}>📅 MONTHLY PERFORMANCE</div>
+              <div style={{ marginBottom: 20 }}>
+  <div style={{ height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", borderRadius: 1, marginBottom: 14 }} />
+  <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, letterSpacing: "0.12em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1 }}>✦ MONTHLY PERFORMANCE</div>
+  </div>
+  <div className="helper-text" style={{ marginTop: 4 }}>REVIEW YOUR CALENDAR · TRACK YOUR EDGE</div>
+</div>
               <CalendarView
               month={calMonth}
               entries={entries}
@@ -9200,21 +9772,179 @@ export default function TradingJournal() {
               netPnl={netPnl}
               gradeColor={gradeColor}
               calcAnalytics={calcAnalytics}
+              calendarNotes={calendarNotes}
+              saveCalNote={saveCalNote}
             />
             </>
           ) : listMode === "weekly" ? (
             <>
-              <div style={{ fontSize: 22, color: "#93c5fd", letterSpacing: "0.08em", fontWeight: 700, fontFamily: "'Bebas Neue', sans-serif", marginBottom: 14 }}>📈 WEEKLY PERFORMANCE</div>
+              <div style={{ marginBottom: 20 }}>
+  <div style={{ height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", borderRadius: 1, marginBottom: 14 }} />
+  <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, letterSpacing: "0.12em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1 }}>✦ WEEKLY PERFORMANCE</div>
+  </div>
+  <div className="helper-text" style={{ marginTop: 4 }}>WEEK BY WEEK PROGRESS · SPOT YOUR PATTERNS</div>
+</div>
               <WeeklyPerformance entries={entries} netPnl={netPnl} fmtPnl={fmtPnl} pnlColor={pnlColor} calcAnalytics={calcAnalytics} />
             </>
           ) : listMode === "performance" ? (
             <>
-              <div style={{ fontSize: 22, color: "#93c5fd", letterSpacing: "0.08em", fontWeight: 700, fontFamily: "'Bebas Neue', sans-serif", marginBottom: 14 }}>📊 ANNUAL PERFORMANCE BREAKDOWN</div>
+              <div style={{ marginBottom: 20 }}>
+  <div style={{ height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", borderRadius: 1, marginBottom: 14 }} />
+  <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, letterSpacing: "0.12em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1 }}>✦ ANNUAL PERFORMANCE BREAKDOWN</div>
+  </div>
+  <div className="helper-text" style={{ marginTop: 4 }}>YEARLY OVERVIEW · MEASURE YOUR GROWTH</div>
+</div>
               <PerformanceOverview entries={entries} netPnl={netPnl} fmtPnl={fmtPnl} pnlColor={pnlColor} />
             </>
           ) : (
-            <>
-              <div style={{ fontSize: 22, color: "#93c5fd", letterSpacing: "0.08em", fontWeight: 700, fontFamily: "'Bebas Neue', sans-serif", marginBottom: 14 }}>📋 TRADE LIST</div>
+            <div>
+              <div style={{ marginBottom: 16 }}>
+  <div style={{ height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", borderRadius: 1, marginBottom: 14 }} />
+  <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, letterSpacing: "0.12em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1 }}>✦ TRADE LIST</div>
+  </div>
+  <div className="helper-text" style={{ marginTop: 4 }}>ALL SESSIONS · SEARCH · FILTER · REVIEW</div>
+</div>
+
+              {/* Sub-tab strip: Journal Entries | CSV Import Log */}
+              <div style={{ display: "flex", gap: 6, marginBottom: 16, alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[["journal","📋 JOURNAL ENTRIES"],["csv","📂 CSV IMPORT LOG"]].map(([id,label]) => (
+                    listSubTab === id ? (
+                      <button key={id} onClick={() => setListSubTab(id)}
+                        style={{ position:"relative", padding:"9px 18px", borderRadius:6, fontFamily:"inherit", fontSize:12, cursor:"pointer", letterSpacing:"0.06em", fontWeight:600, overflow:"hidden", transition:"all .15s", background:"rgba(10,18,32,0.95)", border:"1px solid #1e3a5f", color:"#e2e8f0" }}>
+                        <span style={{ position:"absolute", bottom:0, left:0, right:0, height:2, background:"linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
+                        {label}
+                      </button>
+                    ) : (
+                      <span key={id} style={{ display:"inline-block", padding:1, borderRadius:7, background:"linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))" }}>
+                        <button onClick={() => setListSubTab(id)}
+                          style={{ display:"block", background:"#070d1a", color:"#64748b", border:"none", padding:"8px 17px", borderRadius:6, fontFamily:"inherit", fontSize:12, cursor:"pointer", letterSpacing:"0.06em", fontWeight:600, whiteSpace:"nowrap" }}>
+                          {label}
+                        </button>
+                      </span>
+                    )
+                  ))}
+                </div>
+                {listSubTab === "journal" && (
+                  <button onClick={() => setSortNewest(p => !p)}
+                    style={{ background:"transparent", border:"1px solid #1e293b", borderRadius:6, color:"#64748b", fontSize:11, padding:"7px 14px", cursor:"pointer", fontFamily:"inherit", letterSpacing:"0.06em", display:"flex", alignItems:"center", gap:5 }}>
+                    {sortNewest ? "↓ NEWEST FIRST" : "↑ OLDEST FIRST"}
+                  </button>
+                )}
+              </div>
+
+              {/* ── CSV IMPORT LOG sub-view ── */}
+              {listSubTab === "csv" && (() => {
+                const today = new Date().toISOString().slice(0,10);
+                const weekAgo = new Date(Date.now() - 7*86400000).toISOString().slice(0,10);
+                const monthAgo = new Date(Date.now() - 30*86400000).toISOString().slice(0,10);
+                // Flatten all parsedTrades from all entries
+                let allTrades = entries.flatMap(e =>
+                  (e.parsedTrades || []).map(t => ({ ...t, _entryDate: e.date, _entryId: e.id }))
+                ).filter(t => t.buyTime || t.sellTime || t.symbol);
+                // Apply date filter
+                const fromDate = csvDatePreset === "today" ? today
+                  : csvDatePreset === "week" ? weekAgo
+                  : csvDatePreset === "month" ? monthAgo
+                  : csvDatePreset === "custom" ? csvDateFrom
+                  : null;
+                const toDate = csvDatePreset === "custom" ? csvDateTo : null;
+                if (fromDate) allTrades = allTrades.filter(t => (t._entryDate || "") >= fromDate);
+                if (toDate)   allTrades = allTrades.filter(t => (t._entryDate || "") <= toDate);
+                allTrades = allTrades.sort((a, b) => (b._entryDate || "").localeCompare(a._entryDate || ""));
+                const totalPnL = allTrades.reduce((s,t) => s + (Number.isFinite(t.pnl) ? t.pnl : 0), 0);
+                const wins = allTrades.filter(t => Number.isFinite(t.pnl) && t.pnl > 0).length;
+                const wr = allTrades.length ? Math.round(wins/allTrades.length*100) : 0;
+                return (
+                  <div>
+                    {/* Date filter strip */}
+                    <div style={{ display:"flex", gap:6, marginBottom:14, alignItems:"center", flexWrap:"wrap" }}>
+                      <span style={{ fontSize:9, color:"#3b82f6", letterSpacing:"0.1em" }}>RANGE:</span>
+                      {[["all","ALL TIME"],["today","TODAY"],["week","LAST 7D"],["month","LAST 30D"],["custom","CUSTOM"]].map(([id,label]) => (
+                        <button key={id} onClick={() => setCsvDatePreset(id)}
+                          style={{ padding:"5px 12px", borderRadius:4, fontSize:10, fontFamily:"inherit", cursor:"pointer", letterSpacing:"0.06em",
+                            background: csvDatePreset===id ? "#1e3a5f" : "transparent",
+                            border: `1px solid ${csvDatePreset===id ? "#3b82f6" : "#1e293b"}`,
+                            color: csvDatePreset===id ? "#93c5fd" : "#64748b" }}>
+                          {label}
+                        </button>
+                      ))}
+                      {csvDatePreset === "custom" && (
+                        <>
+                          <input type="date" value={csvDateFrom} onChange={e => setCsvDateFrom(e.target.value)} style={{ width:140, fontSize:11, padding:"4px 8px" }}/>
+                          <span style={{ color:"#475569", fontSize:11 }}>→</span>
+                          <input type="date" value={csvDateTo} onChange={e => setCsvDateTo(e.target.value)} style={{ width:140, fontSize:11, padding:"4px 8px" }}/>
+                        </>
+                      )}
+                    </div>
+                    {/* Summary strip */}
+                    {allTrades.length > 0 && (
+                      <div style={{ display:"flex", gap:16, marginBottom:12, padding:"10px 16px", background:"#0a0e1a", border:"1px solid #1e293b", borderRadius:6, flexWrap:"wrap" }}>
+                        {[
+                          { l:"TRADES", v:allTrades.length, c:"#e2e8f0" },
+                          { l:"WIN RATE", v:`${wr}%`, c: wr>=50?"#4ade80":"#f87171" },
+                          { l:"TOTAL P&L", v:(totalPnL>=0?"+":"")+`$${totalPnL.toFixed(2)}`, c:totalPnL>=0?"#4ade80":"#f87171" },
+                          { l:"WINNERS", v:wins, c:"#4ade80" },
+                          { l:"LOSERS", v:allTrades.length-wins, c:"#f87171" },
+                        ].map(s => (
+                          <div key={s.l} style={{ display:"flex", flexDirection:"column", gap:2 }}>
+                            <div style={{ fontSize:8, color:"#3b82f6", letterSpacing:"0.12em" }}>{s.l}</div>
+                            <div style={{ fontSize:14, color:s.c, fontWeight:600 }}>{s.v}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Table */}
+                    {allTrades.length === 0 ? (
+                      <div style={{ textAlign:"center", padding:"40px 0", color:"#475569", fontSize:12 }}>No imported trade data for this range.</div>
+                    ) : (
+                      <div style={{ overflowX:"auto" }}>
+                        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
+                          <thead>
+                            <tr style={{ background:"#0a0e1a", borderBottom:"1px solid #1e3a5f" }}>
+                              {["DATE","SYMBOL","DIRECTION","QTY","ENTRY","EXIT","DURATION","GROSS P&L","COMMISSION","NET P&L","ORDER TYPE"].map(h => (
+                                <th key={h} style={{ padding:"8px 10px", textAlign:"left", fontSize:8, color:"#3b82f6", letterSpacing:"0.1em", fontWeight:400, whiteSpace:"nowrap" }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {allTrades.map((t,i) => {
+                              const net = Number.isFinite(t.pnl) ? t.pnl - (t.commission||0) : null;
+                              const dir = (t.direction||"").toUpperCase();
+                              return (
+                                <tr key={i} style={{ borderBottom:"1px solid #0f1729", background: i%2===0?"#0a0e1a":"#0d1525" }}
+                                  onMouseEnter={e=>e.currentTarget.style.background="#0f1e38"} onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"#0a0e1a":"#0d1525"}>
+                                  <td style={{ padding:"7px 10px", color:"#64748b", whiteSpace:"nowrap" }}>{t._entryDate}</td>
+                                  <td style={{ padding:"7px 10px", color:"#93c5fd", fontWeight:600 }}>{t.symbol||"—"}</td>
+                                  <td style={{ padding:"7px 10px" }}>
+                                    <span style={{ padding:"2px 8px", borderRadius:3, fontSize:9, fontWeight:600, letterSpacing:"0.06em",
+                                      background: dir==="LONG"?"rgba(74,222,128,0.12)":dir==="SHORT"?"rgba(248,113,113,0.12)":"rgba(148,163,184,0.1)",
+                                      color: dir==="LONG"?"#4ade80":dir==="SHORT"?"#f87171":"#94a3b8" }}>{dir||"—"}</span>
+                                  </td>
+                                  <td style={{ padding:"7px 10px", color:"#e2e8f0" }}>{t.qty||"—"}</td>
+                                  <td style={{ padding:"7px 10px", color:"#94a3b8", whiteSpace:"nowrap" }}>{t.buyPrice!=null?`$${Number(t.buyPrice).toFixed(2)}`:"—"}</td>
+                                  <td style={{ padding:"7px 10px", color:"#94a3b8", whiteSpace:"nowrap" }}>{t.sellPrice!=null?`$${Number(t.sellPrice).toFixed(2)}`:"—"}</td>
+                                  <td style={{ padding:"7px 10px", color:"#64748b" }}>{t.duration||"—"}</td>
+                                  <td style={{ padding:"7px 10px", color:Number.isFinite(t.pnl)?(t.pnl>=0?"#4ade80":"#f87171"):"#64748b", fontWeight:600 }}>{Number.isFinite(t.pnl)?(t.pnl>=0?"+":"")+`$${t.pnl.toFixed(2)}`:"—"}</td>
+                                  <td style={{ padding:"7px 10px", color:"#f87171" }}>{t.commission>0?`-$${t.commission.toFixed(2)}`:"—"}</td>
+                                  <td style={{ padding:"7px 10px", color:net!=null?(net>=0?"#4ade80":"#f87171"):"#64748b", fontWeight:600 }}>{net!=null?(net>=0?"+":"")+`$${net.toFixed(2)}`:"—"}</td>
+                                  <td style={{ padding:"7px 10px", color:"#64748b" }}>{t.orderType||"—"}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* ── JOURNAL ENTRIES sub-view ── */}
+              {listSubTab === "journal" && <>
 
               {/* Search bar */}
               <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center" }}>
@@ -9256,7 +9986,7 @@ export default function TradingJournal() {
                     const a = entryAnalyticsMap[entry.id];
                     return (
                       <div key={entry.id} className="entry-card" onClick={() => viewDetail(entry)}
-                        style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 6, padding: "18px 24px", display: "grid", gridTemplateColumns: "160px 1fr auto auto", gap: 24, alignItems: "center" }}>
+                        style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderBottom: "2px solid transparent", borderImage: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent) 1", borderRadius: 6, padding: "18px 24px", display: "grid", gridTemplateColumns: "160px 1fr auto auto", gap: 24, alignItems: "center" }}>
 
                         {/* DATE COLUMN */}
                         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -9279,15 +10009,15 @@ export default function TradingJournal() {
                           <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
                             {a && <>
                               <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>Trades</div>
+                                <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase" }}>Trades</div>
                                 <div style={{ fontSize: 15, color: "#e2e8f0", fontWeight: 600 }}>{a.trades}</div>
                               </div>
                               <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>Win Rate</div>
+                                <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase" }}>Win Rate</div>
                                 <div style={{ fontSize: 15, color: a.winRate >= 50 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{Math.round(a.winRate)}%</div>
                               </div>
                               <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>W / L</div>
+                                <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase" }}>W / L</div>
                                 <div style={{ fontSize: 15, fontWeight: 600 }}>
                                   <span style={{ color: "#4ade80" }}>{a.winners}</span>
                                   <span style={{ color: "#475569" }}> / </span>
@@ -9296,14 +10026,14 @@ export default function TradingJournal() {
                               </div>
                               {a.profitFactor !== null && a.profitFactor !== undefined && (
                                 <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                  <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>Prof. Factor</div>
+                                  <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase" }}>Prof. Factor</div>
                                   <div style={{ fontSize: 15, color: a.profitFactor >= 1 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{typeof a.profitFactor === "number" ? a.profitFactor.toFixed(2) : "—"}</div>
                                 </div>
                               )}
                               {parseFloat(entry.commissions) > 0 && (
                                 <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                                  <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>Fees</div>
-                                  <div style={{ fontSize: 15, color: "#f87171", fontWeight: 600 }}>-${parseFloat(entry.commissions).toFixed(2)}</div>
+                                  <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase" }}>Fees</div>
+                                  <div style={{ fontSize: 11, color: "#475569" }}>-${parseFloat(entry.commissions).toFixed(2)}</div>
                                 </div>
                               )}
                             </>}
@@ -9319,7 +10049,7 @@ export default function TradingJournal() {
                               entry.sessionMistakes.includes("No Mistakes — Executed the Plan ✓") ? (
                                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 4, fontSize: 11, background: "#052e16", border: "1px solid #166534", color: "#4ade80" }}>✓ Clean Session</span>
                               ) : (
-                                <span style={{ padding: "3px 10px", borderRadius: 4, fontSize: 11, background: "#1f0606", border: "1px solid #7f1d1d", color: "#f87171" }}>
+                                <span style={{ padding: "3px 10px", borderRadius: 4, fontSize: 11, background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", color: "#f87171" }}>
                                   {entry.sessionMistakes.length} mistake{entry.sessionMistakes.length !== 1 ? "s" : ""}
                                 </span>
                               )
@@ -9345,37 +10075,45 @@ export default function TradingJournal() {
                   })}
                 </div>
               )}
-            </>
+            </>}
+            </div>
           )}
 
           {/* AI Recap banner */}
           {entries.length > 0 && (
-            <div style={{ marginTop: 20, background: "#0a0e1a", border: "1px solid #1e3a5f", borderRadius: 6, overflow: "hidden" }}>
+            <div style={{ marginTop: 20, background: "#0a0e1a", border: "1px solid #1e3a5f", borderRadius: 6, overflow: "hidden", position: "relative" }}>
+              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
               <div style={{ padding: "18px 24px", background: "#0a1628", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <div style={{ fontSize: 12, color: "#93c5fd", letterSpacing: "0.1em", fontWeight: 600 }}>✦ AI WEEKLY & MONTHLY RECAP</div>
-                  <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>Claude analyzes your journal notes and identifies patterns, lessons & focus areas</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>✦ AI WEEKLY & MONTHLY RECAP</div>
+                  <div style={{ fontSize: 9, color: "#475569", marginTop: 3, letterSpacing: "0.1em" }}>ANALYSE · REFLECT · IMPROVE</div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button onClick={() => { setRecapInitMode("weekly"); setView("recap"); }}
-                    style={{ background: "#1d4ed8", color: "white", border: "none", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s" }}>
+                    style={{ background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", color: "#070d1a", border: "none", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 700, transition: "all .15s" }}>
                     ANALYSE WEEK →
                   </button>
                   <button onClick={() => { setRecapInitMode("monthly"); setView("recap"); }}
-                    style={{ background: "#1d4ed8", color: "white", border: "none", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s" }}>
+                    style={{ background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", color: "#070d1a", border: "none", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 700, transition: "all .15s" }}>
                     ANALYSE MONTH →
                   </button>
                 </div>
               </div>
             </div>
           )}
-        </>)}
+        </div>)}
 
         {/* NEW/EDIT */}
         {view === "new" && (
           <div>
             <div style={{ marginBottom: 18 }}>
-              <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, color: "#94a3b8", letterSpacing: "0.1em" }}>{activeEntry ? "EDIT ENTRY" : "NEW ENTRY"}</div>
+              <div style={{ marginBottom: 4 }}>
+  <div style={{ height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", borderRadius: 1, marginBottom: 14 }} />
+  <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 32, letterSpacing: "0.12em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1 }}>{activeEntry ? "✎ EDIT ENTRY" : "✦ NEW ENTRY"}</div>
+  </div>
+  <div className="helper-text" style={{ marginTop: 4 }}>{activeEntry ? "UPDATE YOUR SESSION · REVISE YOUR NOTES" : "LOG YOUR SESSION · CAPTURE YOUR EDGE · GROW DAILY"}</div>
+</div>
             </div>
             {!activeEntry && (() => {
               const yp = getYesterdayPlan();
@@ -9403,11 +10141,18 @@ export default function TradingJournal() {
                 </div>
               );
             })()}
-            <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 18, marginBottom: 18 }}>
-              <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>DATE</label><input type="date" value={form.date} onChange={e => f("date", e.target.value)} /></div>
-              <div style={{ gridColumn: "2 / -1" }}><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>{isProp ? "INSTRUMENTS TRADED" : "TICKER / SYMBOL"}</label>
+            <div style={{ display: "grid", gridTemplateColumns: "180px 1fr 180px", gap: 18, alignItems: "start", marginBottom: 18 }}>
+
+              {/* ── DATE ── */}
+              <div>
+                <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>DATE</label>
+                <input type="date" value={form.date} onChange={e => f("date", e.target.value)} style={{ width: "100%" }} />
+              </div>
+
+              {/* ── TICKER / INSTRUMENTS ── */}
+              <div>
+                <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>{isProp ? "INSTRUMENTS TRADED" : "TICKER / SYMBOL"}</label>
                 {isProp ? (() => {
-                  // Prop accounts: existing pill selector + custom
                   const known = ["ES", "MES", "NQ", "MNQ"];
                   const selected = form.instruments || [];
                   const toggle = (sym) => {
@@ -9428,12 +10173,6 @@ export default function TradingJournal() {
                           style={{ padding: "8px 14px", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em", background: "transparent", border: "1px solid #1e293b", color: "#94a3b8" }}>
                           + Custom
                         </button>
-                        {/* Gross P&L inline — right side */}
-                        <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-                          <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>GROSS P&L ($)</label>
-                          <input type="number" placeholder="Auto on import" value={form.pnl} onChange={e => f("pnl", e.target.value)}
-                            style={{ width: 160, fontSize: 16, fontWeight: 600, padding: "8px 12px", textAlign: "right" }} />
-                        </div>
                       </div>
                       {selected.map((sym, idx) => !known.includes(sym) && (
                         <div key={idx} style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
@@ -9447,36 +10186,35 @@ export default function TradingJournal() {
                     </div>
                   );
                 })() : (
-                  // Personal accounts: free-form text input, defaults to Stock context
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <input
-                      type="text"
-                      placeholder="e.g. AAPL, TSLA, SPY, BTC… (stocks, ETFs, crypto)"
-                      value={(form.instruments || []).join(", ")}
-                      onChange={e => {
-                        const raw = e.target.value;
-                        const parsed = raw.split(/[,\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
-                        f("instruments", raw.trim() ? parsed : []);
-                      }}
-                      style={{ flex: 1, fontSize: 13 }}
-                    />
-                    {/* Gross P&L inline — right side */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
-                      <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>GROSS P&L ($)</label>
-                      <input type="number" placeholder="0.00" value={form.pnl} onChange={e => f("pnl", e.target.value)}
-                        style={{ width: 160, fontSize: 16, fontWeight: 600, padding: "8px 12px", textAlign: "right" }} />
-                    </div>
-          </div>
-          )}
+                  <input
+                    type="text"
+                    placeholder="e.g. AAPL, TSLA, SPY, BTC… (stocks, ETFs, crypto)"
+                    value={(form.instruments || []).join(", ")}
+                    onChange={e => {
+                      const raw = e.target.value;
+                      const parsed = raw.split(/[,\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+                      f("instruments", raw.trim() ? parsed : []);
+                    }}
+                    style={{ width: "100%", fontSize: 13 }}
+                  />
+                )}
               </div>
+
+              {/* ── GROSS P&L ── */}
+              <div>
+                <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>GROSS P&L ($)</label>
+                <input type="number" placeholder={isProp ? "Auto on import" : "0.00"} value={form.pnl} onChange={e => f("pnl", e.target.value)}
+                  style={{ width: "100%", fontSize: 16, fontWeight: 600, padding: "8px 12px", textAlign: "right" }} />
+              </div>
+
             </div>
             {/* Fees + Net PnL + optional cash deposit row */}
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 4, padding: "8px 14px", flexWrap: "wrap" }}>
-              <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>FEES ($)</div>
+              <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>FEES ($)</div>
               <input type="number" min="0" placeholder="0.00" value={form.commissions} onChange={e => f("commissions", e.target.value)}
                 style={{ width: 90, fontSize: 13, padding: "4px 8px" }} />
               <div style={{ width: "1px", height: 20, background: "#1e293b", margin: "0 4px" }} />
-              <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>NET P&L</div>
+              <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", whiteSpace: "nowrap" }}>NET P&L</div>
               {(() => {
                 const gross = parseFloat(form.pnl);
                 const comm = parseFloat(form.commissions) || 0;
@@ -9496,7 +10234,11 @@ export default function TradingJournal() {
               {TABS.map(t => (
                 <button key={t.id} disabled={t.disabled}
                   onClick={() => !t.disabled && setTab(t.id)}
-                  style={{ flex: 1, padding: "11px 0", borderRadius: 4, fontFamily: "inherit", fontSize: 12, cursor: t.disabled ? "not-allowed" : "pointer", transition: "all .15s", letterSpacing: "0.06em", opacity: t.disabled ? 0.35 : 1, background: tab === t.id ? "#1e3a5f" : "transparent", border: `1px solid ${tab === t.id ? "#3b82f6" : "#1e293b"}`, color: tab === t.id ? "#93c5fd" : "#94a3b8", textAlign: "center" }}>
+                  style={{ position: "relative", flex: 1, padding: "11px 0", borderRadius: 6, fontFamily: "inherit", fontSize: 12, cursor: t.disabled ? "not-allowed" : "pointer", transition: "all .15s", letterSpacing: "0.06em", opacity: t.disabled ? 0.35 : 1, overflow: "hidden", textAlign: "center",
+                    background: tab === t.id ? "rgba(10,18,32,0.95)" : "transparent",
+                    border: `1px solid ${tab === t.id ? "#1e3a5f" : "#1e293b"}`,
+                    color: tab === t.id ? "#e2e8f0" : "#64748b" }}>
+                  {tab === t.id && <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)", borderRadius: "0 0 5px 5px" }} />}
                   {t.label.toUpperCase()}
                 </button>
               ))}
@@ -9504,13 +10246,33 @@ export default function TradingJournal() {
 
             {tab === "session" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8, display: "block" }}>MARKET BIAS</label><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{BIAS_OPTIONS.map(b => <button key={b} className={`pill ${form.bias === b ? "sel" : ""}`} onClick={() => f("bias", b)}>{b.toUpperCase()}</button>)}</div></div>
-                <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8, display: "block" }}>MOOD / MENTAL STATE <span style={{ color: "#64748b", fontWeight: 400, letterSpacing: 0 }}>· select all that apply</span></label><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{MOOD_OPTIONS.map(m => { const sel = (form.moods || []).includes(m); return <button key={m} className={`pill ${sel ? "sel" : ""}`} onClick={() => { const cur = form.moods || []; f("moods", sel ? cur.filter(x => x !== m) : [...cur, m]); }}>{m}</button>; })}</div></div>
+
+                {/* Sub-tab strip: SESSION | LESSONS */}
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[
+                    ["session", "📋", "SESSION", "hue-rotate(180deg) saturate(3) brightness(1.4)"],
+                    ["lessons", "📖", "LESSONS",  "hue-rotate(30deg)  saturate(4) brightness(1.2)"],
+                  ].map(([id, emoji, text, emojiFilter]) => (
+                    <button key={id} onClick={() => setSessionInnerTab(id)}
+                      style={{ padding: "8px 20px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", display: "flex", alignItems: "center", gap: 6,
+                        background: sessionInnerTab === id ? "#1e3a5f" : "transparent",
+                        border: `1px solid ${sessionInnerTab === id ? "#3b82f6" : "#1e293b"}`,
+                        color: sessionInnerTab === id ? "#93c5fd" : "#94a3b8" }}>
+                      <span style={{ fontSize: 13, filter: emojiFilter }}>{emoji}</span>
+                      {text}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── SESSION sub-tab ── */}
+                {sessionInnerTab === "session" && <>
+                <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8, display: "block" }}>MARKET BIAS</label><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{BIAS_OPTIONS.map(b => <button key={b} className={`pill ${form.bias === b ? "sel" : ""}`} onClick={() => f("bias", b)}>{b.toUpperCase()}</button>)}</div></div>
+                <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8, display: "block" }}>MOOD / MENTAL STATE <span style={{ color: "#64748b", fontWeight: 400, letterSpacing: 0 }}>· select all that apply</span></label><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{MOOD_OPTIONS.map(m => { const sel = (form.moods || []).includes(m); return <button key={m} className={`pill ${sel ? "sel" : ""}`} onClick={() => { const cur = form.moods || []; f("moods", sel ? cur.filter(x => x !== m) : [...cur, m]); }}>{m}</button>; })}</div></div>
                 <div>
-                  <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8, display: "block" }}>SESSION MISTAKES <span style={{ color: "#64748b", fontWeight: 400, letterSpacing: 0 }}>· select all that apply</span></label>
+                  <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8, display: "block" }}>SESSION MISTAKES <span style={{ color: "#64748b", fontWeight: 400, letterSpacing: 0 }}>· select all that apply</span></label>
                   <MistakesDropdown selected={form.sessionMistakes || []} onChange={v => f("sessionMistakes", v)} />
                 </div>
-                <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8, display: "block" }}>SESSION GRADE / SYSTEM ADHERENCE SCORE</label><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{GRADE_OPTIONS.map(g => <button key={g} className={`pill ${form.grade === g ? "sel" : ""}`} onClick={() => f("grade", g)} style={form.grade === g ? { borderColor: gradeColor(g), background: "#0f172a", color: gradeColor(g) } : {}}>{g}</button>)}</div></div>
+                <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8, display: "block" }}>SESSION GRADE / SYSTEM ADHERENCE SCORE</label><div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{GRADE_OPTIONS.map(g => <button key={g} className={`pill ${form.grade === g ? "sel" : ""}`} onClick={() => f("grade", g)} style={form.grade === g ? { borderColor: gradeColor(g), background: "#0f172a", color: gradeColor(g) } : {}}>{g}</button>)}</div></div>
                 {/* Feature 3: Dual Scores */}
                 {(() => {
                   // Dynamic color scale: red(1) → amber(5) → green(10)
@@ -9623,8 +10385,24 @@ export default function TradingJournal() {
                     </div>
                   );
                 })()}
-                <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>MARKET / TAPE NOTES</label><textarea rows={4} placeholder="Price action, key levels, macro context, structure..." value={form.marketNotes} onChange={e => f("marketNotes", e.target.value)} /></div>
-                <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>RULES FOLLOWED / BROKEN</label><textarea rows={3} placeholder="Did you follow your trading plan?" value={form.rules} onChange={e => f("rules", e.target.value)} /></div>
+                <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>MARKET / TAPE NOTES</label><textarea rows={4} placeholder="Price action, key levels, macro context, structure..." value={form.marketNotes} onChange={e => f("marketNotes", e.target.value)} /></div>
+                <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>RULES FOLLOWED / BROKEN</label><textarea rows={3} placeholder="Did you follow your trading plan?" value={form.rules} onChange={e => f("rules", e.target.value)} /></div>
+                </> /* end session sub-tab */}
+
+                {/* ── LESSONS sub-tab ── */}
+                {sessionInnerTab === "lessons" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>LESSONS LEARNED TODAY</label><textarea rows={5} placeholder="What did the market teach you today?" value={form.lessonsLearned} onChange={e => f("lessonsLearned", e.target.value)} /></div>
+                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>MISTAKES TO AVOID</label><textarea rows={4} placeholder="Be specific. e.g. 'Don't trade after 2 back-to-back losses'" value={form.mistakes} onChange={e => f("mistakes", e.target.value)} /></div>
+                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>AREAS FOR IMPROVEMENT</label><textarea rows={3} placeholder="Entry timing? Holding winners? Cutting losers?" value={form.improvements} onChange={e => f("improvements", e.target.value)} /></div>
+                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>BEST TRADE OF THE DAY</label><textarea rows={3} placeholder="What setup worked? What went right?" value={form.bestTrade} onChange={e => f("bestTrade", e.target.value)} /></div>
+                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>WORST TRADE / MISTAKE</label><textarea rows={3} placeholder="What went wrong? Revenge trade? Poor sizing?" value={form.worstTrade} onChange={e => f("worstTrade", e.target.value)} /></div>
+                    <div style={{ border: "1px solid #1e3a5f", borderRadius: 6, padding: "14px 16px", background: "#0a1628" }}>
+                      <label style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>ONE RULE TO REINFORCE TOMORROW?</label>
+                      <textarea rows={2} placeholder="e.g. 'No trades during the Afternoon Deadzone' or 'Size down after first loss'" value={form.reinforceRule || ""} onChange={e => f("reinforceRule", e.target.value)} />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -9642,14 +10420,14 @@ export default function TradingJournal() {
                   </div>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {["Tradovate", "Interactive Brokers", "Questrade", "NinjaTrader", "Rithmic", "Any Format"].map(b => (
-                      <span key={b} style={{ fontSize: 9, color: "#64748b", border: "1px solid #1e293b", padding: "2px 8px", borderRadius: 12, letterSpacing: "0.08em" }}>{b}</span>
+                      <span key={b} style={{ fontSize: 9, color: "#3b82f6", border: "1px solid #1e293b", padding: "2px 8px", borderRadius: 12, letterSpacing: "0.08em" }}>{b}</span>
                     ))}
                   </div>
                 </div>
 
                 {/* CSV Upload */}
                 <div>
-                  <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>UPLOAD CSV FILE</label>
+                  <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>UPLOAD CSV FILE</label>
                   <div
                     style={{ border: "2px dashed #1e3a5f", borderRadius: 6, padding: "20px 24px", textAlign: "center", cursor: "pointer", background: csvFileName ? "rgba(59,130,246,0.05)" : "transparent", transition: "all .15s" }}
                     onClick={() => csvInputRef.current && csvInputRef.current.click()}
@@ -9687,7 +10465,7 @@ export default function TradingJournal() {
                 {/* Paste textarea */}
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase" }}>PASTE BROKER DATA</label>
+                    <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase" }}>PASTE BROKER DATA</label>
                     {detectedFormat && <span style={{ fontSize: 9, color: "#3b82f6", background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)", padding: "2px 8px", borderRadius: 12 }}>✓ {detectedFormat}</span>}
                   </div>
                   <textarea rows={10} placeholder={"Paste your broker export here — any format works:\n\n• Tradovate Orders CSV\n• Interactive Brokers Flex Query\n• Questrade Activity Export\n• NinjaTrader Trade Log\n• Any tab or comma separated fills data\n\nJust paste and hit the button — AI handles the rest."} value={importRaw} onChange={e => { setImportRaw(e.target.value); setCsvFileName(""); setDetectedFormat(""); setImportSuccess(false); setAiParseError(""); }} style={{ fontFamily: "monospace", fontSize: 11 }} />
@@ -9752,7 +10530,7 @@ export default function TradingJournal() {
                           const losses = trades.filter(t => Number.isFinite(t.pnl) && t.pnl < 0);
                           const totalPnL = trades.reduce((s,t) => s + (Number.isFinite(t.pnl) ? t.pnl : 0), 0);
                           const totalFees = trades.reduce((s,t) => s + (Number.isFinite(t.commission) ? t.commission : 0), 0);
-                          const bySymbol = trades.reduce((acc,t) => { if(t.symbol){ acc[t.symbol]=(acc[t.symbol]||0)+(Number.isFinite(t.pnl)?t.pnl:0); } return acc; }, {});
+                          const bySymbol = trades.reduce((acc,t) => { const sym=normalizeSymbol(t.symbol); if(sym){ acc[sym]=(acc[sym]||0)+(Number.isFinite(t.pnl)?t.pnl:0); } return acc; }, {});
                           return { totalPnL, wins: wins.length, losses: losses.length, totalFees, bySymbol, trades: trades.length };
                         })()}
                         trades={trades}
@@ -9765,29 +10543,18 @@ export default function TradingJournal() {
                     </div>
                   );
                 })()}
+
               </div>
             )}
 
             {tab === "analysis" && analytics && (
-              <AnalyticsPanel a={analytics} trades={form.parsedTrades} pnlColor={pnlColor} fmtPnl={fmtPnl} analyticsTab={analyticsTab} setAnalyticsTab={setAnalyticsTab} totalFees={parseFloat(form.commissions) || 0} />
+              <AnalyticsPanel a={analytics} trades={form.parsedTrades} pnlColor={pnlColor} fmtPnl={fmtPnl} analyticsTab={analyticsTab} setAnalyticsTab={setAnalyticsTab} totalFees={parseFloat(form.commissions) || 0} rawCsvFile={form.rawCsvFile || null} />
             )}
 
-            {tab === "lessons" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>LESSONS LEARNED TODAY</label><textarea rows={5} placeholder="What did the market teach you today?" value={form.lessonsLearned} onChange={e => f("lessonsLearned", e.target.value)} /></div>
-                <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>MISTAKES TO AVOID</label><textarea rows={4} placeholder="Be specific. e.g. 'Don't trade after 2 back-to-back losses'" value={form.mistakes} onChange={e => f("mistakes", e.target.value)} /></div>
-                <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>AREAS FOR IMPROVEMENT</label><textarea rows={3} placeholder="Entry timing? Holding winners? Cutting losers?" value={form.improvements} onChange={e => f("improvements", e.target.value)} /></div>
-                <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>BEST TRADE OF THE DAY</label><textarea rows={3} placeholder="What setup worked? What went right?" value={form.bestTrade} onChange={e => f("bestTrade", e.target.value)} /></div>
-                <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>WORST TRADE / MISTAKE</label><textarea rows={3} placeholder="What went wrong? Revenge trade? Poor sizing?" value={form.worstTrade} onChange={e => f("worstTrade", e.target.value)} /></div>
-                <div style={{ border: "1px solid #1e3a5f", borderRadius: 6, padding: "14px 16px", background: "#0a1628" }}>
-                  <label style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>ONE RULE TO REINFORCE TOMORROW?</label>
-                  <textarea rows={2} placeholder="e.g. 'No trades during the Afternoon Deadzone' or 'Size down after first loss'" value={form.reinforceRule || ""} onChange={e => f("reinforceRule", e.target.value)} />
-                </div>
-              </div>
-            )}
+
 
             {tab === "tomorrow" && (
-              <div><label style={{ fontSize: 10, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>PLAN FOR TOMORROW</label><textarea rows={7} placeholder="Key levels, economic events, intended setups, max loss for the day, goals..." value={form.tomorrow} onChange={e => f("tomorrow", e.target.value)} /></div>
+              <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>PLAN FOR TOMORROW</label><textarea rows={7} placeholder="Key levels, economic events, intended setups, max loss for the day, goals..." value={form.tomorrow} onChange={e => f("tomorrow", e.target.value)} /></div>
             )}
 
             <ChartScreenshotZone
@@ -9842,19 +10609,26 @@ export default function TradingJournal() {
 
         {/* PERSONAL BALANCE BANNER — shown on list view for personal accounts */}
         {view === "list" && isPersonal && personalBalance && personalBalance.currentBalance > 0 && (
-          <div style={{ background: "#070d1a", border: "1px solid #1e3a5f", borderRadius: 6, padding: "14px 18px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-            <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.12em" }}>💼 ACCOUNT BALANCE</div>
-            <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-              {[
-                { l: "STARTING", v: `$${personalBalance.startingBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, c: "#475569" },
-                { l: "NET P&L", v: fmtPnl(totalPnL), c: pnlColor(totalPnL) },
-                { l: "CURRENT BALANCE", v: `$${personalBalance.currentBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, c: "#e2e8f0" },
-              ].map(s => (
-                <div key={s.l} style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 2 }}>{s.l}</div>
-                  <div style={{ fontSize: 14, color: s.c, fontWeight: 500 }}>{s.v}</div>
-                </div>
-              ))}
+          <div style={{ background: "#0a0e1a", border: "1px solid #1e3a5f", borderRadius: 6, overflow: "hidden", position: "relative", marginBottom: 16 }}>
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
+            <div style={{ padding: "14px 18px", background: "#0a1628", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+              {/* Emoji rendered separately so gradient doesn't swallow it */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 16 }}>💼</span>
+                <span style={{ fontSize: 15, fontWeight: 700, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>ACCOUNT BALANCE</span>
+              </div>
+              <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+                {[
+                  { l: "STARTING", v: `$${personalBalance.startingBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, c: "#475569" },
+                  { l: "NET P&L", v: fmtPnl(totalPnL), c: pnlColor(totalPnL) },
+                  { l: "CURRENT BALANCE", v: `${personalBalance.currentBalance >= personalBalance.startingBalance ? "+" : "-"}$${personalBalance.currentBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, c: personalBalance.currentBalance > personalBalance.startingBalance ? "#4ade80" : personalBalance.currentBalance < personalBalance.startingBalance ? "#f87171" : "#e2e8f0" },
+                ].map(s => (
+                  <div key={s.l} style={{ textAlign: "right" }}>
+                    <div style={{ fontSize: 9, letterSpacing: "0.1em", marginBottom: 3, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>{s.l}</div>
+                    <div style={{ fontSize: 15, color: s.c, fontWeight: 600 }}>{s.v}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
