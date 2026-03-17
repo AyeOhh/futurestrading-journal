@@ -857,24 +857,41 @@ const getEstOffsetMinutes = () => {
 const getSession = (timeStr, tzLock = false) => {
   if (!timeStr) return "Unknown";
   const str = timeStr.trim();
-  // Support both "YYYY-MM-DD HH:MM:SS" and plain "HH:MM:SS" or "HH:MM" formats
-  const spaceIdx = str.indexOf(" ");
-  const timePart = (spaceIdx !== -1 ? str.slice(spaceIdx + 1) : str).trim();
-  const timeLower = timePart.toLowerCase();
-  const colonParts = timePart.split(":");
+
   let h, mn;
-  if (colonParts.length >= 2) {
-    h = parseInt(colonParts[0]); mn = parseInt(colonParts[1]);
-  } else if (/^\d{6}$/.test(timePart)) {
-    // IBKR HHMMSS no-colon format e.g. "094500"
-    h = parseInt(timePart.slice(0,2)); mn = parseInt(timePart.slice(2,4));
-  } else if (/^\d{4}$/.test(timePart)) {
-    // HHMM no-colon format
-    h = parseInt(timePart.slice(0,2)); mn = parseInt(timePart.slice(2,4));
-  } else { return "Unknown"; }
-  if (isNaN(h) || isNaN(mn)) return "Unknown";
-  if (timeLower.includes("pm")) { if (h !== 12) h += 12; }
-  else if (timeLower.includes("am")) { if (h === 12) h = 0; }
+
+  // Method 1: YYYYMMDD HHMMSS or YYYYMMDD;HHMMSS (IBKR style) e.g. "20260311 132635"
+  const ibkrMatch = str.match(/^\d{8}[;\s](\d{2})(\d{2})\d{2}$/);
+  if (ibkrMatch) {
+    h = parseInt(ibkrMatch[1]); mn = parseInt(ibkrMatch[2]);
+  }
+
+  // Method 2: ISO with T separator e.g. "2026-03-11T09:30:00" or "2026-03-11T09:30:00Z"
+  if (h === undefined) {
+    const isoMatch = str.match(/T(\d{1,2}):(\d{2})(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})?$/i);
+    if (isoMatch) { h = parseInt(isoMatch[1]); mn = parseInt(isoMatch[2]); }
+  }
+
+  // Method 3: HH:MM or H:MM with optional :SS and optional AM/PM anywhere in string
+  if (h === undefined) {
+    const hhmm = str.match(/\b(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?/i);
+    if (hhmm) {
+      h = parseInt(hhmm[1]); mn = parseInt(hhmm[2]);
+      const ampm = (hhmm[3] || "").toLowerCase();
+      if (ampm === "pm" && h !== 12) h += 12;
+      else if (ampm === "am" && h === 12) h = 0;
+    }
+  }
+
+  // Method 4: bare HHMMSS or HHMM string
+  if (h === undefined) {
+    const digits = str.replace(/\D/g, "");
+    if (digits.length >= 6) { h = parseInt(digits.slice(0,2)); mn = parseInt(digits.slice(2,4)); }
+    else if (digits.length === 4) { h = parseInt(digits.slice(0,2)); mn = parseInt(digits.slice(2,4)); }
+  }
+
+  if (h === undefined || isNaN(h) || isNaN(mn) || h > 23 || mn > 59) return "Unknown";
+
   let t = h * 60 + mn;
   if (tzLock) t = ((t - getEstOffsetMinutes()) % 1440 + 1440) % 1440;
   if (t >= 1080) return "Asian Session (6PM–12AM)";
@@ -3180,13 +3197,21 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                         <div style={{ fontSize: 15, color: monthEntries.length && monthWins / monthEntries.length >= 0.5 ? "#4ade80" : "#f87171", fontWeight: 600 }}>
                           {monthEntries.length ? `${Math.round(monthWins / monthEntries.length * 100)}%` : "—"}
                         </div>
-                        <div style={{ fontSize: 9, color: "#334155", marginTop: 2 }}>{monthWins}W · {monthLoss}L</div>
+                        <div style={{ fontSize: 9, color: "#64748b", marginTop: 2 }}>
+                          <span style={{ color: "#4ade80" }}>{monthWins}W</span>
+                          <span style={{ color: "#475569" }}> · </span>
+                          <span style={{ color: "#f87171" }}>{monthLoss}L</span>
+                        </div>
                       </div>
                       {monthAnalytics && <>
                         <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
                           <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>TRADE WIN RATE</div>
                           <div style={{ fontSize: 15, color: monthAnalytics.winRate >= 50 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{monthAnalytics.winRate.toFixed(0)}%</div>
-                          <div style={{ fontSize: 9, color: "#334155", marginTop: 2 }}>{monthAnalytics.winners}W · {monthAnalytics.losers}L</div>
+                          <div style={{ fontSize: 9, color: "#64748b", marginTop: 2 }}>
+                            <span style={{ color: "#4ade80" }}>{monthAnalytics.winners}W</span>
+                            <span style={{ color: "#475569" }}> · </span>
+                            <span style={{ color: "#f87171" }}>{monthAnalytics.losers}L</span>
+                          </div>
                         </div>
                         <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
                           <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>PROFIT FACTOR</div>
@@ -3202,14 +3227,14 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                           <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>AVG WIN / LOSS</div>
                           <div style={{ fontSize: 12, fontWeight: 600 }}>
                             <span style={{ color: "#4ade80" }}>{fmtPnl(monthAnalytics.avgWin)}</span>
-                            <span style={{ color: "#334155" }}> / </span>
+                            <span style={{ color: "#475569" }}> / </span>
                             <span style={{ color: "#f87171" }}>{fmtPnl(monthAnalytics.avgLoss)}</span>
                           </div>
                         </div>
                         <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
                           <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>TOTAL TRADES</div>
                           <div style={{ fontSize: 15, color: "#e2e8f0", fontWeight: 600 }}>{monthAnalytics.total}</div>
-                          <div style={{ fontSize: 9, color: "#334155", marginTop: 2 }}>{monthAnalytics.avgQty.toFixed(1)} avg cts</div>
+                          <div style={{ fontSize: 9, color: "#64748b", marginTop: 2 }}>{monthAnalytics.avgQty.toFixed(1)} avg cts</div>
                         </div>
                       </>}
                     </div>
@@ -3724,86 +3749,82 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               if (!hasMistakes && !hasMoods) return null;
 
               return (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
+                <div style={{ display: "flex", flexDirection: "row", gap: 16, alignItems: "flex-start" }}>
 
                   {/* LEFT — Mistake Frequency */}
-                  {hasMistakes ? (
-                    <div>
-                      <SectionHeader label="MISTAKE FREQUENCY" skey="mistakes"
-                        summary={<span style={{ color: "#64748b" }}>{mistakeSorted.length} types · {cleanSessions} clean day{cleanSessions !== 1 ? "s" : ""}</span>} />
-                      {!collapsed.mistakes && (
-                        <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
-                          {cleanSessions > 0 && (
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: mistakeSorted.length ? 10 : 0, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
-                              <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Executed the Plan</span>
-                              <span style={{ fontSize: 12, fontWeight: 600, color: "#4ade80" }}>{cleanSessions} day{cleanSessions !== 1 ? "s" : ""}</span>
-                            </div>
-                          )}
-                          {mistakeSorted.map(([mistake, count]) => {
-                            const barW = (count / maxCount) * 100;
-                            const freq = Math.round((count / monthEntries.length) * 100);
-                            return (
-                              <div key={mistake} style={{ marginBottom: 10 }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                                  <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mistake}</span>
-                                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                    <span style={{ fontSize: 9, color: "#94a3b8" }}>{freq}% of sessions</span>
-                                    <span style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>{count}×</span>
-                                  </div>
-                                </div>
-                                <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
-                                  <div style={{ width: `${barW}%`, height: "100%", background: "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <SectionHeader label="MISTAKE FREQUENCY" skey="mistakes"
+                      summary={<span style={{ color: "#64748b" }}>{mistakeSorted.length} types · {cleanSessions} clean day{cleanSessions !== 1 ? "s" : ""}</span>} />
+                    {!collapsed.mistakes && (
+                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
+                        {cleanSessions > 0 && (
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: mistakeSorted.length ? 10 : 0, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
+                            <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Executed the Plan</span>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "#4ade80" }}>{cleanSessions} day{cleanSessions !== 1 ? "s" : ""}</span>
+                          </div>
+                        )}
+                        {hasMistakes ? mistakeSorted.map(([mistake, count]) => {
+                          const barW = (count / maxCount) * 100;
+                          const freq = Math.round((count / monthEntries.length) * 100);
+                          return (
+                            <div key={mistake} style={{ marginBottom: 10 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                                <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mistake}</span>
+                                <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0, marginLeft: 8 }}>
+                                  <span style={{ fontSize: 9, color: "#94a3b8" }}>{freq}% of sessions</span>
+                                  <span style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>{count}×</span>
                                 </div>
                               </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  ) : <div />}
+                              <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
+                                <div style={{ width: `${barW}%`, height: "100%", background: "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                              </div>
+                            </div>
+                          );
+                        }) : <div style={{ fontSize: 11, color: "#475569" }}>No mistakes flagged.</div>}
+                      </div>
+                    )}
+                  </div>
 
                   {/* RIGHT — Mood vs Performance */}
-                  {hasMoods ? (
-                    <div>
-                      <SectionHeader label="MOOD VS PERFORMANCE" skey="mood"
-                        summary={<span style={{ color: "#64748b" }}>{moodEntries.length} mood{moodEntries.length !== 1 ? "s" : ""} tracked</span>} />
-                      {!collapsed.mood && (
-                        <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-                          {moodEntries.map(([mood, s]) => {
-                            const avg = s.pnl / s.sessions;
-                            const wr = Math.round((s.wins / s.sessions) * 100);
-                            const barW = Math.abs(avg) / maxAvg * 100;
-                            const isPos = avg >= 0;
-                            return (
-                              <div key={mood}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                                  <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mood}</span>
-                                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                                    <span style={{ fontSize: 9, color: "#94a3b8" }}>{s.sessions} session{s.sessions !== 1 ? "s" : ""} · {wr}% WR</span>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 70, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
-                                  </div>
-                                </div>
-                                <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
-                                  <div style={{ width: `${barW}%`, height: "100%", background: isPos ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <SectionHeader label="MOOD VS PERFORMANCE" skey="mood"
+                      summary={<span style={{ color: "#64748b" }}>{moodEntries.length} mood{moodEntries.length !== 1 ? "s" : ""} tracked</span>} />
+                    {!collapsed.mood && (
+                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                        {hasMoods ? moodEntries.map(([mood, s]) => {
+                          const avg = s.pnl / s.sessions;
+                          const wr = Math.round((s.wins / s.sessions) * 100);
+                          const barW = Math.abs(avg) / maxAvg * 100;
+                          const isPos = avg >= 0;
+                          return (
+                            <div key={mood}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                                <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mood}</span>
+                                <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0, marginLeft: 8 }}>
+                                  <span style={{ fontSize: 9, color: "#94a3b8" }}>{s.sessions}× · {wr}% WR</span>
+                                  <span style={{ fontSize: 11, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 62, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
                                 </div>
                               </div>
-                            );
-                          })}
-                          {moodEntries.length >= 2 && (() => {
-                            const best = moodEntries[0];
-                            const worst = moodEntries[moodEntries.length - 1];
-                            return (
-                              <div style={{ marginTop: 4, padding: "8px 10px", background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 4, fontSize: 10, color: "#94a3b8", lineHeight: 1.7 }}>
-                                <span style={{ color: "#3b82f6" }}>💡 </span>
-                                Best mindset: <span style={{ color: "#4ade80" }}>{best[0]}</span> (+${(best[1].pnl / best[1].sessions).toFixed(0)} avg).
-                                {(worst[1].pnl / worst[1].sessions) < 0 && <> Avoid trading in <span style={{ color: "#f87171" }}>{worst[0]}</span> state (${(worst[1].pnl / worst[1].sessions).toFixed(0)} avg).</>}
+                              <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
+                                <div style={{ width: `${barW}%`, height: "100%", background: isPos ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
                               </div>
-                            );
-                          })()}
-                        </div>
-                      )}
-                    </div>
-                  ) : <div />}
+                            </div>
+                          );
+                        }) : <div style={{ fontSize: 11, color: "#475569" }}>No mood data logged.</div>}
+                        {hasMoods && moodEntries.length >= 2 && (() => {
+                          const best = moodEntries[0];
+                          const worst = moodEntries[moodEntries.length - 1];
+                          return (
+                            <div style={{ marginTop: 4, padding: "8px 10px", background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 4, fontSize: 10, color: "#94a3b8", lineHeight: 1.7 }}>
+                              <span style={{ color: "#3b82f6" }}>💡 </span>
+                              Best mindset: <span style={{ color: "#4ade80" }}>{best[0]}</span> (+${(best[1].pnl / best[1].sessions).toFixed(0)} avg).
+                              {(worst[1].pnl / worst[1].sessions) < 0 && <> Avoid trading in <span style={{ color: "#f87171" }}>{worst[0]}</span> state.</>}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
 
                 </div>
               );
@@ -4142,7 +4163,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
   return (
     <div>
       {/* Year selector */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", gap: 6 }}>
           {years.map(y => (
             <button key={y} onClick={() => setSelectedYear(y)}
@@ -4153,8 +4174,19 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
         </div>
         <div style={{ fontSize: 10, color: "#64748b" }}>{weeks.length} weeks · {yearEntries.length} trading days</div>
       </div>
-
-
+      {/* Year display header — gradient style */}
+      <div style={{ marginBottom: 18, position: "relative" }}>
+        <div style={{ height: 1, background: "linear-gradient(90deg, #38bdf8, #818cf8, #c084fc, transparent)", marginBottom: 10, opacity: 0.5 }} />
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 38, letterSpacing: "0.1em", lineHeight: 1, background: "linear-gradient(135deg,#38bdf8 0%,#818cf8 55%,#c084fc 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+            WEEKLY BREAKDOWN
+          </div>
+          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: "#475569", letterSpacing: "0.18em", paddingBottom: 3 }}>
+            {selectedYear}
+          </div>
+        </div>
+        <div style={{ height: 1, background: "linear-gradient(90deg, transparent, #818cf8, #c084fc, transparent)", marginTop: 8, opacity: 0.25 }} />
+      </div>
 
       {/* Weekly cards */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -4507,8 +4539,17 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
       )}
 
       {/* ── MONTH GRID — immediately after Full Year Summary ── */}
-      <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, letterSpacing: "0.08em", fontWeight: 700, marginBottom: 12, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-        {PERIOD_LABELS[period]} · {selectedYear}
+      <div style={{ marginBottom: 14, position: "relative" }}>
+        <div style={{ height: 1, background: "linear-gradient(90deg, #38bdf8, #818cf8, #c084fc, transparent)", marginBottom: 10, opacity: 0.5 }} />
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 38, letterSpacing: "0.1em", lineHeight: 1, background: "linear-gradient(135deg,#38bdf8 0%,#818cf8 55%,#c084fc 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+            {PERIOD_LABELS[period]}
+          </div>
+          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: "#475569", letterSpacing: "0.18em", paddingBottom: 3 }}>
+            {selectedYear}
+          </div>
+        </div>
+        <div style={{ height: 1, background: "linear-gradient(90deg, transparent, #818cf8, #c084fc, transparent)", marginTop: 8, opacity: 0.25 }} />
       </div>
       {/* Month grid */}
       <div style={{ display: "grid", gridTemplateColumns: period === "year" ? "repeat(4, 1fr)" : period === "h1" || period === "h2" ? "repeat(3, 1fr)" : "repeat(3, 1fr)", gap: 10, marginBottom: 16 }}>
