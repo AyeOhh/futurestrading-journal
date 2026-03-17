@@ -1291,10 +1291,28 @@ const EquityCurveChart = ({ values, dots = false, height = 90, gradientId = "ecF
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: "block", overflow: "visible" }}>
       <defs>
+        {/* Profit: journal gradient stroke */}
+        <linearGradient id={`${gradientId}-stroke-profit`} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#38bdf8" />
+          <stop offset="50%" stopColor="#818cf8" />
+          <stop offset="100%" stopColor="#c084fc" />
+        </linearGradient>
+        {/* Loss: red-violet-red stroke */}
+        <linearGradient id={`${gradientId}-stroke-loss`} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#f87171" />
+          <stop offset="50%" stopColor="#c084fc" />
+          <stop offset="100%" stopColor="#f87171" />
+        </linearGradient>
+        {/* Profit fill: journal gradient tint */}
         <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.22" />
-          <stop offset="50%" stopColor="#818cf8" stopOpacity="0.18" />
-          <stop offset="100%" stopColor="#c084fc" stopOpacity="0.08" />
+          <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.12" />
+          <stop offset="50%" stopColor="#818cf8" stopOpacity="0.1" />
+          <stop offset="100%" stopColor="#c084fc" stopOpacity="0.05" />
+        </linearGradient>
+        {/* Loss fill: red tint */}
+        <linearGradient id={`${gradientId}-loss`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#f87171" stopOpacity="0.04" />
+          <stop offset="100%" stopColor="#f87171" stopOpacity="0.14" />
         </linearGradient>
         {dangerLine !== null && (
           <linearGradient id={`${gradientId}-danger`} x1="0" y1="0" x2="0" y2="1">
@@ -1321,8 +1339,7 @@ const EquityCurveChart = ({ values, dots = false, height = 90, gradientId = "ecF
         <rect x={PAD_L} y={dangerY} width={chartW} height={Math.max(0, H - PAD_B - dangerY)}
           fill={`url(#${gradientId}-danger)`} />
       )}
-      {/* Area fill */}
-      <path d={fillPath} fill={`url(#${gradientId})`} />
+
       {/* Danger line */}
       {dangerLine !== null && dangerY !== null && (
         <g>
@@ -1353,12 +1370,28 @@ const EquityCurveChart = ({ values, dots = false, height = 90, gradientId = "ecF
           </g>
         );
       })}
-      {/* Line */}
-      <polyline points={pts} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-      {/* Dots (optional) */}
-      {dots && values.map((v, i) => (
-        <circle key={i} cx={toX(i)} cy={toY(v)} r="4"
-          fill={v >= 0 ? "#4ade80" : "#f87171"} stroke="#0f1729" strokeWidth="2" />
+      {/* Area fill — journal gradient for profit, red tint for loss */}
+      <path d={fillPath} fill={lastVal >= 0 ? `url(#${gradientId})` : `url(#${gradientId}-loss)`} />
+      {/* Line — 1.5px gradient stroke */}
+      <polyline points={pts} fill="none"
+        stroke={lastVal >= 0 ? (inDangerZone ? "#fbbf24" : `url(#${gradientId}-stroke-profit)`) : `url(#${gradientId}-stroke-loss)`}
+        strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      {/* End dot — marks latest value */}
+      {(() => {
+        const lx = toX(values.length - 1);
+        const ly = toY(lastVal);
+        const dotColor = lastVal >= 0 ? (inDangerZone ? "#fbbf24" : "#c084fc") : "#f87171";
+        return (
+          <g>
+            <circle cx={lx} cy={ly} r="6" fill="none" stroke={dotColor} strokeWidth="0.75" opacity="0.4" />
+            <circle cx={lx} cy={ly} r="3.5" fill={dotColor} stroke="#0f1729" strokeWidth="2" />
+          </g>
+        );
+      })()}
+      {/* Mid-point dots (optional — small) */}
+      {dots && values.slice(0, -1).map((v, i) => (
+        <circle key={i} cx={toX(i)} cy={toY(v)} r="2.5"
+          fill={v >= 0 ? "#818cf8" : "#f87171"} stroke="#0f1729" strokeWidth="1.5" opacity="0.7" />
       ))}
     </svg>
   );
@@ -3001,7 +3034,7 @@ Rewritten summary:` }],
           <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
           <div style={{ padding: "14px 20px", background: "#0a1628", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>✦ AI WEEKLY & MONTHLY RECAP</div>
+              <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>✦ AI WEEKLY & MONTHLY RECAP</div>
               <div style={{ fontSize: 9, color: "#475569", marginTop: 3, letterSpacing: "0.1em" }}>ANALYSE · REFLECT · IMPROVE</div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
@@ -3027,8 +3060,8 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
   const [collapsed, setCollapsed] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("tj-collapse-cal-v1") || "{}");
-      return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, ...saved };
-    } catch { return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false }; }
+      return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false, ...saved };
+    } catch { return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false }; }
   });
   const toggleSection = (key) => setCollapsed(prev => {
     const next = { ...prev, [key]: !prev[key] };
@@ -3380,22 +3413,24 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
         const lineColor = points[points.length - 1].cum >= 0 ? "#4ade80" : "#f87171";
         const chartVals = points.length === 1 ? [0, points[0].cum] : points.map(p => p.cum);
         return (
-          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 6, padding: "16px 18px", marginTop: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em" }}>CUMULATIVE P&L · {(() => { const [y, m] = month.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase(); })()}</div>
-              <div style={{ fontSize: 14, color: lineColor, fontWeight: 600 }}>{fmtPnl(monthPnL)}</div>
-            </div>
-            <EquityCurveChart values={chartVals} dots={points.length > 1} height={110} gradientId="ec2" />
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-              {points.map((p, i) => {
-                const show = points.length <= 8 || i === 0 || i === points.length - 1 || i % Math.ceil(points.length / 6) === 0;
-                return (
-                  <div key={i} style={{ fontSize: 9, color: show ? "#475569" : "transparent", textAlign: "center", flex: 1 }}>
-                    {new Date(p.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </div>
-                );
-              })}
-            </div>
+          <div style={{ marginTop: 16 }}>
+            <SectionHeader label="CUMULATIVE P&L" skey="cumChart"
+              summary={<span style={{ color: lineColor, fontWeight: 600 }}>{fmtPnl(monthPnL)}</span>} />
+            {!collapsed.cumChart && (
+              <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 6, padding: "16px 18px" }}>
+                <EquityCurveChart values={chartVals} dots={points.length > 1} height={110} gradientId="ec2" />
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                  {points.map((p, i) => {
+                    const show = points.length <= 8 || i === 0 || i === points.length - 1 || i % Math.ceil(points.length / 6) === 0;
+                    return (
+                      <div key={i} style={{ fontSize: 9, color: show ? "#475569" : "transparent", textAlign: "center", flex: 1 }}>
+                        {new Date(p.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         );
       })()}
@@ -10085,7 +10120,7 @@ export default function TradingJournal() {
               <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
               <div style={{ padding: "18px 24px", background: "#0a1628", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>✦ AI WEEKLY & MONTHLY RECAP</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>✦ AI WEEKLY & MONTHLY RECAP</div>
                   <div style={{ fontSize: 9, color: "#475569", marginTop: 3, letterSpacing: "0.1em" }}>ANALYSE · REFLECT · IMPROVE</div>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
