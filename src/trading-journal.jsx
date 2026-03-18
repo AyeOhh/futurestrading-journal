@@ -399,8 +399,14 @@ const aiRequestText = async (ai, opts) => {
     } catch (err) {
       lastErr = err;
       const f = friendlyAiError(err);
+      // Hard failures — don't retry
       if (['no_key','disabled','unauthorized','forbidden'].includes(f.code)) throw err;
-      if (attempt < maxAttempts) await sleep(450 * attempt);
+      if (attempt < maxAttempts) {
+        // 429 rate limit: wait 35s first retry, 60s second retry
+        // Other errors: short exponential backoff
+        const delay = f.code === 'rate_limit' ? (attempt === 1 ? 35000 : 60000) : 450 * attempt;
+        await sleep(delay);
+      }
     }
   }
   throw lastErr || new Error('AI request failed');
@@ -5489,12 +5495,12 @@ Keep bullets concise — one clear finding per bullet. Dense, specific, no fille
       const code = parts[1] || "unknown";
       const msg = parts.slice(2).join(":") || "Unknown error";
       const helpMap = {
-        timeout: "The request timed out — your dataset may be large. Try ↺ re-run.",
+        timeout: "The request timed out. Try ↺ re-run.",
         no_key: "No API key found. Open Settings (⚙) → AI & API Key and add your key.",
-        unauthorized: "API key rejected (401). Check your key is correct in Settings (⚙).",
-        forbidden: "Request blocked (403). Check your Anthropic account permissions.",
-        rate_limit: "Rate limited (429). Wait 30 seconds then try ↺ re-run.",
-        provider_down: "Anthropic API returned a 5xx error. Try again in a moment.",
+        unauthorized: "API key rejected (401). Check your key in Settings (⚙).",
+        forbidden: "Request blocked (403). Check your Gemini/Anthropic account permissions.",
+        rate_limit: "Gemini rate limit hit (429). The journal will auto-retry with a 35-second wait between attempts. If all 3 retries fail, wait 1–2 minutes then try ↺ re-run. To avoid this: use Gemini 2.5 Flash (higher free limits) or add billing to your Google AI Studio account.",
+        provider_down: "API returned a 5xx server error. Try again in a moment.",
         network: "Network error. Check your internet connection and try again.",
       };
       return (
