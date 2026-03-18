@@ -148,12 +148,9 @@ const AI_PROVIDER_REGISTRY = [
     keyHint: 'aistudio.google.com',
     defaultModel: 'gemini-2.5-flash',
     models: [
-      { id: 'gemini-2.5-pro',        label: 'Gemini 2.5 Pro'        },
-      { id: 'gemini-2.5-flash',      label: 'Gemini 2.5 Flash'      },
-      { id: 'gemini-2.0-flash',      label: 'Gemini 2.0 Flash'      },
-      { id: 'gemini-1.5-pro',        label: 'Gemini 1.5 Pro'        },
-      { id: 'gemini-1.5-flash',      label: 'Gemini 1.5 Flash'      },
-      { id: 'gemini-1.5-flash-8b',   label: 'Gemini 1.5 Flash 8B'   },
+      { id: 'gemini-2.5-pro',               label: 'Gemini 2.5 Pro (best quality)'      },
+      { id: 'gemini-2.5-flash',             label: 'Gemini 2.5 Flash (recommended ✓)'  },
+      { id: 'gemini-2.5-flash-lite-preview-06-17', label: 'Gemini 2.5 Flash Lite (fastest, free)' },
     ],
     async request(ai, { messages, max_tokens = 600, model, timeoutMs = 120000 }) {
       const ctrl = new AbortController();
