@@ -1645,45 +1645,6 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
             )}
           </div>
 
-          {/* Performance by Time of Day */}
-          {(() => {
-            const sessions = ["Asian Session (6PM–12AM)", "London Session (12AM–9:30AM)", "NY Open (9:30AM–12PM)", "Afternoon Deadzone (12–3PM)", "Power Hour (3–4PM)", "After Hours (4–6PM)"];
-            const sessionData = sessions.map(s => ({ name: s, ...(a.bySession[s] || { trades: 0, pnl: 0, wins: 0 }) })).filter(s => s.trades > 0);
-            if (sessionData.length === 0) return null;
-            const maxAbs = Math.max(...sessionData.map(s => Math.abs(s.pnl)), 1);
-            return (
-              <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
-                <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 14 }}>PERFORMANCE BY TIME OF DAY</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {sessionData.map(s => {
-                    const wr = Math.round(s.wins / s.trades * 100);
-                    const barW = Math.abs(s.pnl) / maxAbs * 100;
-                    const shortName = s.name === "Asian Session (6PM–12AM)" ? "Asian Session" : s.name === "London Session (12AM–9:30AM)" ? "London Session" : s.name === "NY Open (9:30AM–12PM)" ? "NY Open" : s.name === "Afternoon Deadzone (12–3PM)" ? "Deadzone" : s.name === "Power Hour (3–4PM)" ? "Power Hour" : "After Hours";
-                    const timeLabel = s.name === "Asian Session (6PM–12AM)" ? "6:00 PM – 12:00 AM EST" : s.name === "London Session (12AM–9:30AM)" ? "12:00 AM – 9:30 AM EST" : s.name === "NY Open (9:30AM–12PM)" ? "9:30 AM – 12:00 PM EST" : s.name === "Afternoon Deadzone (12–3PM)" ? "12:00 – 3:00 PM EST" : s.name === "Power Hour (3–4PM)" ? "3:00 – 4:00 PM EST" : "4:00 – 6:00 PM EST";
-                    return (
-                      <div key={s.name}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
-                          <div>
-                            <span style={{ fontSize: 11, color: "#e2e8f0", fontWeight: 500 }}>{shortName}</span>
-                            <span style={{ fontSize: 9, color: "#64748b", marginLeft: 8 }}>{timeLabel}</span>
-                          </div>
-                          <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                            <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
-                            <span style={{ fontSize: 10, letterSpacing: 0 }}><span style={{ letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{s.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{s.trades - s.wins}</span></span></span>
-                            <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(2)}</span>
-                          </div>
-                        </div>
-                        <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
-                          <div style={{ width: `${barW}%`, height: "100%", background: s.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
-
           {/* Performance by Symbol */}
           {Object.keys(a.bySymbol).length > 0 && (
             <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
@@ -3077,8 +3038,8 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
   const [collapsed, setCollapsed] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("tj-collapse-cal-v1") || "{}");
-      return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false, direction: false, ...saved };
-    } catch { return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false, direction: false }; }
+      return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false, direction: false, behavioral: false, holdingtime: false, ...saved };
+    } catch { return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false, direction: false, behavioral: false, holdingtime: false }; }
   });
   const toggleSection = (key) => setCollapsed(prev => {
     const next = { ...prev, [key]: !prev[key] };
@@ -3410,17 +3371,17 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                   }}
                   onClick={e => e.stopPropagation()}
                   placeholder={isWeekend ? "weekend plan…" : "notes…"}
-                  style={{ width: "100%", fontSize: 12, color: "#7dd3fc", background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px", textAlign: "center" }}
+                  style={{ width: "100%", fontSize: 12, color: "#fbbf24", background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px", textAlign: "center" }}
                   className="no-autoresize"
                   onFocus={e => {
-                    e.currentTarget.style.color = "#bae6fd";
-                    e.currentTarget.parentNode.style.borderTopColor = "rgba(129,140,248,0.4)";
+                    e.currentTarget.style.color = "#fde68a";
+                    e.currentTarget.parentNode.style.borderTopColor = "rgba(251,191,36,0.4)";
                     // Expand to full content on focus
                     e.currentTarget.style.height = "20px";
                     e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
                   }}
                   onBlur={e => {
-                    e.currentTarget.style.color = "#7dd3fc";
+                    e.currentTarget.style.color = "#fbbf24";
                     const val = e.currentTarget.value;
                     e.currentTarget.parentNode.style.borderTopColor = val ? "#1e293b" : "transparent";
                     // Shrink back to 1 row if empty, keep height if has content
@@ -3471,47 +3432,6 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
         );
       })()}
 
-
-            {/* Performance by Time of Day */}
-            {monthAnalytics && (() => {
-              const sessions = ["Asian Session (6PM–12AM)", "London Session (12AM–9:30AM)", "NY Open (9:30AM–12PM)", "Afternoon Deadzone (12–3PM)", "Power Hour (3–4PM)", "After Hours (4–6PM)"];
-              const sessionData = sessions.map(s => ({ name: s, ...(monthAnalytics.bySession[s] || { trades: 0, pnl: 0, wins: 0 }) })).filter(s => s.trades > 0);
-              if (!sessionData.length) return null;
-              const maxAbs = Math.max(...sessionData.map(s => Math.abs(s.pnl)), 1);
-              return (
-                <div>
-                  <SectionHeader label="PERFORMANCE BY TIME OF DAY" skey="time" summary={<span style={{ color: "#64748b" }}>{sessionData.length} sessions</span>} />
-                  {!collapsed.time && (
-                  <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
-                    {sessionData.map(s => {
-                      const wr = Math.round(s.wins / s.trades * 100);
-                      const barW = Math.abs(s.pnl) / maxAbs * 100;
-                      const shortName = s.name === "Asian Session (6PM–12AM)" ? "Asian Session" : s.name === "London Session (12AM–9:30AM)" ? "London Session" : s.name === "NY Open (9:30AM–12PM)" ? "NY Open" : s.name === "Afternoon Deadzone (12–3PM)" ? "Deadzone" : s.name === "Power Hour (3–4PM)" ? "Power Hour" : "After Hours";
-                      const timeLabel = s.name === "Asian Session (6PM–12AM)" ? "6:00 PM – 12:00 AM EST" : s.name === "London Session (12AM–9:30AM)" ? "12:00 AM – 9:30 AM EST" : s.name === "NY Open (9:30AM–12PM)" ? "9:30 AM – 12:00 PM EST" : s.name === "Afternoon Deadzone (12–3PM)" ? "12:00 – 3:00 PM EST" : s.name === "Power Hour (3–4PM)" ? "3:00 – 4:00 PM EST" : "4:00 – 6:00 PM EST";
-                      return (
-                        <div key={s.name}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
-                            <div>
-                              <span style={{ fontSize: 11, color: "#e2e8f0", fontWeight: 500 }}>{shortName}</span>
-                              <span style={{ fontSize: 9, color: "#64748b", marginLeft: 8 }}>{timeLabel}</span>
-                            </div>
-                            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                              <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
-                              <span style={{ fontSize: 10, letterSpacing: 0 }}><span style={{ letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{s.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{s.trades - s.wins}</span></span></span>
-                              <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(2)}</span>
-                            </div>
-                          </div>
-                          <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
-                            <div style={{ width: `${barW}%`, height: "100%", background: s.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  )}
-                </div>
-              );
-            })()}
 
             {/* Performance by Day of Week */}
             {monthEntries.length > 0 && (() => {
@@ -3614,6 +3534,82 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                     );
                   })}
                 </div>
+                )}
+              </div>
+            )}
+
+            {/* Behavioral Edge Checks */}
+            {monthAnalytics && (monthAnalytics.afterLoss?.total > 0 || monthAnalytics.afterWin?.total > 0 || monthAnalytics.first3?.total > 0) && (
+              <div>
+                <SectionHeader label="BEHAVIORAL EDGE CHECKS" skey="behavioral"
+                  summary={<span style={{ color: "#64748b" }}>after loss · after win · first 3</span>} />
+                {!collapsed.behavioral && (
+                  <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+                      {[
+                        { label: "AFTER A LOSS",   data: monthAnalytics.afterLoss },
+                        { label: "AFTER A WIN",    data: monthAnalytics.afterWin  },
+                        { label: "FIRST 3 TRADES", data: monthAnalytics.first3    },
+                        { label: "REST OF SESSION", data: monthAnalytics.rest     },
+                      ].map(card => (
+                        <div key={card.label} style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 4, padding: "10px 12px" }}>
+                          <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 6 }}>{card.label}</div>
+                          {card.data?.total ? (
+                            <>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+                                <div style={{ fontSize: 13, color: "#e2e8f0" }}>{card.data.winRate.toFixed(0)}% WR</div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: (card.label === "AFTER A LOSS" || card.label === "AFTER A WIN") ? (card.data.avgPnl >= 0 ? "#4ade80" : "#f87171") : (card.data.pnl >= 0 ? "#4ade80" : "#f87171") }}>
+                                  {card.label === "AFTER A LOSS" || card.label === "AFTER A WIN"
+                                    ? `${card.data.avgPnl >= 0 ? "+" : "-"}$${Math.abs(card.data.avgPnl).toFixed(0)}/trade`
+                                    : `${card.data.pnl >= 0 ? "+" : "-"}$${Math.abs(card.data.pnl).toFixed(0)}`}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: 10, color: "#64748b", marginTop: 6 }}>n={card.data.total} · avg {card.data.avgQty.toFixed(1)} cts</div>
+                            </>
+                          ) : <div style={{ fontSize: 12, color: "#64748b" }}>Not enough data</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Performance by Holding Time */}
+            {monthAnalytics?.byDuration && Object.values(monthAnalytics.byDuration).some(b => b.trades > 0) && (
+              <div>
+                <SectionHeader label="PERFORMANCE BY HOLDING TIME" skey="holdingtime"
+                  summary={<span style={{ color: "#64748b" }}>{Object.values(monthAnalytics.byDuration).filter(b => b.trades > 0).length} buckets</span>} />
+                {!collapsed.holdingtime && (
+                  <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+                    {(monthAnalytics.DURATION_BUCKETS || []).map(bucket => {
+                      const b = monthAnalytics.byDuration[bucket.key];
+                      if (!b || b.trades === 0) return null;
+                      const wr = Math.round(b.wins / b.trades * 100);
+                      const maxPnl = Math.max(...(monthAnalytics.DURATION_BUCKETS || []).map(bk => Math.abs(monthAnalytics.byDuration[bk.key]?.pnl || 0)), 1);
+                      const barW = Math.abs(b.pnl) / maxPnl * 100;
+                      const avg = b.pnl / b.trades;
+                      const fmtSecs = s => !s ? "—" : s < 60 ? `${Math.round(s)}s` : s < 3600 ? `${Math.floor(s/60)}m ${Math.round(s%60)}s` : `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+                      return (
+                        <div key={bucket.key}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
+                            <div>
+                              <span style={{ fontSize: 11, color: "#e2e8f0", fontWeight: 500 }}>{bucket.label}</span>
+                              <span style={{ fontSize: 9, color: "#64748b", marginLeft: 8 }}>avg {fmtSecs(b.avgSecs)}</span>
+                            </div>
+                            <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                              <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
+                              <span style={{ fontSize: 10 }}><span style={{ color: "#4ade80" }}>{b.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{b.losses}</span></span>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: b.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
+                            </div>
+                          </div>
+                          <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
+                            <div style={{ width: `${barW}%`, height: "100%", background: b.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             )}
@@ -4840,44 +4836,6 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                 );
               })()}
 
-              {/* Performance by Time of Day */}
-              {a && (() => {
-                const sessions = ["Asian Session (6PM–12AM)", "London Session (12AM–9:30AM)", "NY Open (9:30AM–12PM)", "Afternoon Deadzone (12–3PM)", "Power Hour (3–4PM)", "After Hours (4–6PM)"];
-                const sessionData = sessions.map(s => ({ name: s, ...(a.bySession[s] || { trades: 0, pnl: 0, wins: 0 }) })).filter(s => s.trades > 0);
-                if (!sessionData.length) return null;
-                const maxAbs = Math.max(...sessionData.map(s => Math.abs(s.pnl)), 1);
-                return (
-                  <div>
-                    <MonthSectionHeader label="PERFORMANCE BY TIME OF DAY" monthKey={expandedMonth} skey="time" summary={<span style={{ color: "#64748b" }}>{sessionData.length} sessions</span>} />
-                    {!isCollapsed(expandedMonth, "time") && (
-                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
-                        {sessionData.map(s => {
-                          const wr = Math.round(s.wins / s.trades * 100);
-                          const barW = Math.abs(s.pnl) / maxAbs * 100;
-                          const shortName = s.name === "Asian Session (6PM–12AM)" ? "Asian Session" : s.name === "London Session (12AM–9:30AM)" ? "London Session" : s.name === "NY Open (9:30AM–12PM)" ? "NY Open" : s.name === "Afternoon Deadzone (12–3PM)" ? "Deadzone" : s.name === "Power Hour (3–4PM)" ? "Power Hour" : "After Hours";
-                          const timeLabel = s.name === "Asian Session (6PM–12AM)" ? "6:00 PM – 12:00 AM EST" : s.name === "London Session (12AM–9:30AM)" ? "12:00 AM – 9:30 AM EST" : s.name === "NY Open (9:30AM–12PM)" ? "9:30 AM – 12:00 PM EST" : s.name === "Afternoon Deadzone (12–3PM)" ? "12:00 – 3:00 PM EST" : s.name === "Power Hour (3–4PM)" ? "3:00 – 4:00 PM EST" : "4:00 – 6:00 PM EST";
-                          return (
-                            <div key={s.name}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
-                                <div><span style={{ fontSize: 11, color: "#e2e8f0", fontWeight: 500 }}>{shortName}</span><span style={{ fontSize: 9, color: "#64748b", marginLeft: 8 }}>{timeLabel}</span></div>
-                                <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-                                  <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
-                                  <span style={{ fontSize: 10, letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{s.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{s.trades - s.wins}</span></span>
-                                  <span style={{ fontSize: 12, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(2)}</span>
-                                </div>
-                              </div>
-                              <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
-                                <div style={{ width: `${barW}%`, height: "100%", background: s.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
               {/* Performance by Symbol */}
               {a && Object.keys(a.bySymbol).length > 0 && (
                 <div>
@@ -4909,7 +4867,83 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                 </div>
               )}
 
-                {/* Mistake Frequency — expanded month */}
+                {/* Behavioral Edge Checks — expanded month */}
+                {a && (a.afterLoss?.total > 0 || a.afterWin?.total > 0 || a.first3?.total > 0) && (() => (
+                  <div>
+                    <MonthSectionHeader label="BEHAVIORAL EDGE CHECKS" monthKey={expandedMonth} skey="behavioral"
+                      summary={<span style={{ color: "#64748b" }}>after loss · after win · first 3</span>} />
+                    {!isCollapsed(expandedMonth, "behavioral") && (
+                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 10 }}>
+                          {[
+                            { label: "AFTER A LOSS",   data: a.afterLoss },
+                            { label: "AFTER A WIN",    data: a.afterWin  },
+                            { label: "FIRST 3 TRADES", data: a.first3    },
+                            { label: "REST OF SESSION", data: a.rest     },
+                          ].map(card => (
+                            <div key={card.label} style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 4, padding: "10px 12px" }}>
+                              <div style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", marginBottom: 6 }}>{card.label}</div>
+                              {card.data?.total ? (
+                                <>
+                                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
+                                    <div style={{ fontSize: 13, color: "#e2e8f0" }}>{card.data.winRate.toFixed(0)}% WR</div>
+                                    <div style={{ fontSize: 13, fontWeight: 600, color: (card.label === "AFTER A LOSS" || card.label === "AFTER A WIN") ? (card.data.avgPnl >= 0 ? "#4ade80" : "#f87171") : (card.data.pnl >= 0 ? "#4ade80" : "#f87171") }}>
+                                      {card.label === "AFTER A LOSS" || card.label === "AFTER A WIN"
+                                        ? `${card.data.avgPnl >= 0 ? "+" : "-"}$${Math.abs(card.data.avgPnl).toFixed(0)}/trade`
+                                        : `${card.data.pnl >= 0 ? "+" : "-"}$${Math.abs(card.data.pnl).toFixed(0)}`}
+                                    </div>
+                                  </div>
+                                  <div style={{ fontSize: 10, color: "#64748b", marginTop: 6 }}>n={card.data.total} · avg {card.data.avgQty.toFixed(1)} cts</div>
+                                </>
+                              ) : <div style={{ fontSize: 12, color: "#64748b" }}>Not enough data</div>}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))()}
+
+                {/* Performance by Holding Time — expanded month */}
+                {a?.byDuration && Object.values(a.byDuration).some(b => b.trades > 0) && (
+                  <div>
+                    <MonthSectionHeader label="PERFORMANCE BY HOLDING TIME" monthKey={expandedMonth} skey="holdingtime"
+                      summary={<span style={{ color: "#64748b" }}>{Object.values(a.byDuration).filter(b => b.trades > 0).length} buckets</span>} />
+                    {!isCollapsed(expandedMonth, "holdingtime") && (
+                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+                        {(a.DURATION_BUCKETS || []).map(bucket => {
+                          const b = a.byDuration[bucket.key];
+                          if (!b || b.trades === 0) return null;
+                          const wr = Math.round(b.wins / b.trades * 100);
+                          const maxPnl = Math.max(...(a.DURATION_BUCKETS || []).map(bk => Math.abs(a.byDuration[bk.key]?.pnl || 0)), 1);
+                          const barW = Math.abs(b.pnl) / maxPnl * 100;
+                          const avg = b.pnl / b.trades;
+                          const fmtSecs = s => !s ? "—" : s < 60 ? `${Math.round(s)}s` : s < 3600 ? `${Math.floor(s/60)}m ${Math.round(s%60)}s` : `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+                          return (
+                            <div key={bucket.key}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
+                                <div>
+                                  <span style={{ fontSize: 11, color: "#e2e8f0", fontWeight: 500 }}>{bucket.label}</span>
+                                  <span style={{ fontSize: 9, color: "#64748b", marginLeft: 8 }}>avg {fmtSecs(b.avgSecs)}</span>
+                                </div>
+                                <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                                  <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
+                                  <span style={{ fontSize: 10 }}><span style={{ color: "#4ade80" }}>{b.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{b.losses}</span></span>
+                                  <span style={{ fontSize: 12, fontWeight: 600, color: b.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
+                                </div>
+                              </div>
+                              <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
+                                <div style={{ width: `${barW}%`, height: "100%", background: b.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Mistake Frequency + Mood vs Performance — side by side */}
                 {(() => {
                   const mistakeCounts = {};
                   let cleanDays = 0;
@@ -4920,46 +4954,10 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                       mistakeCounts[m] = (mistakeCounts[m] || 0) + 1;
                     }
                   }
-                  const sorted = Object.entries(mistakeCounts).sort((a, b) => b[1] - a[1]);
-                  if (sorted.length === 0 && cleanDays === 0) return null;
-                  const maxCount = sorted[0]?.[1] || 1;
-                  return (
-                    <div>
-                      <MonthSectionHeader label="MISTAKE FREQUENCY" monthKey={expandedMonth} skey="mistakes"
-                        summary={<span style={{ color: "#64748b" }}>{sorted.length} type{sorted.length !== 1 ? "s" : ""} · {cleanDays} clean</span>} />
-                      {!isCollapsed(expandedMonth, "mistakes") && (
-                        <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
-                          {cleanDays > 0 && (
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: sorted.length ? 10 : 0, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
-                              <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Executed the Plan</span>
-                              <span style={{ fontSize: 12, fontWeight: 600, color: "#4ade80" }}>{cleanDays} day{cleanDays !== 1 ? "s" : ""}</span>
-                            </div>
-                          )}
-                          {sorted.map(([mistake, count]) => {
-                            const freq = Math.round((count / me.length) * 100);
-                            return (
-                              <div key={mistake} style={{ marginBottom: 10 }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                                  <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mistake}</span>
-                                  <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                                    <span style={{ fontSize: 9, color: "#94a3b8" }}>{freq}% of sessions</span>
-                                    <span style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>{count}×</span>
-                                  </div>
-                                </div>
-                                <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
-                                  <div style={{ width: `${(count / maxCount) * 100}%`, height: "100%", background: "#f87171", borderRadius: 2, opacity: 0.7 }} />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
+                  const mistakeSorted = Object.entries(mistakeCounts).sort((a, b) => b[1] - a[1]);
+                  const maxCount = mistakeSorted[0]?.[1] || 1;
+                  const hasMistakes = mistakeSorted.length > 0 || cleanDays > 0;
 
-                {/* Mood vs Performance — expanded month */}
-                {(() => {
                   const moodStats = {};
                   for (const e of me) {
                     const moods = e.moods?.length ? e.moods : e.mood ? [e.mood] : [];
@@ -4972,49 +4970,81 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                     }
                   }
                   const moodList = Object.entries(moodStats).sort((a, b) => (b[1].pnl / b[1].sessions) - (a[1].pnl / a[1].sessions));
-                  if (moodList.length === 0) return null;
                   const maxAvg = Math.max(...moodList.map(([, s]) => Math.abs(s.pnl / s.sessions)), 1);
+                  const hasMoods = moodList.length > 0;
+                  if (!hasMistakes && !hasMoods) return null;
                   return (
-                    <div>
-                      <MonthSectionHeader label="MOOD VS PERFORMANCE" monthKey={expandedMonth} skey="mood"
-                        summary={<span style={{ color: "#64748b" }}>{moodList.length} mood{moodList.length !== 1 ? "s" : ""} tracked</span>} />
-                      {!isCollapsed(expandedMonth, "mood") && (
-                        <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-                          {moodList.map(([mood, s]) => {
-                            const avg = s.pnl / s.sessions;
-                            const wr = Math.round((s.wins / s.sessions) * 100);
-                            const isPos = avg >= 0;
-                            return (
-                              <div key={mood}>
+                    <div style={{ display: "flex", flexDirection: "row", gap: 16, alignItems: "flex-start" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <MonthSectionHeader label="MISTAKE FREQUENCY" monthKey={expandedMonth} skey="mistakes"
+                          summary={<span style={{ color: "#64748b" }}>{mistakeSorted.length} type{mistakeSorted.length !== 1 ? "s" : ""} · {cleanDays} clean</span>} />
+                        {!isCollapsed(expandedMonth, "mistakes") && (
+                          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
+                            {cleanDays > 0 && (
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: mistakeSorted.length ? 10 : 0, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
+                                <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Executed the Plan</span>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: "#4ade80" }}>{cleanDays} day{cleanDays !== 1 ? "s" : ""}</span>
+                              </div>
+                            )}
+                            {mistakeSorted.map(([mistake, count]) => (
+                              <div key={mistake} style={{ marginBottom: 10 }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                                  <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mood}</span>
-                                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                                    <span style={{ fontSize: 9, color: "#94a3b8" }}>{s.sessions} session{s.sessions !== 1 ? "s" : ""} · {wr}% WR</span>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 70, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
+                                  <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mistake}</span>
+                                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0, marginLeft: 8 }}>
+                                    <span style={{ fontSize: 9, color: "#94a3b8" }}>{Math.round(count / me.length * 100)}%</span>
+                                    <span style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>{count}×</span>
                                   </div>
                                 </div>
                                 <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
-                                  <div style={{ width: `${Math.abs(avg) / maxAvg * 100}%`, height: "100%", background: isPos ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                                  <div style={{ width: `${(count / maxCount) * 100}%`, height: "100%", background: "#f87171", borderRadius: 2, opacity: 0.7 }} />
                                 </div>
                               </div>
-                            );
-                          })}
-                          {moodList.length >= 2 && (() => {
-                            const best = moodList[0];
-                            const worst = moodList[moodList.length - 1];
-                            return (
-                              <div style={{ marginTop: 4, padding: "8px 10px", background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 4, fontSize: 10, color: "#94a3b8", lineHeight: 1.7 }}>
-                                <span style={{ color: "#3b82f6" }}>💡 </span>
-                                Best mindset: <span style={{ color: "#4ade80" }}>{best[0]}</span> (+${(best[1].pnl / best[1].sessions).toFixed(0)} avg).
-                                {(worst[1].pnl / worst[1].sessions) < 0 && <> Watch for <span style={{ color: "#f87171" }}>{worst[0]}</span> sessions (${(worst[1].pnl / worst[1].sessions).toFixed(0)} avg).</>}
-                              </div>
-                            );
-                          })()}
-                        </div>
-                      )}
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <MonthSectionHeader label="MOOD VS PERFORMANCE" monthKey={expandedMonth} skey="mood"
+                          summary={<span style={{ color: "#64748b" }}>{moodList.length} mood{moodList.length !== 1 ? "s" : ""}</span>} />
+                        {!isCollapsed(expandedMonth, "mood") && (
+                          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                            {moodList.map(([mood, s]) => {
+                              const avg = s.pnl / s.sessions;
+                              const wr = Math.round((s.wins / s.sessions) * 100);
+                              const isPos = avg >= 0;
+                              return (
+                                <div key={mood}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                                    <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mood}</span>
+                                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0, marginLeft: 8 }}>
+                                      <span style={{ fontSize: 9, color: "#94a3b8" }}>{s.sessions}× · {wr}% WR</span>
+                                      <span style={{ fontSize: 11, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 62, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
+                                    </div>
+                                  </div>
+                                  <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
+                                    <div style={{ width: `${Math.abs(avg) / maxAvg * 100}%`, height: "100%", background: isPos ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {moodList.length >= 2 && (() => {
+                              const best = moodList[0];
+                              const worst = moodList[moodList.length - 1];
+                              return (
+                                <div style={{ marginTop: 4, padding: "8px 10px", background: "#0a1628", border: "1px solid #1e3a5f", borderRadius: 4, fontSize: 10, color: "#94a3b8", lineHeight: 1.7 }}>
+                                  <span style={{ color: "#3b82f6" }}>💡 </span>
+                                  Best: <span style={{ color: "#4ade80" }}>{best[0]}</span> (+${(best[1].pnl / best[1].sessions).toFixed(0)} avg).
+                                  {(worst[1].pnl / worst[1].sessions) < 0 && <> Watch: <span style={{ color: "#f87171" }}>{worst[0]}</span>.</>}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })()}
+
 
             </div>
           </div>
@@ -5255,111 +5285,94 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
         ).join("\n\n")
       : "  No consecutive entries with plans in this period";
 
-    return `You are a professional trading coach with access to a futures trader's COMPLETE journal data for the period: ${label}. You have every trade, every written note, and all behavioral data. Your analysis should feel like it was written by someone who has personally reviewed every session.
+    return `You are a professional trading coach. You have the complete journal data below for: ${label}
+${activeJournal?.type === JOURNAL_TYPES.PROP ? `\nACCOUNT: Prop Firm — ${activeJournal?.config?.firmName || "Prop"} (${activeJournal?.config?.phase === "funded" ? "Funded" : "Challenge"}, $${(activeJournal?.config?.accountSize||0).toLocaleString()})` : "\nACCOUNT: Personal"}
 
-ACCOUNT TYPE: ${activeJournal?.type === JOURNAL_TYPES.PROP ? `Prop Firm — ${activeJournal?.config?.firmName || "Prop"} (${activeJournal?.config?.phase === "funded" ? "Funded Account" : "Challenge/Evaluation"}, $${(activeJournal?.config?.accountSize || 0).toLocaleString()} account)` : "Personal Account"}
-${activeJournal?.type === JOURNAL_TYPES.PROP && propStatus ? `PROP STATUS: Profit target ${propStatus.profitTargetPct.toFixed(1)}% complete ($${propStatus.profitTargetProgress.toFixed(2)} of $${activeJournal.config.profitTarget}), trailing drawdown ${propStatus.trailingDrawdownPct.toFixed(1)}% used, consistency rule at ${propStatus.consistencyPct.toFixed(1)}% (limit ${activeJournal.config.consistencyRule}%), ${propStatus.daysTraded} of ${activeJournal.config.minTradingDays} min days traded` : ""}
+PERIOD STATS:
+- Days: ${periodEntries.length} (${wins}W/${losses}L) | Net: $${totalPnl.toFixed(0)} | Avg/day: $${avgDailyPnl}
+- Trades: ${allTrades.length} | WR: ${overallWR}% | PF: ${overallPF} | Gross: $${periodGross.toFixed(0)} | Fees: $${periodTotalComm.toFixed(0)} (${periodCommDrag}% drag)
+- Grades: ${gradeDist}${avgExec||avgDec ? ` | Scores: exec:${avgExec||"—"}/10 dec:${avgDec||"—"}/10` : ""}
 
-PERIOD SUMMARY:
-- Trading days: ${periodEntries.length} (${wins}W / ${losses}L) | Avg daily P&L: $${avgDailyPnl}
-- Net P&L: $${totalPnl.toFixed(2)}
-- Total trades: ${allTrades.length} | Trade win rate: ${overallWR}% | Profit factor: ${overallPF}
-- Grade distribution: ${gradeDist}
-${avgExec || avgDec ? `- Avg Scores: ${[avgExec && `Execution ${avgExec}/10`, avgDec && `Decision ${avgDec}/10`].filter(Boolean).join(" | ")}` : ""}
-- Total commissions: $${periodTotalComm.toFixed(2)} (${periodCommDrag}% commission drag on gross $${periodGross.toFixed(2)})
+SESSION BREAKDOWN: ${periodSessionSummary||"none"}
+HOLD TIME: ${durationSummary||"none"}
+ORDER TYPES: ${orderTypeSummary||"none"}
+SYMBOLS: ${symbolSummary||"none"}
+DAY OF WEEK: ${DOW.filter(d=>dowStats[d].days>0).map(d=>`${d.slice(0,3)}:$${dowStats[d].pnl.toFixed(0)}(${Math.round(dowStats[d].wins/dowStats[d].days*100)}%WR)`).join(" | ")||"none"}
+MISTAKE FREQUENCY: ${mistakeTally.replace(/\n/g," | ")}
+MISTAKE COSTS: ${mistakeCostSummary.replace(/\n/g, " | ")||"none"}${totalMistakeCost>0?` | Total: $${totalMistakeCost.toFixed(0)}`:""}
+MOOD→GRADE: ${moodGrade}
 
-ORDER TYPE BREAKDOWN (aggregated across all trades this period):
-${orderTypeSummary}
-
-HOLD TIME BREAKDOWN (duration buckets — where is edge concentrated?):
-${durationSummary}
-
-SESSION WINDOW BREAKDOWN (aggregated across all trades this period):
-${periodSessionSummary}
-
-SYMBOL BREAKDOWN:
-${symbolSummary}
-
-DAY OF WEEK BREAKDOWN:
-${dowSummary}
-
-SESSION MISTAKE FREQUENCY:
-${mistakeTally}
-
-MISTAKE COST ATTRIBUTION (dollar impact of behavioral habits):
-${mistakeCostSummary}
-${totalMistakeCost > 0 ? `Total attributed mistake cost: $${totalMistakeCost.toFixed(2)} over the period` : ""}
-
-MOOD → GRADE CORRELATION PAIRS:
-${moodGrade}
-
-PLAN-VS-EXECUTION LOG (previous day's plan vs actual next-day behavior):
+PLAN VS EXECUTION:
 ${planViolationSummary}
 
-SCORE VS P&L LOG (flag days with high self-scores but negative results — rating bias):
-${scoreVsPnl||"  No scores logged"}
+SCORES VS P&L:
+${scoreVsPnl||"No scores logged"}
 
-COMPILED WRITTEN NOTES — ALL ENTRIES (for theme and pattern mining):
-${allNarratives ? `JOURNAL NARRATIVES (AI-consolidated per day):\n${allNarratives}\n\n` : ""}LESSONS LEARNED:
-${allLessons||"  None written"}
+WRITTEN NOTES PER FIELD:
+LESSONS: ${allLessons||"None"}
+MISTAKES: ${allMistakeNotes||"None"}
+RULES: ${allRules||"None"}
+IMPROVEMENTS: ${allImprovements||"None"}
+MARKET NOTES: ${allMarketNotes||"None"}
+REINFORCE: ${allReinforceRules||"None"}
+TOMORROW PLANS: ${allTomorrowPlans||"None"}
+BEST TRADES: ${allBestTrades||"None"}
+WORST TRADES: ${allWorstTrades||"None"}
 
-MISTAKES (freeform):
-${allMistakeNotes||"  None written"}
-
-RULES FOLLOWED/BROKEN:
-${allRules||"  None written"}
-
-AREAS FOR IMPROVEMENT:
-${allImprovements||"  None written"}
-
-MARKET NOTES:
-${allMarketNotes||"  None written"}
-
-RULES TO REINFORCE:
-${allReinforceRules||"  None written"}
-
-TOMORROW PLANS WRITTEN:
-${allTomorrowPlans||"  None written"}
-
-BEST TRADE DESCRIPTIONS:
-${allBestTrades||"  None written"}
-
-WORST TRADE DESCRIPTIONS:
-${allWorstTrades||"  None written"}
-${allMistakeCostNotes ? `\nMISTAKE COST NOTES:\n${allMistakeCostNotes}` : ""}
-
-FULL JOURNAL ENTRIES (with complete trade logs and all written notes):
+FULL SESSION LOG:
 ${notes}
 
-You have everything. Every trade price, time, and P&L. Every word the trader wrote across every day. Every mistake they flagged. Every lesson, plan, and rule. Cross-reference all of it ruthlessly.
+Review every trade, every written note, every flagged mistake, every plan. Cross-reference all of it ruthlessly.
 
-Provide a structured recap with exactly these 7 sections:
+OUTPUT FORMAT: Bullet points only. No paragraphs. Every finding must cite a date, dollar amount, or trade number. Be direct. No filler.
+
+Write exactly these 7 sections:
 
 **📊 PERFORMANCE OVERVIEW**
-3-4 sentences. Lead with the key number (P&L, win rate, profit factor). Note consistency — were wins and losses spread evenly or clustered? Call out any meaningful patterns in the order type, session, or duration breakdowns. Any grade or day-of-week pattern worth flagging immediately?
+- Net P&L, win rate, profit factor, avg daily P&L — one bullet each
+- Best session/time window and worst — with exact numbers
+- Hold time edge: which duration bucket produced the best results
+- Grade pattern: what grades appeared and what they signal
+- One-line verdict on the week/month
 
 **🔑 KEY LESSONS IDENTIFIED**
-Read ALL compiled written notes above (lessons learned, mistakes, rules, improvements, plans). Extract the top 3-4 recurring themes by looking for: the same word, concept, or situation appearing across multiple days; plans that were written but never acted on; lessons that were re-learned (same lesson written on multiple dates). For each theme: (1) quote or closely paraphrase the trader's exact words with dates, (2) count how many days it appeared, (3) cross-reference against the trade data — did the trade results improve on days they acknowledged this lesson? Show them you read every word they actually wrote — do not generalize or invent.
+For each recurring theme found across multiple days (same concept written more than once):
+- Theme: [name it in 3-5 words]
+- Appeared: [list the dates]
+- What they wrote: [quote or closely paraphrase their exact words]
+- Did it change behavior? [yes/no + evidence from trade data]
 
 **⚠️ PATTERNS & MISTAKES**
-This is the most important section. Two layers: (A) FLAGGED MISTAKES — lead with the session mistake frequency tally. For each repeated mistake: name it, how many times it was flagged, what the trade data shows on those days (worse P&L? more trades? larger losses?), dollar cost if quantifiable from mistake cost data, and root cause. (B) WRITTEN NOTES PATTERNS — scan ALL the compiled freeform notes above. Find: the same mistake described in different words across multiple days (name the underlying pattern); rules the trader wrote but the trades show were broken; self-improvement intentions that never materialized (written 3+ times = habitual blind spot). For unacknowledged patterns visible in the trade data but absent from any notes, name them explicitly — these are the trader's blind spots. Be direct. Use dates and dollar amounts.
+Flagged mistakes section:
+- [Mistake name]: flagged [N]x — trade data on those days: [W/L count, avg P&L, $ cost if available]
+
+Blind spots (patterns in trade data NOT mentioned in notes):
+- [Pattern]: [evidence with dates and dollar amounts]
 
 **🚩 RED FLAGS — PLAN VS. EXECUTION**
-Analyze the Plan-vs-Execution log above. For every consecutive entry pair where a plan existed: (1) State what was planned in quotes, (2) Identify whether the next day's actual behavior honored or violated the plan — use the session mistakes, grade, and P&L as evidence, (3) Label each as HONORED or VIOLATED with a one-line explanation. If violations are repeated across multiple days (e.g. the trader keeps writing "no revenge trading" then flagging revenge trading), call out the pattern explicitly with dates. If no plan data exists for this period, skip this section.
+For each consecutive entry where a plan existed:
+- [Date] planned: "[quote]"
+- Next day result: HONORED or VIOLATED — [one-line evidence]
+
+Skip this section if no plan data exists.
 
 **🧠 BEHAVIORAL TRENDS**
-3 observations the trader likely hasn't noticed themselves. Use the order type breakdown, hold time breakdown, and session window breakdown — cross-reference them against P&L. Look for: which day of week and session their edge is strongest/weakest, whether mood correlates with grade, whether mistake clusters appear on winning or losing days, whether LMT vs STP vs MKT entries show meaningfully different results, whether shorter or longer holds produce better outcomes. Commission drag: if fees are >5% of gross P&L, flag it explicitly. Cite specific dates or data points.
-
-**🪞 SELF-AWARENESS AUDIT**
-Cross-reference the Score vs P&L log and written plans vs actual execution. Answer: (1) Is the trader's self-assessment (execution/decision scores) calibrated to their actual results, or do they rate themselves highly on losing days? Name specific dates. (2) Plans written for tomorrow — were they actually followed the next day? Quote the plan and describe what happened. (3) Rules written to reinforce — did the trader honor them the following session? This section is about whether the trader's self-knowledge matches reality. Skip if no score or plan data exists.
+3 data-backed observations the trader likely hasn't noticed:
+- Trend 1: [session/time/order type pattern + $ evidence]
+- Trend 2: [mood/grade/mistake cluster pattern + dates]
+- Trend 3: [commission drag, hold time, or direction bias + numbers]
 
 **💡 STRENGTHS TO BUILD ON**
-2-3 genuine positives backed by data. Which sessions, setups, or behavioral patterns produced the best results? Be specific — "Tuesday NY Open trades averaged +$X" not "you trade well sometimes."
+- Strength 1: [specific session, setup, or behavior + exact P&L data]
+- Strength 2: [specific positive pattern + dates]
 
 **🎯 ACTIONABLE FOCUS POINTS**
-3 rules for next period. Format strictly as: [Root Cause] → [Measurable Rule]. Tie each directly to the most damaging repeated mistake or behavioral pattern — including any repeated plan violations. Make them specific enough to evaluate at end of next session.
+3 rules for next period — format strictly as:
+- [Root cause] → [Measurable rule with specific threshold]
+- [Root cause] → [Measurable rule with specific threshold]
+- [Root cause] → [Measurable rule with specific threshold]
 
-Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler. When calling out plan violations, be unflinching — the trader wrote the plan themselves. Accountability is the point.`;
+Keep bullets concise — one clear finding per bullet. Dense, specific, no filler. Complete all 7 sections fully — do not truncate any section.`;
   };
 
   const generateSummary = async (period) => {
@@ -5385,8 +5398,8 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
       // responses don't get served. Recaps are deduplicated by the `generated` state map
       // which is session-only and always reflects the current token budget.
       const txt = await aiRequestText(ai, {
-        max_tokens: 4000,
-        timeoutMs: 90000,
+        max_tokens: 8000,
+        timeoutMs: 120000,
         messages: [{ role: 'user', content: prompt }],
       });
       setSummary(txt);
@@ -5424,7 +5437,8 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
       <div style={{ background: "linear-gradient(135deg,rgba(56,189,248,0.1),rgba(129,140,248,0.12),rgba(192,132,252,0.08))", border: "1px solid rgba(129,140,248,0.3)", borderRadius: 6, padding: "14px 18px", marginBottom: 20, position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>🤖 AI RECAP</span>
+          <span style={{ fontSize: 26 }}>🤖</span>
+          <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>AI RECAP</span>
           <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.15em" }}>ANALYSE · REFLECT · IMPROVE</span>
         </div>
       </div>
@@ -8489,8 +8503,9 @@ export default function TradingJournal() {
         } catch {}
         setJournals(loadedJournals);
 
-        // Load active journal entries
-        const activeId = DEFAULT_JOURNAL_ID;
+        // Always select the first journal in the list on load
+        const activeId = loadedJournals[0]?.id || DEFAULT_JOURNAL_ID;
+        setActiveJournalId(activeId);
         let entriesData = null;
 
         // Try new key first
@@ -9140,7 +9155,7 @@ export default function TradingJournal() {
       `}</style>
 
       {/* Header */}
-      <div style={{ borderBottom: "1px solid #1e293b", padding: "0 40px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#0a0e1a", zIndex: 10, overflow: "visible", height: 64 }}>
+      <div style={{ borderBottom: "1px solid #1e293b", padding: "0 40px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: "#0a0e1a", zIndex: 10, overflow: "visible", height: 80 }}>
 
         {/* LEFT: C4 signature — AyeOh + rule + TRADING JOURNAL horizontal + tagline */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0, overflow: "visible" }}>
@@ -9148,19 +9163,19 @@ export default function TradingJournal() {
             style={{ display: "flex", alignItems: "center", gap: 14, cursor: "pointer", userSelect: "none", overflow: "visible" }}
             onMouseEnter={e => e.currentTarget.querySelector(".ayeoh-sig").style.opacity = "0.75"}
             onMouseLeave={e => e.currentTarget.querySelector(".ayeoh-sig").style.opacity = "1"}>
-            <div className="ayeoh-sig" style={{ fontFamily: "'Cinzel',serif", fontSize: 26, fontWeight: 900, fontStyle: "normal", letterSpacing: "0.12em", lineHeight: 1, background: "linear-gradient(135deg,#38bdf8 0%,#818cf8 55%,#c084fc 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", transition: "opacity .15s", flexShrink: 0 }}>AYEOH</div>
-            <div style={{ width: 1, height: 32, background: "linear-gradient(180deg,transparent,#334155,transparent)", flexShrink: 0 }} />
-            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: "#38bdf8", letterSpacing: "0.3em", whiteSpace: "nowrap", opacity: 0.9 }}>TRADING JOURNAL</div>
+            <div className="ayeoh-sig" style={{ fontFamily: "'Cinzel',serif", fontSize: 32, fontWeight: 900, fontStyle: "normal", letterSpacing: "0.12em", lineHeight: 1, background: "linear-gradient(135deg,#38bdf8 0%,#818cf8 55%,#c084fc 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", transition: "opacity .15s", flexShrink: 0 }}>AYEOH</div>
+            <div style={{ width: 1, height: 40, background: "linear-gradient(180deg,transparent,#334155,transparent)", flexShrink: 0 }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: "#38bdf8", letterSpacing: "0.3em", whiteSpace: "nowrap", opacity: 0.9 }}>TRADING JOURNAL</div>
               <div style={{ height: 1.5, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", borderRadius: 1 }} />
-              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, letterSpacing: "0.22em", whiteSpace: "nowrap", background: "linear-gradient(135deg,rgba(56,189,248,0.6),rgba(129,140,248,0.6),rgba(192,132,252,0.6))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>CAPTURE · ANALYSE · GROW</div>
+              <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, letterSpacing: "0.22em", whiteSpace: "nowrap", background: "linear-gradient(135deg,rgba(56,189,248,0.6),rgba(129,140,248,0.6),rgba(192,132,252,0.6))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>CAPTURE · ANALYSE · GROW</div>
             </div>
           </div>
-          {/* Settings — tiny, unobtrusive */}
+          {/* Settings — unobtrusive */}
           <button
             onClick={() => { setShowSettings(true); setSettingsTab("backup"); setImportMsg(null); }}
             title="Settings"
-            style={{ background: "transparent", border: "none", color: "#818cf8", fontSize: 15, cursor: "pointer", padding: "2px 4px", lineHeight: 1, fontFamily: "inherit", transition: "color .15s", flexShrink: 0 }}
+            style={{ background: "transparent", border: "none", color: "#818cf8", fontSize: 20, cursor: "pointer", padding: "4px 6px", lineHeight: 1, fontFamily: "inherit", transition: "color .15s", flexShrink: 0 }}
             onMouseEnter={e => e.currentTarget.style.color = "#c084fc"}
             onMouseLeave={e => e.currentTarget.style.color = "#818cf8"}>
             ⚙
@@ -9204,38 +9219,38 @@ export default function TradingJournal() {
 
         {/* RIGHT: Nav buttons */}
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0 }}>
-          {view === "list" && propJournals.length > 0 && <button onClick={() => { setPropDashTab("overview"); setView("propdash"); }} style={{ background: "rgba(120,53,15,0.15)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.35)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>🏆 PROP DASHBOARD</button>}
+          {view === "list" && propJournals.length > 0 && <button onClick={() => { setPropDashTab("overview"); setView("propdash"); }} style={{ background: "rgba(120,53,15,0.15)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.35)", padding: "12px 24px", borderRadius: 6, fontFamily: "inherit", fontSize: 14, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>🏆 PROP DASHBOARD</button>}
           {(view === "list" || view === "recap") && (
             <span style={{ display:"inline-block", padding:1, borderRadius:7, background: view === "recap" ? "linear-gradient(135deg,#7c3aed,#a855f7,#818cf8)" : "linear-gradient(135deg,#1e1b4b,#2e1065)", flexShrink:0 }}>
-              <button onClick={() => setView("recap")} style={{ display:"block", background: view === "recap" ? "#0d0a1a" : "#070d1a", color: view === "recap" ? "#c4b5fd" : "#475569", border:"none", padding:"9px 21px", borderRadius:6, fontFamily:"inherit", fontSize:13, cursor:"pointer", letterSpacing:"0.06em", fontWeight:700, whiteSpace:"nowrap" }}>🤖 AI RECAP</button>
+              <button onClick={() => setView("recap")} style={{ display:"block", background: view === "recap" ? "#0d0a1a" : "#070d1a", color: view === "recap" ? "#c4b5fd" : "#475569", border:"none", padding:"11px 24px", borderRadius:6, fontFamily:"inherit", fontSize:14, cursor:"pointer", letterSpacing:"0.06em", fontWeight:700, whiteSpace:"nowrap" }}>🤖 AI RECAP</button>
             </span>
           )}
           {view === "list" && (
             <span style={{ display:"inline-block", padding:1, borderRadius:7, background:"linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", flexShrink:0 }}>
-              <button onClick={openNew} style={{ display:"block", background:"#070d1a", color:"#e2e8f0", border:"none", padding:"9px 21px", borderRadius:6, fontFamily:"inherit", fontSize:13, cursor:"pointer", letterSpacing:"0.06em", fontWeight:700, whiteSpace:"nowrap" }}>+ NEW ENTRY</button>
+              <button onClick={openNew} style={{ display:"block", background:"#070d1a", color:"#e2e8f0", border:"none", padding:"11px 24px", borderRadius:6, fontFamily:"inherit", fontSize:14, cursor:"pointer", letterSpacing:"0.06em", fontWeight:700, whiteSpace:"nowrap" }}>+ NEW ENTRY</button>
             </span>
           )}
-          {view === "recap" && <button onClick={() => setView("list")} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>}
-          {view === "quotes" && <button onClick={() => setView("list")} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>}
-          {view === "reference" && <button onClick={() => setView("list")} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>}
-          {view === "propdash" && <button onClick={() => setView("list")} style={{ background: "rgba(120,53,15,0.1)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>← BACK</button>}
+          {view === "recap" && <button onClick={() => setView("list")} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "12px 24px", borderRadius: 6, fontFamily: "inherit", fontSize: 14, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>}
+          {view === "quotes" && <button onClick={() => setView("list")} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "12px 24px", borderRadius: 6, fontFamily: "inherit", fontSize: 14, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>}
+          {view === "reference" && <button onClick={() => setView("list")} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "12px 24px", borderRadius: 6, fontFamily: "inherit", fontSize: 14, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>}
+          {view === "propdash" && <button onClick={() => setView("list")} style={{ background: "rgba(120,53,15,0.1)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.25)", padding: "12px 24px", borderRadius: 6, fontFamily: "inherit", fontSize: 14, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>← BACK</button>}
           {view === "new" && <>
-            <button onClick={() => { setView("list"); setActiveEntry(null); }} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>CANCEL</button>
-            <button onClick={handleSave} disabled={saving} style={{ background: "#0a0e1a", color: "#4ade80", border: "1px solid rgba(74,222,128,0.4)", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 700, boxShadow: "0 0 0 1px rgba(74,222,128,0.15)" }}>{saving ? "SAVING..." : saved ? "✓ SAVED" : activeEntry ? "✓ UPDATE" : "+ APPLY"}</button>
+            <button onClick={() => { setView("list"); setActiveEntry(null); }} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "12px 24px", borderRadius: 6, fontFamily: "inherit", fontSize: 14, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>CANCEL</button>
+            <button onClick={handleSave} disabled={saving} style={{ background: "#0a0e1a", color: "#4ade80", border: "1px solid rgba(74,222,128,0.4)", padding: "12px 24px", borderRadius: 6, fontFamily: "inherit", fontSize: 14, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 700, boxShadow: "0 0 0 1px rgba(74,222,128,0.15)" }}>{saving ? "SAVING..." : saved ? "✓ SAVED" : activeEntry ? "✓ UPDATE" : "+ APPLY"}</button>
           </>}
           {view === "detail" && <>
-            <button onClick={() => { setView("list"); setConfirmDeleteEntry(false); }} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "9px 18px", borderRadius: 6, fontFamily: "inherit", fontSize: 12, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>
-            <button onClick={() => { openEdit(activeEntry); setConfirmDeleteEntry(false); }} style={{ background: "rgba(10,18,32,0.5)", color: "#64748b", border: "1px solid #1e293b", padding: "10px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>EDIT</button>
+            <button onClick={() => { setView("list"); setConfirmDeleteEntry(false); }} style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.35)", padding: "11px 20px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>← BACK</button>
+            <button onClick={() => { openEdit(activeEntry); setConfirmDeleteEntry(false); }} style={{ background: "rgba(10,18,32,0.5)", color: "#64748b", border: "1px solid #1e293b", padding: "12px 24px", borderRadius: 6, fontFamily: "inherit", fontSize: 14, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>EDIT</button>
             {confirmDeleteEntry ? (
               <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <span style={{ fontSize: 11, color: "#f87171", letterSpacing: "0.06em" }}>Delete this entry?</span>
                 <button onClick={() => { handleDelete(activeEntry.id); setConfirmDeleteEntry(false); }}
-                  style={{ background: "rgba(127,29,29,0.25)", border: "1px solid rgba(248,113,113,0.35)", color: "#f87171", padding: "10px 18px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 700 }}>YES DELETE</button>
+                  style={{ background: "rgba(127,29,29,0.25)", border: "1px solid rgba(248,113,113,0.35)", color: "#f87171", padding: "12px 20px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 700 }}>YES DELETE</button>
                 <button onClick={() => setConfirmDeleteEntry(false)}
-                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#475569", padding: "10px 18px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>CANCEL</button>
+                  style={{ background: "transparent", border: "1px solid #1e293b", color: "#475569", padding: "12px 20px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>CANCEL</button>
               </span>
             ) : (
-              <button onClick={() => setConfirmDeleteEntry(true)} style={{ background: "transparent", color: "#f87171", border: "1px solid rgba(248,113,113,0.25)", padding: "10px 20px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>DELETE</button>
+              <button onClick={() => setConfirmDeleteEntry(true)} style={{ background: "transparent", color: "#f87171", border: "1px solid rgba(248,113,113,0.25)", padding: "12px 22px", borderRadius: 6, fontFamily: "inherit", fontSize: 14, cursor: "pointer", letterSpacing: "0.06em", fontWeight: 600 }}>DELETE</button>
             )}
           </>}
         </div>
@@ -9679,7 +9694,7 @@ export default function TradingJournal() {
       )}
 
       {/* Journal tab strip */}
-      <div style={{ borderBottom: "1px solid #1e293b", background: "#060810", padding: "0 40px", display: "flex", alignItems: "stretch", gap: 2, overflowX: "auto", position: "sticky", top: 58, zIndex: 9 }}>
+      <div style={{ borderBottom: "1px solid #1e293b", background: "#060810", padding: "0 40px", display: "flex", alignItems: "stretch", gap: 2, overflowX: "auto", position: "sticky", top: 80, zIndex: 9 }}>
         {journals.map(j => {
           const isActive = j.id === activeJournalId;
           const isRenaming = renamingId === j.id;
@@ -9729,7 +9744,7 @@ export default function TradingJournal() {
                       </div>
                     </div>
                   ) : (
-                    <span style={{ fontSize: 13, color: "#334155", letterSpacing: "0.06em", fontWeight: 400 }}>
+                    <span style={{ fontSize: 13, color: "#64748b", letterSpacing: "0.06em", fontWeight: 400 }}>
                       {j.type === JOURNAL_TYPES.PROP ? "🏆" : "💼"} {j.name.toUpperCase()}
                     </span>
                   )}
