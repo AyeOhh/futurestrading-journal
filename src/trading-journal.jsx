@@ -3410,16 +3410,16 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                   }}
                   onClick={e => e.stopPropagation()}
                   placeholder={isWeekend ? "weekend plan…" : "notes…"}
-                  style={{ width: "100%", fontSize: 12, color: "#94a3b8", background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px", textAlign: "center" }}
+                  style={{ width: "100%", fontSize: 12, color: "#7dd3fc", background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px", textAlign: "center" }}
                   onFocus={e => {
-                    e.currentTarget.style.color = "#cbd5e1";
+                    e.currentTarget.style.color = "#bae6fd";
                     e.currentTarget.parentNode.style.borderTopColor = "rgba(129,140,248,0.4)";
                     // Expand to full content on focus
                     e.currentTarget.style.height = "20px";
                     e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
                   }}
                   onBlur={e => {
-                    e.currentTarget.style.color = "#94a3b8";
+                    e.currentTarget.style.color = "#7dd3fc";
                     const val = e.currentTarget.value;
                     e.currentTarget.parentNode.style.borderTopColor = val ? "#1e293b" : "transparent";
                     // Shrink back to 1 row if empty, keep height if has content
@@ -3913,9 +3913,6 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                             { l: "DAY WIN RATE", v: `${dayWR}%`, c: dayWR >= 50 ? "#4ade80" : "#f87171" },
                             { l: "TRADE WIN RATE", v: tradWR !== null ? `${tradWR}%` : "—", c: tradWR !== null ? (tradWR >= 50 ? "#4ade80" : "#f87171") : "#64748b" },
                             { l: "PROFIT FACTOR", v: pf != null ? (typeof pf === "number" ? pf.toFixed(2) : pf) : "—", c: pf != null && typeof pf === "number" ? (pf >= 1 ? "#4ade80" : "#f87171") : "#64748b" },
-                            { l: "MISTAKE RATE", v: `${mistakeRate}%`, c: mistakeRate > 50 ? "#f87171" : mistakeRate > 25 ? "#f59e0b" : "#4ade80" },
-                            { l: "MISTAKE TYPES", v: Object.keys(allMistakes).length || "—", c: "#94a3b8" },
-                            { l: "P&L TREND", v: netTrend.toUpperCase(), c: trendColor },
                           ].map(s => (
                             <div key={s.l} style={{ background: "#0a0e1a", borderRadius: 4, padding: "8px 10px" }}>
                               <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 3 }}>{s.l}</div>
@@ -9991,7 +9988,6 @@ export default function TradingJournal() {
                     { l: "PROFIT FACTOR", v: globalAnalytics.profitFactor != null ? (typeof globalAnalytics.profitFactor === "number" ? globalAnalytics.profitFactor.toFixed(2) : globalAnalytics.profitFactor) : "—", c: globalAnalytics.profitFactor != null && globalAnalytics.profitFactor >= 1 ? "#4ade80" : "#f87171" },
                     { l: "EXPECTANCY", v: globalAnalytics.expectancy != null ? `${globalAnalytics.expectancy >= 0 ? "+" : ""}$${Math.abs(globalAnalytics.expectancy * Math.abs(globalAnalytics.avgLoss || 1)).toFixed(0)}` : "—", c: globalAnalytics.expectancy != null && globalAnalytics.expectancy >= 0 ? "#4ade80" : "#f87171" },
                     { l: "MAX DRAWDOWN", v: globalAnalytics.maxDD != null ? `-$${Math.abs(globalAnalytics.maxDD).toFixed(0)}` : "—", c: "#f87171" },
-                    { l: "AVG WIN / LOSS", v: globalAnalytics.avgWin && globalAnalytics.avgLoss ? `$${Math.abs(globalAnalytics.avgWin).toFixed(0)} / $${Math.abs(globalAnalytics.avgLoss).toFixed(0)}` : "—", c: "#94a3b8" },
                     { l: "TOTAL TRADES", v: globalAnalytics.total || filtered.length, c: "#e2e8f0" },
                   ].map(s => (
                     <div key={s.l} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "8px 10px" }}>
@@ -9999,6 +9995,19 @@ export default function TradingJournal() {
                       <div style={{ fontSize: 13, color: s.c, fontWeight: 600 }}>{s.v}</div>
                     </div>
                   ))}
+                  {/* AVG WIN / LOSS — split colors */}
+                  <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 3 }}>AVG WIN / LOSS</div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                      {globalAnalytics.avgWin && globalAnalytics.avgLoss ? (
+                        <>
+                          <span style={{ color: "#4ade80" }}>${Math.abs(globalAnalytics.avgWin).toFixed(0)}</span>
+                          <span style={{ color: "#475569" }}> / </span>
+                          <span style={{ color: "#f87171" }}>-${Math.abs(globalAnalytics.avgLoss).toFixed(0)}</span>
+                        </>
+                      ) : "—"}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -10036,7 +10045,7 @@ export default function TradingJournal() {
                   <button onClick={() => { const [y, m] = calMonth.split("-").map(Number); const d = new Date(y, m - 2, 1); setCalMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }}
                     style={{ display:"block", background:"#070d1a", color:"#64748b", border:"none", padding:"10px 15px", borderRadius:4, fontFamily:"inherit", fontSize:13, cursor:"pointer" }}>‹</button>
                 </span>
-                <span style={{ fontSize: 13, color: "#e2e8f0", letterSpacing: "0.08em", minWidth: 130, textAlign: "center", fontWeight: 500 }}>
+                <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, letterSpacing: "0.12em", minWidth: 150, textAlign: "center", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1 }}>
                   {(() => { const [y, m] = calMonth.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase(); })()}
                 </span>
                 <span style={{ display:"inline-block", padding:1, borderRadius:5, background:"linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))" }}>
