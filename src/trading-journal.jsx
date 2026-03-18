@@ -3411,6 +3411,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                   onClick={e => e.stopPropagation()}
                   placeholder={isWeekend ? "weekend plan…" : "notes…"}
                   style={{ width: "100%", fontSize: 12, color: "#7dd3fc", background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px", textAlign: "center" }}
+                  className="no-autoresize"
                   onFocus={e => {
                     e.currentTarget.style.color = "#bae6fd";
                     e.currentTarget.parentNode.style.borderTopColor = "rgba(129,140,248,0.4)";
@@ -5023,7 +5024,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
   );
 }
 
-function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMode = "weekly", ai }) {
+function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMode = "weekly", ai, activeJournal, propStatus }) {
   const calcNetPnl = calcNetPnlProp;
   const [recapMode, setRecapMode] = useState(initMode);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
@@ -5406,8 +5407,8 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
       }
 
       const txt = await aiRequestText(ai, {
-        max_tokens: 2000,
-        timeoutMs: 30000,
+        max_tokens: 4000,
+        timeoutMs: 60000,
         messages: [{ role: 'user', content: prompt }],
       });
       setCachedAiText(cacheKey, txt);
@@ -8857,6 +8858,25 @@ export default function TradingJournal() {
   const propJournals = useMemo(() => journals.filter(j => j.type === JOURNAL_TYPES.PROP), [journals]);
   const [allPropEntriesMap, setAllPropEntriesMap] = useState({}); // { journalId: entries[] }
 
+  // Auto-resize all textareas — JS fallback for browsers without CSS field-sizing support
+  useEffect(() => {
+    const resize = (e) => {
+      const el = e.target;
+      if (el.tagName !== 'TEXTAREA' || el.classList.contains('no-autoresize')) return;
+      el.style.height = 'auto';
+      el.style.height = el.scrollHeight + 'px';
+    };
+    // Set initial heights for any pre-filled textareas
+    const initAll = () => {
+      document.querySelectorAll('textarea:not(.no-autoresize)').forEach(el => {
+        if (el.value) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+      });
+    };
+    document.addEventListener('input', resize);
+    initAll();
+    return () => document.removeEventListener('input', resize);
+  }, [view, tab]); // re-init when view/tab changes to catch newly mounted textareas
+
   // Load all prop journal entries when propDash view is opened
   useEffect(() => {
     if (view !== "propdash") return;
@@ -9125,10 +9145,11 @@ export default function TradingJournal() {
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Bebas+Neue&family=Bodoni+Moda:ital,wght@1,900&family=Cinzel:wght@700;900&family=Space+Grotesk:wght@400;500;600;700&display=swap');
         html,body{width:100%;margin:0;padding:0}*{box-sizing:border-box;margin:0;padding:0}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0a0e1a}::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px}
-        textarea,input,select{background:#0f1729!important;color:#e2e8f0!important;border:1px solid #1e3a5f!important;border-radius:4px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:13px;width:100%;outline:none;transition:border-color .2s;resize:vertical}
+        textarea,input,select{background:#0f1729!important;color:#e2e8f0!important;border:1px solid #1e3a5f!important;border-radius:4px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:13px;width:100%;outline:none;transition:border-color .2s;resize:none;overflow:hidden;field-sizing:content}
         textarea:focus,input:focus,select:focus{border-color:#3b82f6!important}
         textarea::placeholder,input::placeholder{color:#1e3a5f}
         select option{background:#0f1729}
+        textarea.no-autoresize{resize:vertical;overflow:auto;field-sizing:unset}
         .entry-card{transition:all .15s;cursor:pointer}
         
         .entry-card:hover{background:#0f1729!important;border-color:#1e3a5f!important}
@@ -10788,7 +10809,7 @@ export default function TradingJournal() {
                     <label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase" }}>PASTE BROKER DATA</label>
                     {detectedFormat && <span style={{ fontSize: 9, color: "#3b82f6", background: "rgba(59,130,246,0.1)", border: "1px solid rgba(59,130,246,0.2)", padding: "2px 8px", borderRadius: 12 }}>✓ {detectedFormat}</span>}
                   </div>
-                  <textarea rows={10} placeholder={"Paste your broker export here — any format works:\n\n• Tradovate Orders CSV\n• Interactive Brokers Flex Query\n• Questrade Activity Export\n• NinjaTrader Trade Log\n• Any tab or comma separated fills data\n\nJust paste and hit the button — AI handles the rest."} value={importRaw} onChange={e => { setImportRaw(e.target.value); setCsvFileName(""); setDetectedFormat(""); setImportSuccess(false); setAiParseError(""); }} style={{ fontFamily: "monospace", fontSize: 11 }} />
+                  <textarea rows={10} className="no-autoresize" placeholder={"Paste your broker export here — any format works:\n\n• Tradovate Orders CSV\n• Interactive Brokers Flex Query\n• Questrade Activity Export\n• NinjaTrader Trade Log\n• Any tab or comma separated fills data\n\nJust paste and hit the button — AI handles the rest."} value={importRaw} onChange={e => { setImportRaw(e.target.value); setCsvFileName(""); setDetectedFormat(""); setImportSuccess(false); setAiParseError(""); }} style={{ fontFamily: "monospace", fontSize: 11 }} />
                 </div>
 
                 {/* CSV confirm replace dialog */}
@@ -10911,7 +10932,7 @@ export default function TradingJournal() {
 
         {/* AI RECAP */}
         {view === "recap" && (
-          <AIRecapView entries={entries} netPnl={netPnl} fmtPnl={fmtPnl} pnlColor={pnlColor} initMode={recapInitMode} ai={aiCfg} />
+          <AIRecapView entries={entries} netPnl={netPnl} fmtPnl={fmtPnl} pnlColor={pnlColor} initMode={recapInitMode} ai={aiCfg} activeJournal={activeJournal} propStatus={propStatus} />
         )}
 
         {/* QUOTES */}
