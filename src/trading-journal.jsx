@@ -153,48 +153,76 @@ const AI_PROVIDER_REGISTRY = [
       { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (fastest free tier)' },
     ],
     async request(ai, { messages, max_tokens = 600, model, timeoutMs = 120000 }) {
-      const ctrl = new AbortController();
-      const hardTimer = setTimeout(() => ctrl.abort(), timeoutMs);
       const contents = messages.map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],
       }));
       const mdl = model || ai.model;
-      try {
+      const body = JSON.stringify({
+        contents,
+        generationConfig: { maxOutputTokens: max_tokens, temperature: 0.7 },
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+        ],
+      });
+
+      // Use streamGenerateContent (returns chunked JSON array).
+      // Each chunk arrives as it's generated so the connection never stalls.
+      // We wrap with a hard timeout using Promise.race.
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Gemini request timed out after 2 minutes')), timeoutMs)
+      );
+
+      const fetchPromise = (async () => {
+        const ctrl = new AbortController();
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${mdl}:generateContent?key=${ai.apiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${mdl}:streamGenerateContent?key=${ai.apiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             signal: ctrl.signal,
-            body: JSON.stringify({
-              contents,
-              generationConfig: { maxOutputTokens: max_tokens, temperature: 0.7 },
-              safetySettings: [
-                { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-              ],
-            }),
+            body,
           }
         );
         if (!res.ok) {
           const errBody = await res.text().catch(() => '');
           throw new Error(`API error ${res.status}: ${errBody.slice(0, 300)}`);
         }
-        const data = await res.json();
-        if (data?.error) throw new Error(data.error.message || 'Gemini API returned an error');
-        const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-        const clean = text.trim();
+        // streamGenerateContent returns a JSON array: [chunk, chunk, ...]
+        // Read the full body then parse — each chunk has candidates[0].content.parts
+        const text = await res.text();
+        // The response is a JSON array of GenerateContentResponse objects
+        // Strip outer brackets and split on '},\r\n{' to parse chunks
+        let accumulated = '';
+        try {
+          const chunks = JSON.parse(text);
+          if (Array.isArray(chunks)) {
+            for (const chunk of chunks) {
+              const t = chunk.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+              accumulated += t;
+            }
+          } else {
+            // Single response object fallback
+            accumulated = chunks.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+          }
+        } catch {
+          // If JSON parse fails, try extracting text directly
+          const matches = text.matchAll(/"text":\s*"((?:[^"\\]|\\.)*)"/g);
+          for (const m of matches) {
+            try { accumulated += JSON.parse(`"${m[1]}"`); } catch { accumulated += m[1]; }
+          }
+        }
+        const clean = accumulated.trim();
         if (!clean) {
-          const reason = data.candidates?.[0]?.finishReason || 'unknown';
-          throw new Error(`Empty response from Gemini (finishReason: ${reason})`);
+          throw new Error(`Empty response from Gemini — check model name and API key`);
         }
         return clean;
-      } finally {
-        clearTimeout(hardTimer);
-      }
+      })();
+
+      return Promise.race([fetchPromise, timeoutPromise]);
     },
   },
   {
@@ -5205,208 +5233,72 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
     const allLosers = allTrades.filter(t => t.pnl < 0);
     const overallWR = allTrades.length ? ((allWinners.length/allTrades.length)*100).toFixed(1) : "N/A";
     const overallPF = allLosers.length ? (allWinners.reduce((s,t)=>s+t.pnl,0)/Math.abs(allLosers.reduce((s,t)=>s+t.pnl,0))).toFixed(2) : "N/A";
-    const avgDailyPnl = (totalPnl / periodEntries.length).toFixed(2);
-    // Order type aggregation across period
-    const periodOT = {};
-    for (const t of allTrades) { const k = t.orderType||"MKT"; if (!periodOT[k]) periodOT[k]={trades:0,pnl:0,wins:0}; periodOT[k].trades++; periodOT[k].pnl+=t.pnl; if(t.pnl>0)periodOT[k].wins++; }
-    const orderTypeSummary = Object.entries(periodOT).filter(([,d])=>d.trades>0).map(([ot,d])=>`${ot}: ${d.trades} trades, ${Math.round(d.wins/d.trades*100)}% WR, $${d.pnl.toFixed(2)} gross`).join(" | ") || "none";
-    // Commission drag across period
+    const avgDailyPnl = (totalPnl / periodEntries.length).toFixed(0);
     const periodTotalComm = allTrades.reduce((s,t)=>s+(t.commission||0),0);
     const periodGross = allTrades.reduce((s,t)=>s+t.pnl,0);
-    const periodCommDrag = Math.abs(periodGross)>0 ? (periodTotalComm/Math.abs(periodGross)*100).toFixed(1) : "N/A";
-    // Duration breakdown across period
+    const periodCommDrag = Math.abs(periodGross)>0 ? (periodTotalComm/Math.abs(periodGross)*100).toFixed(1) : "0";
+
+    const periodOT = {};
+    for (const t of allTrades) { const k=t.orderType||"MKT"; if(!periodOT[k])periodOT[k]={trades:0,pnl:0,wins:0}; periodOT[k].trades++; periodOT[k].pnl+=t.pnl; if(t.pnl>0)periodOT[k].wins++; }
+    const orderTypeSummary = Object.entries(periodOT).filter(([,d])=>d.trades>0).map(([ot,d])=>`${ot}:${d.trades}t ${Math.round(d.wins/d.trades*100)}%WR $${d.pnl.toFixed(0)}`).join(" | ")||"none";
+
     const periodDurBuckets = {"<1m":{t:0,w:0,pnl:0},"1-5m":{t:0,w:0,pnl:0},"5-15m":{t:0,w:0,pnl:0},"15-60m":{t:0,w:0,pnl:0},">1h":{t:0,w:0,pnl:0}};
     for (const t of allTrades) { const s=t.durationSecs||0; const k=s<60?"<1m":s<300?"1-5m":s<900?"5-15m":s<3600?"15-60m":">1h"; periodDurBuckets[k].t++; periodDurBuckets[k].pnl+=t.pnl; if(t.pnl>0)periodDurBuckets[k].w++; }
-    const durationSummary = Object.entries(periodDurBuckets).filter(([,d])=>d.t>0).map(([k,d])=>`${k}: ${d.t} trades ${Math.round(d.w/d.t*100)}% WR $${d.pnl.toFixed(0)}`).join(" | ") || "none";
-    // Session breakdown across period
+    const durationSummary = Object.entries(periodDurBuckets).filter(([,d])=>d.t>0).map(([k,d])=>`${k}:${d.t}t ${Math.round(d.w/d.t*100)}%WR $${d.pnl.toFixed(0)}`).join(" | ")||"none";
+
     const periodSess = {};
-    const _getSess = (sellTime) => { if (!sellTime) return "Unknown"; const spIdx=sellTime.indexOf(" "); const p=(spIdx!==-1?sellTime.slice(spIdx+1):sellTime).trim(); const cp=p.split(":"); let h,m; if(cp.length>=2){h=+cp[0];m=+cp[1];}else if(/^\d{6}$/.test(p)){h=+p.slice(0,2);m=+p.slice(2,4);}else if(/^\d{4}$/.test(p)){h=+p.slice(0,2);m=+p.slice(2,4);}else{return "Unknown";} const mins=h*60+m; return mins<360?"Asian":mins<570?"London":mins<720?"NY Open":mins<900?"Afternoon Deadzone":mins<960?"Power Hour":"After Hours"; };
-    for (const t of allTrades) { const k=_getSess(t.sellTime); if(!periodSess[k])periodSess[k]={trades:0,pnl:0,wins:0}; periodSess[k].trades++; periodSess[k].pnl+=t.pnl; if(t.pnl>0)periodSess[k].wins++; }
-    const periodSessionSummary = Object.entries(periodSess).filter(([,d])=>d.trades>0).sort((a,b)=>b[1].pnl-a[1].pnl).map(([k,d])=>`${k}: ${d.trades} trades ${Math.round(d.wins/d.trades*100)}% WR $${d.pnl.toFixed(2)}`).join(" | ") || "none";
-    // Symbol breakdown across period
+    const _getSess = (sellTime) => { if(!sellTime) return "?"; const p=(sellTime.indexOf(" ")!==-1?sellTime.split(" ")[1]:sellTime).trim(); const cp=p.split(":"); let h=0,m=0; if(cp.length>=2){h=+cp[0];m=+cp[1];}else if(/^\d{6}$/.test(p)){h=+p.slice(0,2);m=+p.slice(2,4);}else return "?"; const mins=h*60+m; return mins<360?"Asian":mins<570?"London":mins<720?"NY Open":mins<900?"Deadzone":mins<960?"Power Hr":"After Hrs"; };
+    for (const t of allTrades) { const k=_getSess(t.sellTime); if(!periodSess[k])periodSess[k]={t:0,pnl:0,w:0}; periodSess[k].t++;periodSess[k].pnl+=t.pnl;if(t.pnl>0)periodSess[k].w++; }
+    const sessionSummary = Object.entries(periodSess).filter(([,d])=>d.t>0).sort((a,b)=>b[1].pnl-a[1].pnl).map(([k,d])=>`${k}:${d.t}t ${Math.round(d.w/d.t*100)}%WR $${d.pnl.toFixed(0)}`).join(" | ")||"none";
+
     const periodSyms = {};
-    for (const t of allTrades) { if(!periodSyms[t.symbol])periodSyms[t.symbol]={trades:0,pnl:0,wins:0}; periodSyms[t.symbol].trades++; periodSyms[t.symbol].pnl+=t.pnl; if(t.pnl>0)periodSyms[t.symbol].wins++; }
-    const symbolSummary = Object.entries(periodSyms).sort((a,b)=>b[1].pnl-a[1].pnl).map(([sym,d])=>`${sym}: ${d.trades} trades ${Math.round(d.wins/d.trades*100)}% WR $${d.pnl.toFixed(2)}`).join(" | ") || "none";
+    for (const t of allTrades) { if(!periodSyms[t.symbol])periodSyms[t.symbol]={t:0,pnl:0,w:0}; periodSyms[t.symbol].t++;periodSyms[t.symbol].pnl+=t.pnl;if(t.pnl>0)periodSyms[t.symbol].w++; }
+    const symbolSummary = Object.entries(periodSyms).sort((a,b)=>b[1].pnl-a[1].pnl).map(([sym,d])=>`${sym}:${d.t}t $${d.pnl.toFixed(0)}`).join(" | ")||"none";
 
-    // Mistake frequency tally
     const mistakeCounts = {};
-    for (const e of periodEntries) for (const m of (e.sessionMistakes || [])) mistakeCounts[m] = (mistakeCounts[m] || 0) + 1;
-    const mistakeTally = Object.entries(mistakeCounts).sort((a,b)=>b[1]-a[1])
-      .map(([m,n]) => `  ${m}: ${n}x (${Math.round(n/periodEntries.length*100)}% of days)`)
-      .join("\n") || "  None flagged";
+    for (const e of periodEntries) for (const m of (e.sessionMistakes||[])) mistakeCounts[m]=(mistakeCounts[m]||0)+1;
+    const mistakeTally = Object.entries(mistakeCounts).sort((a,b)=>b[1]-a[1]).map(([m,n])=>`${m}:${n}x`).join(", ")||"none";
 
-    // Compile all written notes by field across the period for theme mining
-    // Prefer polished rewrites over raw text
-    const getNote = (e, key) => (e.aiRewrites?.[key]?.trim() || e[key] || "");
-    const allNarratives = periodEntries.filter(e=>e.aiNoteSummary).map(e=>`[${e.date}] ${e.aiNoteSummary}`).join("\n");
-    const allLessons = periodEntries.filter(e=>getNote(e,"lessonsLearned")).map(e=>`[${e.date}] ${getNote(e,"lessonsLearned")}`).join("\n");
-    const allMistakeNotes = periodEntries.filter(e=>getNote(e,"mistakes")).map(e=>`[${e.date}] ${getNote(e,"mistakes")}`).join("\n");
-    const allImprovements = periodEntries.filter(e=>getNote(e,"improvements")).map(e=>`[${e.date}] ${getNote(e,"improvements")}`).join("\n");
-    const allRules = periodEntries.filter(e=>getNote(e,"rules")).map(e=>`[${e.date}] ${getNote(e,"rules")}`).join("\n");
-    const allMarketNotes = periodEntries.filter(e=>getNote(e,"marketNotes")).map(e=>`[${e.date}] ${getNote(e,"marketNotes")}`).join("\n");
-    const allReinforceRules = periodEntries.filter(e=>getNote(e,"reinforceRule")).map(e=>`[${e.date}] ${getNote(e,"reinforceRule")}`).join("\n");
-    const allTomorrowPlans = periodEntries.filter(e=>getNote(e,"tomorrow")).map(e=>`[${e.date}] ${getNote(e,"tomorrow")}`).join("\n");
-    const allBestTrades = periodEntries.filter(e=>getNote(e,"bestTrade")).map(e=>`[${e.date}] ${getNote(e,"bestTrade")}`).join("\n");
-    const allWorstTrades = periodEntries.filter(e=>getNote(e,"worstTrade")).map(e=>`[${e.date}] ${getNote(e,"worstTrade")}`).join("\n");
-    const allMistakeCostNotes = periodEntries.filter(e=>e.mistakeCostNotes).map(e=>`[${e.date}] ${e.mistakeCostNotes}`).join("\n");
-    const scoreEntries = periodEntries.filter(e=>e.executionScore!=null||e.decisionScore!=null);
-    const scoreVsPnl = scoreEntries.map(e=>{ const net=netPnl(e); return `[${e.date}] exec:${e.executionScore??"—"}/10 dec:${e.decisionScore??"—"}/10 net:$${net.toFixed(0)} ${net<0&&(e.executionScore||0)>=7?"⚠ high score on losing day":""}`; }).join("\n");
+    const grades = periodEntries.filter(e=>e.grade).map(e=>e.grade);
+    const gradeDist = grades.length ? [...new Set(grades)].map(g=>`${g}:${grades.filter(x=>x===g).length}`).join(",") : "none";
 
-    // Feature 4: Mistake cost tally across period
-    const mistakeCostTotals = {};
-    for (const e of periodEntries) {
-      if (!e.mistakeCosts) continue;
-      for (const [tag, cost] of Object.entries(e.mistakeCosts)) {
-        if (cost == null || !Number.isFinite(Number(cost)) || Number(cost) <= 0) continue;
-        mistakeCostTotals[tag] = (mistakeCostTotals[tag] || 0) + Number(cost);
-      }
+    // Plan vs execution — only if plans exist (keeps prompt short when no data)
+    const sortedEntries = [...periodEntries].sort((a,b)=>a.date.localeCompare(b.date));
+    const planLines = [];
+    for (let i=1;i<sortedEntries.length;i++) {
+      const prev=sortedEntries[i-1], curr=sortedEntries[i];
+      if (prev.tomorrow?.trim()) planLines.push(`[${prev.date}→${curr.date}] Planned:"${prev.tomorrow.slice(0,120)}" | Actual grade:${curr.grade||"?"} P&L:$${netPnl(curr).toFixed(0)} mistakes:${(curr.sessionMistakes||[]).join(",")||"none"}`);
     }
-    const totalMistakeCost = Object.values(mistakeCostTotals).reduce((s, v) => s + v, 0);
-    const mistakeCostSummary = Object.entries(mistakeCostTotals).sort((a,b)=>b[1]-a[1])
-      .map(([tag, cost]) => `  ${tag}: $${cost.toFixed(2)}`)
-      .join("\n") || "  No cost data attributed";
 
-    // Feature 3: Average scores
-    const scoredEntries = periodEntries.filter(e => e.executionScore != null || e.decisionScore != null);
-    const avgExec = scoredEntries.length ? (scoredEntries.filter(e=>e.executionScore!=null).reduce((s,e)=>s+e.executionScore,0) / Math.max(1,scoredEntries.filter(e=>e.executionScore!=null).length)).toFixed(1) : null;
-    const avgDec  = scoredEntries.length ? (scoredEntries.filter(e=>e.decisionScore!=null).reduce((s,e)=>s+e.decisionScore,0)  / Math.max(1,scoredEntries.filter(e=>e.decisionScore!=null).length)).toFixed(1)  : null;
+    return `Trading coach: analyze this journal for ${label}. Data is complete — every trade, every note.
 
-    // Grade distribution
-    const grades = periodEntries.filter(e => e.grade).map(e => e.grade);
-    const gradeDist = grades.length ? [...new Set(grades)].map(g=>`${g}:${grades.filter(x=>x===g).length}`).join(", ") : "None logged";
+STATS: ${wins}W/${losses}L days | Net $${totalPnl.toFixed(0)} | Avg/day $${avgDailyPnl} | ${allTrades.length} trades ${overallWR}%WR PF:${overallPF} | Fees $${periodTotalComm.toFixed(0)} (${periodCommDrag}% drag)
+GRADES: ${gradeDist}
+SESSIONS: ${sessionSummary}
+HOLD TIME: ${durationSummary}
+ORDER TYPES: ${orderTypeSummary}
+SYMBOLS: ${symbolSummary}
+MISTAKES: ${mistakeTally}
+${planLines.length ? `PLAN vs ACTUAL:\n${planLines.join("\n")}` : ""}
 
-    // Day of week breakdown
-    const DOW = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
-    const dowStats = {};
-    for (const day of DOW) dowStats[day] = { pnl:0, wins:0, days:0 };
-    for (const e of periodEntries) {
-      const day = DOW[new Date(e.date+"T12:00:00").getDay()-1];
-      if (!day) continue;
-      dowStats[day].pnl += netPnl(e);
-      dowStats[day].days++;
-      if (netPnl(e) > 0) dowStats[day].wins++;
-    }
-    const dowSummary = DOW.filter(d => dowStats[d].days > 0)
-      .map(d => `  ${d}: ${dowStats[d].days} days, $${dowStats[d].pnl.toFixed(2)} net, ${Math.round(dowStats[d].wins/dowStats[d].days*100)}% WR`)
-      .join("\n") || "  No data";
-
-    // Mood/grade correlation
-    const moodGrade = periodEntries.filter(e => (e.moods?.length || e.mood) && e.grade)
-      .map(e => `${(e.moods?.length ? e.moods : [e.mood]).join("+")}→${e.grade}`)
-      .join(", ") || "None";
-
-    // Plan-violation cross-reference: for each entry, look at the PREVIOUS entry's "tomorrow" plan
-    const sortedEntries = [...periodEntries].sort((a, b) => a.date.localeCompare(b.date));
-    const planViolations = [];
-    for (let i = 1; i < sortedEntries.length; i++) {
-      const prev = sortedEntries[i - 1];
-      const curr = sortedEntries[i];
-      if (prev.tomorrow && prev.tomorrow.trim()) {
-        planViolations.push({
-          planDate: prev.date,
-          tradeDate: curr.date,
-          plan: prev.tomorrow.trim(),
-          rule: prev.reinforceRule || null,
-          actualMistakes: curr.sessionMistakes || [],
-          actualGrade: curr.grade || null,
-          actualNetPnl: netPnl(curr),
-        });
-      }
-    }
-    const planViolationSummary = planViolations.length > 0
-      ? planViolations.map(v =>
-          `  [${v.planDate} plan → ${v.tradeDate} actual]\n  Plan stated: "${v.plan}"${v.rule ? `\n  Rule to reinforce: "${v.rule}"` : ""}\n  Actual session grade: ${v.actualGrade || "not logged"} | Net P&L: $${v.actualNetPnl.toFixed(2)}${v.actualMistakes.length ? `\n  Mistakes flagged on actual day: ${v.actualMistakes.join(", ")}` : ""}`
-        ).join("\n\n")
-      : "  No consecutive entries with plans in this period";
-
-    return `You are a professional trading coach. You have the complete journal data below for: ${label}
-${activeJournal?.type === JOURNAL_TYPES.PROP ? `\nACCOUNT: Prop Firm — ${activeJournal?.config?.firmName || "Prop"} (${activeJournal?.config?.phase === "funded" ? "Funded" : "Challenge"}, $${(activeJournal?.config?.accountSize||0).toLocaleString()})` : "\nACCOUNT: Personal"}
-
-PERIOD STATS:
-- Days: ${periodEntries.length} (${wins}W/${losses}L) | Net: $${totalPnl.toFixed(0)} | Avg/day: $${avgDailyPnl}
-- Trades: ${allTrades.length} | WR: ${overallWR}% | PF: ${overallPF} | Gross: $${periodGross.toFixed(0)} | Fees: $${periodTotalComm.toFixed(0)} (${periodCommDrag}% drag)
-- Grades: ${gradeDist}${avgExec||avgDec ? ` | Scores: exec:${avgExec||"—"}/10 dec:${avgDec||"—"}/10` : ""}
-
-SESSION BREAKDOWN: ${periodSessionSummary||"none"}
-HOLD TIME: ${durationSummary||"none"}
-ORDER TYPES: ${orderTypeSummary||"none"}
-SYMBOLS: ${symbolSummary||"none"}
-DAY OF WEEK: ${DOW.filter(d=>dowStats[d].days>0).map(d=>`${d.slice(0,3)}:$${dowStats[d].pnl.toFixed(0)}(${Math.round(dowStats[d].wins/dowStats[d].days*100)}%WR)`).join(" | ")||"none"}
-MISTAKE FREQUENCY: ${mistakeTally.replace(/\n/g," | ")}
-MISTAKE COSTS: ${mistakeCostSummary.replace(/\n/g, " | ")||"none"}${totalMistakeCost>0?` | Total: $${totalMistakeCost.toFixed(0)}`:""}
-MOOD→GRADE: ${moodGrade}
-
-PLAN VS EXECUTION:
-${planViolationSummary}
-
-SCORES VS P&L:
-${scoreVsPnl||"No scores logged"}
-
-WRITTEN NOTES PER FIELD:
-LESSONS: ${allLessons||"None"}
-MISTAKES: ${allMistakeNotes||"None"}
-RULES: ${allRules||"None"}
-IMPROVEMENTS: ${allImprovements||"None"}
-MARKET NOTES: ${allMarketNotes||"None"}
-REINFORCE: ${allReinforceRules||"None"}
-TOMORROW PLANS: ${allTomorrowPlans||"None"}
-BEST TRADES: ${allBestTrades||"None"}
-WORST TRADES: ${allWorstTrades||"None"}
-
-FULL SESSION LOG:
+JOURNAL ENTRIES (full trade log + all notes per day):
 ${notes}
 
-Review every trade, every written note, every flagged mistake, every plan. Cross-reference all of it ruthlessly.
+OUTPUT: Bullet points only. Cite dates and $ amounts. Complete all 7 sections:
 
-OUTPUT FORMAT: Bullet points only. No paragraphs. Every finding must cite a date, dollar amount, or trade number. Be direct. No filler.
+**📊 PERFORMANCE OVERVIEW** — key numbers, best/worst session, hold time edge, verdict
 
-Write exactly these 7 sections:
+**🔑 KEY LESSONS IDENTIFIED** — recurring themes across multiple days (quote exact words + date, count appearances, did behavior change?)
 
-**📊 PERFORMANCE OVERVIEW**
-- Net P&L, win rate, profit factor, avg daily P&L — one bullet each
-- Best session/time window and worst — with exact numbers
-- Hold time edge: which duration bucket produced the best results
-- Grade pattern: what grades appeared and what they signal
-- One-line verdict on the week/month
+**⚠️ PATTERNS & MISTAKES** — flagged mistakes with frequency + P&L impact; blind spots in trade data not mentioned in notes
 
-**🔑 KEY LESSONS IDENTIFIED**
-For each recurring theme found across multiple days (same concept written more than once):
-- Theme: [name it in 3-5 words]
-- Appeared: [list the dates]
-- What they wrote: [quote or closely paraphrase their exact words]
-- Did it change behavior? [yes/no + evidence from trade data]
+**🚩 RED FLAGS — PLAN VS EXECUTION** — for each plan written: HONORED or VIOLATED with evidence (skip if no plans)
 
-**⚠️ PATTERNS & MISTAKES**
-Flagged mistakes section:
-- [Mistake name]: flagged [N]x — trade data on those days: [W/L count, avg P&L, $ cost if available]
+**🧠 BEHAVIORAL TRENDS** — 3 data-backed patterns trader hasn't noticed (session/time/order type/direction)
 
-Blind spots (patterns in trade data NOT mentioned in notes):
-- [Pattern]: [evidence with dates and dollar amounts]
+**💡 STRENGTHS TO BUILD ON** — 2 specific positives with exact numbers
 
-**🚩 RED FLAGS — PLAN VS. EXECUTION**
-For each consecutive entry where a plan existed:
-- [Date] planned: "[quote]"
-- Next day result: HONORED or VIOLATED — [one-line evidence]
-
-Skip this section if no plan data exists.
-
-**🧠 BEHAVIORAL TRENDS**
-3 data-backed observations the trader likely hasn't noticed:
-- Trend 1: [session/time/order type pattern + $ evidence]
-- Trend 2: [mood/grade/mistake cluster pattern + dates]
-- Trend 3: [commission drag, hold time, or direction bias + numbers]
-
-**💡 STRENGTHS TO BUILD ON**
-- Strength 1: [specific session, setup, or behavior + exact P&L data]
-- Strength 2: [specific positive pattern + dates]
-
-**🎯 ACTIONABLE FOCUS POINTS**
-3 rules for next period — format strictly as:
-- [Root cause] → [Measurable rule with specific threshold]
-- [Root cause] → [Measurable rule with specific threshold]
-- [Root cause] → [Measurable rule with specific threshold]
-
-Keep bullets concise — one clear finding per bullet. Dense, specific, no filler. Complete all 7 sections fully — do not truncate any section.`;
+**🎯 ACTIONABLE FOCUS POINTS** — 3 rules: [Root cause] → [Measurable threshold]`;
   };
 
   const generateSummary = async (period) => {
