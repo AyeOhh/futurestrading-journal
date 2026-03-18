@@ -5084,70 +5084,54 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
   };
 
   const buildPrompt = (periodEntries, label) => {
-    // Per-entry full data including computed trade stats
+    // Per-entry data — compact trade log + full written notes
     const notes = periodEntries.map(e => {
       const trades = e.parsedTrades || [];
       const winners = trades.filter(t => t.pnl > 0);
-      const losers = trades.filter(t => t.pnl < 0);
-      const avgWin = winners.length ? (winners.reduce((s,t) => s+t.pnl,0)/winners.length).toFixed(2) : null;
-      const avgLoss = losers.length ? Math.abs(losers.reduce((s,t) => s+t.pnl,0)/losers.length).toFixed(2) : null;
-      const profitFactor = losers.length && avgLoss > 0 ? (winners.reduce((s,t)=>s+t.pnl,0)/Math.abs(losers.reduce((s,t)=>s+t.pnl,0))).toFixed(2) : null;
-      const maxDD = trades.reduce((acc, t) => { acc.peak = Math.max(acc.peak, acc.running += t.pnl); acc.dd = Math.min(acc.dd, acc.running - acc.peak); return acc; }, { running:0, peak:0, dd:0 }).dd;
+      const losers  = trades.filter(t => t.pnl < 0);
+      const avgWin  = winners.length ? (winners.reduce((s,t)=>s+t.pnl,0)/winners.length).toFixed(0) : null;
+      const avgLoss = losers.length  ? Math.abs(losers.reduce((s,t)=>s+t.pnl,0)/losers.length).toFixed(0) : null;
+      const pf      = losers.length  ? (winners.reduce((s,t)=>s+t.pnl,0)/Math.abs(losers.reduce((s,t)=>s+t.pnl,0))).toFixed(2) : null;
+      const maxDD   = trades.reduce((acc,t)=>{acc.peak=Math.max(acc.peak,acc.running+=t.pnl);acc.dd=Math.min(acc.dd,acc.running-acc.peak);return acc;},{running:0,peak:0,dd:0}).dd;
+      // Compact trade log: one line per trade, no redundant labels
       const tradeLog = trades.map((t,i) => {
-        const netT = (t.pnl-(t.commission||0)).toFixed(2);
-        const notesStr = t.notes ? ` [${t.notes}]` : "";
-        return `    Trade ${i+1}: ${t.symbol} qty:${t.qty} ${t.direction||""} | ${t.orderType||"MKT"} | entry $${t.buyPrice}@${t.buyTime?.split(" ")[1]||"?"} exit $${t.sellPrice}@${t.sellTime?.split(" ")[1]||"?"} hold:${t.duration||"?"} | gross $${t.pnl?.toFixed(2)} comm -$${(t.commission||0).toFixed(2)} net $${netT}${notesStr}`;
+        const time = (t.sellTime||t.buyTime||"").split(" ")[1]||"?";
+        const net  = (t.pnl-(t.commission||0)).toFixed(0);
+        const noteStr = t.notes ? ` "${t.notes}"` : "";
+        return `  T${i+1}: ${t.symbol} ${(t.direction||"").slice(0,1).toUpperCase()||"?"} ${t.qty}ct | ${t.orderType||"MKT"} | @${time} hold:${t.duration||"?"} | net$${net}${noteStr}`;
       }).join("\n");
 
       const parts = [];
-      parts.push(`DATE: ${e.date} (${new Date(e.date+"T12:00:00").toLocaleDateString("en-US",{weekday:"long"})})`);
-      if (e.instruments?.length || e.instrument) parts.push(`  Instruments: ${(e.instruments?.length ? e.instruments : [e.instrument]).join(", ")}`);
-      parts.push(`  Net P&L: $${netPnl(e).toFixed(2)} | Gross: $${parseFloat(e.pnl||0).toFixed(2)} | Fees: $${parseFloat(e.commissions||0).toFixed(2)}`);
-      if (e.grade) parts.push(`  Grade: ${e.grade}`);
-      if (e.bias) parts.push(`  Bias: ${e.bias}`);
+      parts.push(`DATE: ${e.date} (${new Date(e.date+"T12:00:00").toLocaleDateString("en-US",{weekday:"short"})})`);
+      parts.push(`  P&L: net$${netPnl(e).toFixed(0)} gross$${parseFloat(e.pnl||0).toFixed(0)} fees$${parseFloat(e.commissions||0).toFixed(0)}`);
+      if (e.grade) parts.push(`  Grade:${e.grade}`);
+      if (e.bias)  parts.push(`  Bias:${e.bias}`);
       const moods = e.moods?.length ? e.moods : e.mood ? [e.mood] : [];
-      if (moods.length) parts.push(`  Mood: ${moods.join(", ")}`);
-      if (e.sessionMistakes?.length) parts.push(`  Session Mistakes: ${e.sessionMistakes.join(", ")}`);
-      // Feature 3: Dual scores
-      if (e.executionScore != null || e.decisionScore != null) {
-        const scoreStr = [
-          e.executionScore != null && `Execution ${e.executionScore}/10`,
-          e.decisionScore  != null && `Decision Quality ${e.decisionScore}/10`,
-        ].filter(Boolean).join(" | ");
-        parts.push(`  Scores: ${scoreStr}`);
-      }
-      // Feature 4: Mistake costs
-      if (e.mistakeCosts && Object.keys(e.mistakeCosts).length) {
-        const costLines = Object.entries(e.mistakeCosts)
-          .filter(([, v]) => v != null && Number(v) > 0)
-          .map(([tag, cost]) => `    - ${tag}: $${Number(cost).toFixed(2)}`);
-        if (costLines.length) {
-          const total = costLines.reduce((s, line) => s + parseFloat(line.split("$")[1] || 0), 0);
-          parts.push(`  Mistake Cost Attribution:\n${costLines.join("\n")}\n    Total: $${total.toFixed(2)} (vs net P&L $${netPnl(e).toFixed(2)})${e.mistakeCostNotes ? `\n    Cost Notes: ${e.mistakeCostNotes}` : ""}`);
-        }
+      if (moods.length) parts.push(`  Mood:${moods.join(", ")}`);
+      if (e.sessionMistakes?.length) parts.push(`  Mistakes:${e.sessionMistakes.join(" | ")}`);
+      if (e.executionScore!=null||e.decisionScore!=null) parts.push(`  Scores: exec:${e.executionScore??"—"}/10 dec:${e.decisionScore??"—"}/10`);
+      if (e.mistakeCosts) {
+        const rows = Object.entries(e.mistakeCosts).filter(([,v])=>v!=null&&Number(v)>0);
+        if (rows.length) parts.push(`  MistakeCost:${rows.map(([t,c])=>`${t}=$${Number(c).toFixed(0)}`).join(" | ")}`);
       }
       if (trades.length) {
-        parts.push(`  Trades: ${trades.length} total | ${winners.length}W / ${losers.length}L | ${trades.length ? ((winners.length/trades.length)*100).toFixed(0) : 0}% WR`);
-        if (avgWin) parts.push(`  Avg Win: $${avgWin} | Avg Loss: $${avgLoss} | Profit Factor: ${profitFactor||"N/A"}`);
-        if (maxDD < 0) parts.push(`  Max Intraday Drawdown: $${maxDD.toFixed(2)}`);
-        parts.push(`  Trade Log:\n${tradeLog}`);
+        parts.push(`  Trades:${trades.length} ${winners.length}W/${losers.length}L avgW:$${avgWin||0} avgL:$${avgLoss||0} PF:${pf||"N/A"}${maxDD<0?` maxDD:$${maxDD.toFixed(0)}`:""}`);
+        parts.push(tradeLog);
       }
-      // Use AI-polished rewrites where available
       const erw = e.aiRewrites || {};
-      const enote = (key) => (erw[key]?.trim() || e[key] || "");
-      if (e.aiNoteSummary) parts.push(`  Journal Narrative: ${e.aiNoteSummary}`);
-      if (enote("marketNotes")) parts.push(`  Market Notes: ${enote("marketNotes")}`);
-      if (enote("rules")) parts.push(`  Rules Followed/Broken: ${enote("rules")}`);
-      if (enote("lessonsLearned")) parts.push(`  Lessons Learned: ${enote("lessonsLearned")}`);
-      if (enote("mistakes")) parts.push(`  Mistakes (freeform): ${enote("mistakes")}`);
-      if (enote("improvements")) parts.push(`  Improvements: ${enote("improvements")}`);
-      if (enote("reinforceRule")) parts.push(`  Rule To Reinforce: ${enote("reinforceRule")}`);
-      if (enote("bestTrade")) parts.push(`  Best Trade: ${enote("bestTrade")}`);
-      if (enote("worstTrade")) parts.push(`  Worst Trade: ${enote("worstTrade")}`);
-      if (enote("tomorrow")) parts.push(`  Tomorrow's Plan: ${enote("tomorrow")}`);
-      if (e.mistakeCostNotes) parts.push(`  Mistake Cost Notes: ${e.mistakeCostNotes}`);
+      const n = (key) => (erw[key]?.trim() || e[key] || "");
+      if (e.aiNoteSummary)     parts.push(`  Narrative: ${e.aiNoteSummary}`);
+      if (n("marketNotes"))    parts.push(`  MarketNotes: ${n("marketNotes")}`);
+      if (n("rules"))          parts.push(`  Rules: ${n("rules")}`);
+      if (n("lessonsLearned")) parts.push(`  Lessons: ${n("lessonsLearned")}`);
+      if (n("mistakes"))       parts.push(`  MistakesNote: ${n("mistakes")}`);
+      if (n("improvements"))   parts.push(`  Improvements: ${n("improvements")}`);
+      if (n("reinforceRule"))  parts.push(`  Reinforce: ${n("reinforceRule")}`);
+      if (n("bestTrade"))      parts.push(`  BestTrade: ${n("bestTrade")}`);
+      if (n("worstTrade"))     parts.push(`  WorstTrade: ${n("worstTrade")}`);
+      if (n("tomorrow"))       parts.push(`  TomorrowPlan: ${n("tomorrow")}`);
       return parts.join("\n");
-    }).join("\n\n---\n\n");
+    }).join("\n\n");
 
     const totalPnl = periodEntries.reduce((s, e) => s + netPnl(e), 0);
     const wins = periodEntries.filter(e => netPnl(e) > 0).length;
@@ -5397,21 +5381,14 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
     setLoading(true);
     try {
       const prompt = buildPrompt(periodEntries, label);
-      const cacheKey = await sha256(`${ai?.provider || "anthropic"}|${ai?.model || ''}|periodRecap|${prompt}`);
-      const cached = getCachedAiText(cacheKey);
-      if (cached) {
-        setSummary(cached);
-        setGenerated(prev => ({ ...prev, [period]: cached }));
-        setLoading(false);
-        return;
-      }
-
+      // Note: we intentionally skip the AI text cache for recaps so truncated old
+      // responses don't get served. Recaps are deduplicated by the `generated` state map
+      // which is session-only and always reflects the current token budget.
       const txt = await aiRequestText(ai, {
         max_tokens: 4000,
-        timeoutMs: 60000,
+        timeoutMs: 90000,
         messages: [{ role: 'user', content: prompt }],
       });
-      setCachedAiText(cacheKey, txt);
       setSummary(txt);
       setGenerated(prev => ({ ...prev, [period]: txt }));
     } catch (err) {
@@ -5435,7 +5412,8 @@ Tone: trusted mentor who has studied every trade. Direct, data-driven, no filler
     );
     if (text === "ERROR") return (
       <div style={{ textAlign: "center", padding: "40px 20px", color: "#f87171", fontSize: 13 }}>
-        Failed to generate summary. Please try again.
+        ⚠ Failed to generate recap. This is usually caused by a timeout on a large dataset.<br />
+        <span style={{ color: "#64748b", fontSize: 11 }}>Try clicking ↺ re-run below, or check your API key in Settings (⚙).</span>
       </div>
     );
     return <RenderAI text={text} />;
