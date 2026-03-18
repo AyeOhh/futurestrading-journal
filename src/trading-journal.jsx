@@ -1,32 +1,50 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 
-// ── Storage adapter: uses window.storage in Claude.ai, localStorage elsewhere ──
+// ── Storage adapter: localStorage FIRST (survives artifact updates in same browser)
+// window.storage is artifact-instance specific — switching to a new artifact wipes it.
+// localStorage is tied to the browser, so data persists across every code update.
 const storage = (() => {
-  const hasWindowStorage = typeof window !== 'undefined' && window.storage &&
-    typeof window.storage.get === 'function' && typeof window.storage.set === 'function';
+  const hasLocalStorage = typeof window !== 'undefined' && (() => {
+    try { localStorage.setItem('__tj_test__', '1'); localStorage.removeItem('__tj_test__'); return true; } catch { return false; }
+  })();
 
-  if (hasWindowStorage) return window.storage;
+  if (hasLocalStorage) {
+    // Primary: localStorage — data survives new artifact pastes in the same browser
+    return {
+      get: async (key) => {
+        try {
+          const val = localStorage.getItem(key);
+          return val !== null ? { key, value: val } : null;
+        } catch { return null; }
+      },
+      set: async (key, value) => {
+        try { localStorage.setItem(key, value); return { key, value }; } catch { return null; }
+      },
+      delete: async (key) => {
+        try { localStorage.removeItem(key); return { key, deleted: true }; } catch { return null; }
+      },
+      list: async (prefix) => {
+        try {
+          const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
+          return { keys };
+        } catch { return { keys: [] }; }
+      },
+    };
+  }
 
-  // localStorage fallback for Vercel / self-hosted
+  // Fallback: window.storage (Claude.ai artifact API) — only used if localStorage unavailable
+  if (typeof window !== 'undefined' && window.storage &&
+      typeof window.storage.get === 'function' && typeof window.storage.set === 'function') {
+    return window.storage;
+  }
+
+  // Last resort: in-memory (session only, no persistence)
+  const mem = {};
   return {
-    get: async (key) => {
-      try {
-        const val = localStorage.getItem(key);
-        return val !== null ? { key, value: val } : null;
-      } catch { return null; }
-    },
-    set: async (key, value) => {
-      try { localStorage.setItem(key, value); return { key, value }; } catch { return null; }
-    },
-    delete: async (key) => {
-      try { localStorage.removeItem(key); return { key, deleted: true }; } catch { return null; }
-    },
-    list: async (prefix) => {
-      try {
-        const keys = Object.keys(localStorage).filter(k => !prefix || k.startsWith(prefix));
-        return { keys };
-      } catch { return { keys: [] }; }
-    },
+    get: async (key) => mem[key] ? { key, value: mem[key] } : null,
+    set: async (key, value) => { mem[key] = value; return { key, value }; },
+    delete: async (key) => { delete mem[key]; return { key, deleted: true }; },
+    list: async (prefix) => ({ keys: Object.keys(mem).filter(k => !prefix || k.startsWith(prefix)) }),
   };
 })();
 
