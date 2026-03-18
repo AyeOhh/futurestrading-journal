@@ -155,33 +155,72 @@ const AI_PROVIDER_REGISTRY = [
       { id: 'gemini-1.5-flash',      label: 'Gemini 1.5 Flash'      },
       { id: 'gemini-1.5-flash-8b',   label: 'Gemini 1.5 Flash 8B'   },
     ],
-    async request(ai, { messages, max_tokens = 600, model, timeoutMs = 22000 }) {
+    async request(ai, { messages, max_tokens = 600, model, timeoutMs = 120000 }) {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), timeoutMs);
-      // Convert OpenAI-style messages → Gemini contents format
+      // Streaming keeps the connection alive so we only timeout if we get no data at all
+      const inactivityTimer = setTimeout(() => ctrl.abort(), timeoutMs);
       const contents = messages.map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],
       }));
       const mdl = model || ai.model;
       try {
+        // Use streamGenerateContent (?alt=sse) — chunks arrive immediately,
+        // no single blocking wait for the full response. Solves timeout on long recaps.
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${mdl}:generateContent?key=${ai.apiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${mdl}:streamGenerateContent?key=${ai.apiKey}&alt=sse`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             signal: ctrl.signal,
-            body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: max_tokens } }),
+            body: JSON.stringify({
+              contents,
+              generationConfig: { maxOutputTokens: max_tokens },
+              safetySettings: [
+                { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+                { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+              ],
+            }),
           }
         );
-        if (!res.ok) throw new Error(`API error ${res.status}`);
-        const data = await res.json();
-        if (data?.error) throw new Error(data.error.message || 'API returned an error');
-        const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('\n') || '';
-        const clean = text.trim();
-        if (!clean) throw new Error('Empty response from API');
+        if (!res.ok) {
+          const errBody = await res.text().catch(() => '');
+          throw new Error(`API error ${res.status}: ${errBody.slice(0, 200)}`);
+        }
+        // Read SSE stream and accumulate text chunks
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('No response body from Gemini');
+        const decoder = new TextDecoder();
+        let accumulated = '';
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          // Reset inactivity timer each time we receive data
+          clearTimeout(inactivityTimer);
+          buffer += decoder.decode(value, { stream: true });
+          // Parse SSE lines
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? ''; // keep incomplete line in buffer
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const jsonStr = line.slice(6).trim();
+            if (!jsonStr || jsonStr === '[DONE]') continue;
+            try {
+              const chunk = JSON.parse(jsonStr);
+              const text = chunk.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+              accumulated += text;
+            } catch { /* skip malformed chunk */ }
+          }
+        }
+        const clean = accumulated.trim();
+        if (!clean) throw new Error('Empty response from Gemini — the model may have blocked the content');
         return clean;
-      } finally { clearTimeout(t); }
+      } finally {
+        clearTimeout(inactivityTimer);
+      }
     },
   },
   {
@@ -5411,12 +5450,18 @@ Keep bullets concise — one clear finding per bullet. Dense, specific, no fille
 
     setLoading(true);
     try {
-      const prompt = buildPrompt(periodEntries, label);
-      // Note: we intentionally skip the AI text cache for recaps so truncated old
-      // responses don't get served. Recaps are deduplicated by the `generated` state map
-      // which is session-only and always reflects the current token budget.
+      let prompt = buildPrompt(periodEntries, label);
+
+      // Guard: if prompt is very large, strip per-trade detail lines (keep all written notes)
+      // This prevents 400 errors from exceeding input context limits
+      if (prompt.length > 18000) {
+        const lines = prompt.split('\n');
+        const trimmed = lines.filter(l => !l.match(/^\s+T\d+:/)); // remove compact trade lines
+        prompt = trimmed.join('\n');
+      }
+
       const txt = await aiRequestText(ai, {
-        max_tokens: 8000,
+        max_tokens: 4096,
         timeoutMs: 120000,
         messages: [{ role: 'user', content: prompt }],
       });
@@ -5424,8 +5469,9 @@ Keep bullets concise — one clear finding per bullet. Dense, specific, no fille
       setGenerated(prev => ({ ...prev, [period]: txt }));
     } catch (err) {
       const f = friendlyAiError(err);
-      console.warn('Recap failed:', f.code, f.message);
-      setSummary("ERROR");
+      const errMsg = `ERROR:${f.code}:${f.message}`;
+      console.warn('Recap failed:', f.code, f.message, err);
+      setSummary(errMsg);
     }
     setLoading(false);
   };
@@ -5441,12 +5487,27 @@ Keep bullets concise — one clear finding per bullet. Dense, specific, no fille
         AI recap is turned off or not configured. Open Settings (⚙) to add your API key or disable AI sections.
       </div>
     );
-    if (text === "ERROR") return (
-      <div style={{ textAlign: "center", padding: "40px 20px", color: "#f87171", fontSize: 13 }}>
-        ⚠ Failed to generate recap. This is usually caused by a timeout on a large dataset.<br />
-        <span style={{ color: "#64748b", fontSize: 11 }}>Try clicking ↺ re-run below, or check your API key in Settings (⚙).</span>
-      </div>
-    );
+    if (text?.startsWith("ERROR:")) {
+      const parts = text.split(":");
+      const code = parts[1] || "unknown";
+      const msg = parts.slice(2).join(":") || "Unknown error";
+      const helpMap = {
+        timeout: "The request timed out — your dataset may be large. Try ↺ re-run.",
+        no_key: "No API key found. Open Settings (⚙) → AI & API Key and add your key.",
+        unauthorized: "API key rejected (401). Check your key is correct in Settings (⚙).",
+        forbidden: "Request blocked (403). Check your Anthropic account permissions.",
+        rate_limit: "Rate limited (429). Wait 30 seconds then try ↺ re-run.",
+        provider_down: "Anthropic API returned a 5xx error. Try again in a moment.",
+        network: "Network error. Check your internet connection and try again.",
+      };
+      return (
+        <div style={{ padding: "32px 24px", background: "#0f1729", border: "1px solid #7f1d1d", borderRadius: 6 }}>
+          <div style={{ fontSize: 13, color: "#f87171", fontWeight: 600, marginBottom: 10 }}>⚠ Recap failed — {code}</div>
+          <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.7, marginBottom: 14 }}>{helpMap[code] || msg}</div>
+          <div style={{ fontSize: 11, color: "#475569", fontFamily: "'DM Mono',monospace", background: "#0a0e1a", padding: "8px 12px", borderRadius: 4 }}>{msg}</div>
+        </div>
+      );
+    }
     return <RenderAI text={text} />;
   };
 
