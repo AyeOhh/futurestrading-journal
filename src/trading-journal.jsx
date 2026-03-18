@@ -148,31 +148,28 @@ const AI_PROVIDER_REGISTRY = [
     keyHint: 'aistudio.google.com',
     defaultModel: 'gemini-2.5-flash',
     models: [
-      { id: 'gemini-2.5-pro',               label: 'Gemini 2.5 Pro (best quality)'      },
-      { id: 'gemini-2.5-flash',             label: 'Gemini 2.5 Flash (recommended ✓)'  },
-      { id: 'gemini-2.5-flash-lite-preview-06-17', label: 'Gemini 2.5 Flash Lite (fastest, free)' },
+      { id: 'gemini-2.5-pro',   label: 'Gemini 2.5 Pro (best quality)'     },
+      { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (recommended ✓)' },
+      { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (fastest free tier)' },
     ],
     async request(ai, { messages, max_tokens = 600, model, timeoutMs = 120000 }) {
       const ctrl = new AbortController();
-      // Streaming keeps the connection alive so we only timeout if we get no data at all
-      const inactivityTimer = setTimeout(() => ctrl.abort(), timeoutMs);
+      const hardTimer = setTimeout(() => ctrl.abort(), timeoutMs);
       const contents = messages.map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],
       }));
       const mdl = model || ai.model;
       try {
-        // Use streamGenerateContent (?alt=sse) — chunks arrive immediately,
-        // no single blocking wait for the full response. Solves timeout on long recaps.
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${mdl}:streamGenerateContent?key=${ai.apiKey}&alt=sse`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${mdl}:generateContent?key=${ai.apiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             signal: ctrl.signal,
             body: JSON.stringify({
               contents,
-              generationConfig: { maxOutputTokens: max_tokens },
+              generationConfig: { maxOutputTokens: max_tokens, temperature: 0.7 },
               safetySettings: [
                 { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
                 { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_NONE' },
@@ -184,39 +181,19 @@ const AI_PROVIDER_REGISTRY = [
         );
         if (!res.ok) {
           const errBody = await res.text().catch(() => '');
-          throw new Error(`API error ${res.status}: ${errBody.slice(0, 200)}`);
+          throw new Error(`API error ${res.status}: ${errBody.slice(0, 300)}`);
         }
-        // Read SSE stream and accumulate text chunks
-        const reader = res.body?.getReader();
-        if (!reader) throw new Error('No response body from Gemini');
-        const decoder = new TextDecoder();
-        let accumulated = '';
-        let buffer = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          // Reset inactivity timer each time we receive data
-          clearTimeout(inactivityTimer);
-          buffer += decoder.decode(value, { stream: true });
-          // Parse SSE lines
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? ''; // keep incomplete line in buffer
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const jsonStr = line.slice(6).trim();
-            if (!jsonStr || jsonStr === '[DONE]') continue;
-            try {
-              const chunk = JSON.parse(jsonStr);
-              const text = chunk.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-              accumulated += text;
-            } catch { /* skip malformed chunk */ }
-          }
+        const data = await res.json();
+        if (data?.error) throw new Error(data.error.message || 'Gemini API returned an error');
+        const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+        const clean = text.trim();
+        if (!clean) {
+          const reason = data.candidates?.[0]?.finishReason || 'unknown';
+          throw new Error(`Empty response from Gemini (finishReason: ${reason})`);
         }
-        const clean = accumulated.trim();
-        if (!clean) throw new Error('Empty response from Gemini — the model may have blocked the content');
         return clean;
       } finally {
-        clearTimeout(inactivityTimer);
+        clearTimeout(hardTimer);
       }
     },
   },
@@ -5469,9 +5446,9 @@ Keep bullets concise — one clear finding per bullet. Dense, specific, no fille
       setGenerated(prev => ({ ...prev, [period]: txt }));
     } catch (err) {
       const f = friendlyAiError(err);
-      const errMsg = `ERROR:${f.code}:${f.message}`;
       console.warn('Recap failed:', f.code, f.message, err);
-      setSummary(errMsg);
+      // Never cache errors — always allow retry on next click
+      setSummary(`ERROR:${f.code}:${f.message}`);
     }
     setLoading(false);
   };
