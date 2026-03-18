@@ -3429,7 +3429,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                   onClick={e => e.stopPropagation()}
                   placeholder={isWeekend ? "weekend plan…" : "notes…"}
                   style={{ width: "100%", fontSize: 12, color: "#fbbf24", background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px", textAlign: "center" }}
-                  className="no-autoresize"
+                  className="no-autoresize cal-note"
                   onFocus={e => {
                     e.currentTarget.style.color = "#fde68a";
                     e.currentTarget.parentNode.style.borderTopColor = "rgba(251,191,36,0.4)";
@@ -9219,6 +9219,8 @@ export default function TradingJournal() {
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0a0e1a}::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px}
         textarea,input,select{background:#0f1729!important;color:#e2e8f0!important;border:1px solid #1e3a5f!important;border-radius:4px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:13px;width:100%;outline:none;transition:border-color .2s;resize:none;overflow:hidden;field-sizing:content}
         textarea:focus,input:focus,select:focus{border-color:#3b82f6!important}
+        textarea.cal-note{color:#fbbf24!important;background:transparent!important;border:none!important;padding:0!important}
+        textarea.cal-note:focus{color:#fde68a!important;border:none!important;outline:none!important}
         textarea::placeholder,input::placeholder{color:#1e3a5f}
         select option{background:#0f1729}
         textarea.no-autoresize{resize:vertical;overflow:auto;field-sizing:unset}
