@@ -3417,31 +3417,28 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                 onClick={e => e.stopPropagation()}>
                 <textarea
                   value={calendarNotes[dateStr] || ""}
+                  ref={el => { if (el) el.style.setProperty('color', '#fbbf24', 'important'); }}
                   onChange={e => {
                     e.stopPropagation();
                     saveCalNote(dateStr, e.target.value);
-                    // Auto-resize: collapse to 1px then expand to scrollHeight
                     e.target.style.height = "20px";
                     e.target.style.height = e.target.scrollHeight + "px";
-                    // Show/hide separator based on live value
                     e.target.parentNode.style.borderTopColor = e.target.value ? "#1e293b" : "transparent";
                   }}
                   onClick={e => e.stopPropagation()}
                   placeholder={isWeekend ? "weekend plan…" : "notes…"}
-                  style={{ width: "100%", fontSize: 12, color: "#fbbf24", background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px", textAlign: "center" }}
+                  style={{ width: "100%", fontSize: 12, background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px", textAlign: "center" }}
                   className="no-autoresize cal-note"
                   onFocus={e => {
-                    e.currentTarget.style.color = "#fde68a";
+                    e.currentTarget.style.setProperty('color', '#fde68a', 'important');
                     e.currentTarget.parentNode.style.borderTopColor = "rgba(251,191,36,0.4)";
-                    // Expand to full content on focus
                     e.currentTarget.style.height = "20px";
                     e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
                   }}
                   onBlur={e => {
-                    e.currentTarget.style.color = "#fbbf24";
+                    e.currentTarget.style.setProperty('color', '#fbbf24', 'important');
                     const val = e.currentTarget.value;
                     e.currentTarget.parentNode.style.borderTopColor = val ? "#1e293b" : "transparent";
-                    // Shrink back to 1 row if empty, keep height if has content
                     if (!val) { e.currentTarget.style.height = "20px"; }
                   }}
                 />
