@@ -983,7 +983,7 @@ const calcAnalytics = (trades, tzLock = false) => {
   const winRate = trades.length ? (winners.length / trades.length) * 100 : 0;
   const grossWin = winners.reduce((s, t) => s + t.pnl, 0);
   const grossLoss = Math.abs(losers.reduce((s, t) => s + t.pnl, 0));
-  const profitFactor = grossLoss > 0 ? grossWin / grossLoss : null;
+  const profitFactor = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : null;
   const largestWin = Math.max(...trades.map(t => t.pnl));
   const largestLoss = Math.min(...trades.map(t => t.pnl));
   const avgQty = trades.reduce((s, t) => s + t.qty, 0) / trades.length;
@@ -1309,6 +1309,10 @@ const calcNetPnl = (entry) => {
 };
 // Alias kept for any inline usage
 const netPnl = calcNetPnl;
+
+// Profit factor display helpers — handles Infinity (perfect day: 0 losses)
+const fmtPF = (pf) => { if (pf == null) return "—"; if (!isFinite(pf)) return "∞"; return pf.toFixed(2); };
+const pfColor = (pf) => { if (pf == null) return "#64748b"; if (!isFinite(pf)) return "#4ade80"; return pf >= 1 ? "#4ade80" : "#f87171"; };
 
 const MiniCurve = ({ curve, w = 100, h = 32 }) => {
   if (!curve || curve.length < 2) return null;
@@ -1650,7 +1654,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
               { l: "WINNERS", v: a.winners, c: "#4ade80" },
               { l: "LOSERS", v: a.losers, c: "#f87171" },
               { l: "WIN RATE", v: `${a.winRate.toFixed(1)}%`, c: a.winRate >= 50 ? "#4ade80" : "#f87171" },
-              { l: "PROFIT FACTOR", v: a.profitFactor ? a.profitFactor.toFixed(2) : "—", c: a.profitFactor >= 1 ? "#4ade80" : "#f87171" },
+              { l: "PROFIT FACTOR", v: fmtPF(a.profitFactor), c: pfColor(a.profitFactor) },
               { l: "AVG CONTRACT SIZE", v: `${a.avgQty.toFixed(1)} cts`, c: "#e2e8f0" },
               { l: "AVG WIN", v: fmtPnl(a.avgWin), c: "#4ade80" },
               { l: "AVG LOSS", v: fmtPnl(a.avgLoss), c: "#f87171" },
@@ -1854,7 +1858,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
                     const bg     = profitable ? "rgba(74,222,128,0.07)" : "rgba(248,113,113,0.07)";
                     const border = profitable ? "rgba(74,222,128,0.2)"  : "rgba(248,113,113,0.2)";
                     const wr = d.trades ? Math.round(d.wins / d.trades * 100) : 0;
-                    const pf = d.grossLoss > 0 ? (d.grossWin / d.grossLoss).toFixed(2) : d.grossWin > 0 ? "∞" : "—";
+                    const pf = fmtPF(d.grossLoss > 0 ? d.grossWin / d.grossLoss : d.grossWin > 0 ? Infinity : null);
                     const avgPnl = d.trades ? d.pnl / d.trades : 0;
                     return (
                       <div key={key} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 6, padding: "12px 14px" }}>
@@ -2203,7 +2207,7 @@ GROSS P&L: $${entry.pnl||0} | NET P&L: $${(parseFloat(entry.pnl||0)-parseFloat(e
 TOTAL TRADES: ${trades.length} | WINNERS: ${winners.length} | LOSERS: ${losers.length}
 WIN RATE: ${trades.length ? ((winners.length/trades.length)*100).toFixed(1) : 0}%
 AVG WIN: $${avgWin} | AVG LOSS: $${avgLoss} | BIGGEST WIN: $${biggestWin} | BIGGEST LOSS: $${biggestLoss}
-PROFIT FACTOR: ${a?.profitFactor?.toFixed(2)||"N/A"} | EXPECTANCY: ${a?.expectancy?.toFixed(2)||"N/A"}R
+PROFIT FACTOR: ${fmtPF(a?.profitFactor)} | EXPECTANCY: ${a?.expectancy?.toFixed(2)||"N/A"}R
 BY SESSION: ${sessionBreakdown}
 BY SYMBOL: ${bySymbol}
 BY ORDER TYPE: ${orderTypeBreakdown}
@@ -2244,7 +2248,7 @@ Return EXACTLY this format, nothing else:
     try {
       const txt = await aiRequestText(ai, {
         max_tokens: 600,
-        timeoutMs: 24000,
+        timeoutMs: 120000,
         messages: [{ role: 'user', content: prompt }],
       });
       setFindings(txt);
@@ -2324,7 +2328,7 @@ function DailyAIAnalysis({ entry, a, ai, priorPlan = null }) {
     const avgLoss = losers.length ? Math.abs(losers.reduce((s, t) => s + t.pnl, 0) / losers.length) : 0;
     const rrRatio = avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : "N/A";
     const winRate = trades.length ? ((winners.length / trades.length) * 100).toFixed(1) : 0;
-    const profitFactor = a?.profitFactor ? a.profitFactor.toFixed(2) : "N/A";
+    const profitFactor = fmtPF(a?.profitFactor);
     const expectancy = a?.expectancy !== null && a?.expectancy !== undefined ? a.expectancy.toFixed(2) + "R" : "N/A";
     // Use AI-polished rewrites where available, fall back to raw original
     const rw = entry.aiRewrites || {};
@@ -2453,14 +2457,15 @@ Keep each section tight. No filler. Maximum value per word. Total response shoul
     setDone(false);
     try {
       const txt = await aiRequestText(ai, {
-        max_tokens: 900,
-        timeoutMs: 24000,
+        max_tokens: 1200,
+        timeoutMs: 120000,
         messages: [{ role: 'user', content: prompt }],
       });
       setAnalysis(txt || 'ERROR');
       setDone(true);
-    } catch {
-      setAnalysis("ERROR");
+    } catch (err) {
+      const f = friendlyAiError(err);
+      setAnalysis(`ERROR:${f.message}`);
       setDone(true);
     }
     setLoading(false);
@@ -2492,15 +2497,20 @@ Keep each section tight. No filler. Maximum value per word. Total response shoul
       )}
 
       {/* Analysis content */}
-      {!loading && analysis && analysis !== "ERROR" && (
+      {!loading && analysis && !analysis.startsWith("ERROR") && (
         <div style={{ padding: "20px 24px" }}>
           <RenderAI text={analysis} />
         </div>
       )}
 
       {/* Error */}
-      {!loading && analysis === "ERROR" && (
-        <div style={{ padding: "20px 24px", color: "#f87171", fontSize: 13 }}>Failed to generate analysis. Please try again.</div>
+      {!loading && analysis?.startsWith("ERROR") && (
+        <div style={{ padding: "20px 24px" }}>
+          <div style={{ color: "#f87171", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>⚠ Analysis failed</div>
+          <div style={{ color: "#94a3b8", fontSize: 11, lineHeight: 1.7 }}>
+            {analysis.slice(6) || "Unknown error — check your API key in Settings (⚙) and try again."}
+          </div>
+        </div>
       )}
 
       {/* Empty prompt */}
@@ -2714,7 +2724,7 @@ ${entry.tomorrow}`,
       try {
         const result = await aiRequestText(ai, {
           max_tokens: 800,
-          timeoutMs: 24000,
+          timeoutMs: 120000,
           messages: [{ role: 'user', content: `You are helping a futures trader consolidate their daily journal notes into one clear, well-written summary. Rewrite all of the notes below into a single cohesive narrative in first person. Preserve every specific detail, insight, and intention — just make it flow naturally as one unified journal entry. Organize it logically: market context first, then trade execution, then lessons and tomorrow's plan. No bullet points. No headers. No added analysis or fluff — only what the trader actually wrote, rewritten clearly.
 
 Notes:
@@ -2914,18 +2924,16 @@ Rewritten summary:` }],
               <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 6, padding: "14px 16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.12em" }}>📈 MARKET / TAPE NOTES</div>
-                  <RewriteBtn fieldKey="marketNotes" text={entry.marketNotes} />
                 </div>
-                <div style={{ fontSize: 13, color: rewrites.marketNotes && !showOriginal.marketNotes ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.marketNotes && !showOriginal.marketNotes ? "italic" : "normal" }}>{rewrites.marketNotes && !showOriginal.marketNotes ? rewrites.marketNotes : entry.marketNotes}</div>
+                <div style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: "normal" }}>{entry.marketNotes}</div>
               </div>
             )}
             {entry.rules && (
               <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 6, padding: "14px 16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                   <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.12em" }}>📋 RULES FOLLOWED / BROKEN</div>
-                  <RewriteBtn fieldKey="rules" text={entry.rules} />
                 </div>
-                <div style={{ fontSize: 13, color: rewrites.rules && !showOriginal.rules ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.rules && !showOriginal.rules ? "italic" : "normal" }}>{rewrites.rules && !showOriginal.rules ? rewrites.rules : entry.rules}</div>
+                <div style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: "normal" }}>{entry.rules}</div>
               </div>
             )}
 
@@ -2936,18 +2944,16 @@ Rewritten summary:` }],
                   <div style={{ background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 6, padding: "14px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <div style={{ fontSize: 10, color: "#4ade80", letterSpacing: "0.12em" }}>✅ BEST TRADE</div>
-                      <RewriteBtn fieldKey="bestTrade" text={entry.bestTrade} />
                     </div>
-                    <div style={{ fontSize: 13, color: rewrites.bestTrade && !showOriginal.bestTrade ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.bestTrade && !showOriginal.bestTrade ? "italic" : "normal" }}>{rewrites.bestTrade && !showOriginal.bestTrade ? rewrites.bestTrade : entry.bestTrade}</div>
+                    <div style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: "normal" }}>{entry.bestTrade}</div>
           </div>
           )}
                 {entry.worstTrade && (
                   <div style={{ background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", borderRadius: 6, padding: "14px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <div style={{ fontSize: 10, color: "#f87171", letterSpacing: "0.12em" }}>❌ WORST TRADE / MISTAKE</div>
-                      <RewriteBtn fieldKey="worstTrade" text={entry.worstTrade} />
                     </div>
-                    <div style={{ fontSize: 13, color: rewrites.worstTrade && !showOriginal.worstTrade ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.worstTrade && !showOriginal.worstTrade ? "italic" : "normal" }}>{rewrites.worstTrade && !showOriginal.worstTrade ? rewrites.worstTrade : entry.worstTrade}</div>
+                    <div style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: "normal" }}>{entry.worstTrade}</div>
           </div>
           )}
               </div>
@@ -2961,27 +2967,24 @@ Rewritten summary:` }],
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                       <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em" }}>LESSONS LEARNED</div>
-                      <RewriteBtn fieldKey="lessonsLearned" text={entry.lessonsLearned} />
                     </div>
-                    <div style={{ fontSize: 13, color: rewrites.lessonsLearned && !showOriginal.lessonsLearned ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.lessonsLearned && !showOriginal.lessonsLearned ? "italic" : "normal" }}>{rewrites.lessonsLearned && !showOriginal.lessonsLearned ? rewrites.lessonsLearned : entry.lessonsLearned}</div>
+                    <div style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: "normal" }}>{entry.lessonsLearned}</div>
           </div>
           )}
                 {entry.mistakes && (
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                       <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em" }}>MISTAKES TO AVOID</div>
-                      <RewriteBtn fieldKey="mistakes" text={entry.mistakes} />
                     </div>
-                    <div style={{ fontSize: 13, color: rewrites.mistakes && !showOriginal.mistakes ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.mistakes && !showOriginal.mistakes ? "italic" : "normal" }}>{rewrites.mistakes && !showOriginal.mistakes ? rewrites.mistakes : entry.mistakes}</div>
+                    <div style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: "normal" }}>{entry.mistakes}</div>
           </div>
           )}
                 {entry.improvements && (
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                       <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em" }}>AREAS FOR IMPROVEMENT</div>
-                      <RewriteBtn fieldKey="improvements" text={entry.improvements} />
                     </div>
-                    <div style={{ fontSize: 13, color: rewrites.improvements && !showOriginal.improvements ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.improvements && !showOriginal.improvements ? "italic" : "normal" }}>{rewrites.improvements && !showOriginal.improvements ? rewrites.improvements : entry.improvements}</div>
+                    <div style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: "normal" }}>{entry.improvements}</div>
           </div>
           )}
               </div>
@@ -2994,18 +2997,16 @@ Rewritten summary:` }],
                   <div style={{ background: "#0f1729", border: "1px solid #1e3a5f", borderRadius: 6, padding: "14px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.12em" }}>🔒 ONE RULE TO REINFORCE TOMORROW</div>
-                      <RewriteBtn fieldKey="reinforceRule" text={entry.reinforceRule} />
                     </div>
-                    <div style={{ fontSize: 13, color: rewrites.reinforceRule && !showOriginal.reinforceRule ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.reinforceRule && !showOriginal.reinforceRule ? "italic" : "normal" }}>{rewrites.reinforceRule && !showOriginal.reinforceRule ? rewrites.reinforceRule : entry.reinforceRule}</div>
+                    <div style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: "normal" }}>{entry.reinforceRule}</div>
           </div>
           )}
                 {entry.tomorrow && (
                   <div style={{ background: "#0f1729", border: "1px solid #1e3a5f", borderRadius: 6, padding: "14px 16px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <div style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.12em" }}>🗓 PLAN FOR TOMORROW</div>
-                      <RewriteBtn fieldKey="tomorrow" text={entry.tomorrow} />
                     </div>
-                    <div style={{ fontSize: 13, color: rewrites.tomorrow && !showOriginal.tomorrow ? "#93c5fd" : "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: rewrites.tomorrow && !showOriginal.tomorrow ? "italic" : "normal" }}>{rewrites.tomorrow && !showOriginal.tomorrow ? rewrites.tomorrow : entry.tomorrow}</div>
+                    <div style={{ fontSize: 13, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap", fontStyle: "normal" }}>{entry.tomorrow}</div>
           </div>
           )}
               </div>
@@ -3243,10 +3244,10 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                           <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>PROFIT FACTOR</div>
                           {monthAnalytics.profitFactor >= 1 ? (
                             <div style={{ fontSize: 15, fontWeight: 700, background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-                              {monthAnalytics.profitFactor ? monthAnalytics.profitFactor.toFixed(2) : "—"}
+                              {fmtPF(monthAnalytics.profitFactor)}
                             </div>
                           ) : (
-                            <div style={{ fontSize: 15, color: "#f87171", fontWeight: 600 }}>{monthAnalytics.profitFactor ? monthAnalytics.profitFactor.toFixed(2) : "—"}</div>
+                            <div style={{ fontSize: 15, color: "#f87171", fontWeight: 600 }}>{fmtPF(monthAnalytics.profitFactor)}</div>
                           )}
                         </div>
                         <div style={{ background: "#0f1729", borderRadius: 5, padding: "10px 12px" }}>
@@ -3388,7 +3389,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                     const losses = entry.parsedTrades.filter(t => t.pnl < 0).length;
                     const gross = entry.parsedTrades.reduce((s,t) => t.pnl>0?s+t.pnl:s, 0);
                     const grossLoss = entry.parsedTrades.reduce((s,t) => t.pnl<0?s+Math.abs(t.pnl):s, 0);
-                    const pf = grossLoss > 0 ? (gross/grossLoss) : gross > 0 ? null : null;
+                    const pf = grossLoss > 0 ? (gross/grossLoss) : gross > 0 ? Infinity : null;
                     return (
                       <>
                         <div style={{ fontSize: 11, lineHeight: 1.5 }}>
@@ -3696,7 +3697,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                           const d = monthAnalytics.byDirection[key];
                           const wr = Math.round(d.wins / d.trades * 100);
                           const avg = d.pnl / d.trades;
-                          const pf = d.grossLoss > 0 ? (d.grossWin / d.grossLoss) : d.grossWin > 0 ? null : null;
+                          const pf = d.grossLoss > 0 ? (d.grossWin / d.grossLoss) : d.grossWin > 0 ? Infinity : null;
                           const sharePct = Math.round(d.trades / totalTrades * 100);
                           return (
                             <div key={key} style={{ background: bgColor, border: `1px solid ${dimColor}`, borderRadius: 5, padding: "12px 14px", position: "relative", overflow: "hidden" }}>
@@ -3727,7 +3728,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                                 </div>
                                 <div style={{ background: "#0a0e1a", borderRadius: 3, padding: "6px 8px" }}>
                                   <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 2 }}>PROF. FACTOR</div>
-                                  <div style={{ fontSize: 13, color: pf != null ? (pf >= 1 ? "#4ade80" : "#f87171") : "#475569", fontWeight: 600 }}>{pf != null ? pf.toFixed(2) : "—"}</div>
+                                  <div style={{ fontSize: 13, color: pfColor(pf), fontWeight: 600 }}>{fmtPF(pf)}</div>
                                   <div style={{ fontSize: 9, color: "#334155", marginTop: 1 }}>+${d.grossWin.toFixed(0)} / -${d.grossLoss.toFixed(0)}</div>
                                 </div>
                               </div>
@@ -3789,6 +3790,22 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               const maxCount = mistakeSorted[0]?.[1] || 1;
               const hasMistakes = mistakeSorted.length > 0 || cleanSessions > 0;
 
+              // Compute P&L impact per mistake for combined display
+              const mistakePerf = {};
+              for (const e of monthEntries) {
+                const ms = (e.sessionMistakes || []).filter(m => m !== "No Mistakes — Executed the Plan ✓");
+                if (!ms.length) continue;
+                const pnl = netPnl(e);
+                for (const m of ms) {
+                  if (!mistakePerf[m]) mistakePerf[m] = { sessions: 0, totalPnl: 0, wins: 0 };
+                  mistakePerf[m].sessions++;
+                  mistakePerf[m].totalPnl += pnl;
+                  if (pnl > 0) mistakePerf[m].wins++;
+                }
+              }
+              const cleanDaySessions = monthEntries.filter(e => e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓"));
+              const cleanAvg = cleanDaySessions.length ? cleanDaySessions.reduce((s,e) => s + netPnl(e), 0) / cleanDaySessions.length : null;
+
               // ── Mood vs Performance data ──
               const moodStats = {};
               for (const e of monthEntries) {
@@ -3825,12 +3842,17 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                         {hasMistakes ? mistakeSorted.map(([mistake, count]) => {
                           const barW = (count / maxCount) * 100;
                           const freq = Math.round((count / monthEntries.length) * 100);
+                          const perf = mistakePerf[mistake];
+                          const avg = perf ? perf.totalPnl / perf.sessions : null;
+                          const delta = avg !== null && cleanAvg !== null ? avg - cleanAvg : null;
                           return (
                             <div key={mistake} style={{ marginBottom: 10 }}>
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
                                 <span style={{ fontSize: 11, color: "#e2e8f0" }}>{mistake}</span>
-                                <div style={{ display: "flex", gap: 10, alignItems: "center", flexShrink: 0, marginLeft: 8 }}>
-                                  <span style={{ fontSize: 9, color: "#94a3b8" }}>{freq}% of sessions</span>
+                                <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0, marginLeft: 8 }}>
+                                  {avg !== null && <span style={{ fontSize: 11, fontWeight: 600, color: avg >= 0 ? "#4ade80" : "#f87171" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>}
+                                  {delta !== null && <span style={{ fontSize: 9, color: delta < -30 ? "#f87171" : delta < 0 ? "#f59e0b" : "#4ade80" }}>{delta >= 0 ? "+" : ""}${delta.toFixed(0)} vs✓</span>}
+                                  <span style={{ fontSize: 9, color: "#94a3b8" }}>{freq}%</span>
                                   <span style={{ fontSize: 12, fontWeight: 600, color: "#f87171" }}>{count}×</span>
                                 </div>
                               </div>
@@ -3840,6 +3862,12 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                             </div>
                           );
                         }) : <div style={{ fontSize: 11, color: "#475569" }}>No mistakes flagged.</div>}
+                        {cleanAvg !== null && mistakeSorted.length > 0 && (
+                          <div style={{ marginTop: 8, fontSize: 10, color: "#64748b", lineHeight: 1.6 }}>
+                            <span style={{ color: "#3b82f6" }}>💡 </span>
+                            Clean day avg: <span style={{ color: "#4ade80", fontWeight: 600 }}>{cleanAvg >= 0 ? "+" : "-"}${Math.abs(cleanAvg).toFixed(0)}</span> · "vs✓" shows drag vs your clean sessions
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3971,7 +3999,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                           {[
                             { l: "DAY WIN RATE", v: `${dayWR}%`, c: dayWR >= 50 ? "#4ade80" : "#f87171" },
                             { l: "TRADE WIN RATE", v: tradWR !== null ? `${tradWR}%` : "—", c: tradWR !== null ? (tradWR >= 50 ? "#4ade80" : "#f87171") : "#64748b" },
-                            { l: "PROFIT FACTOR", v: pf != null ? (typeof pf === "number" ? pf.toFixed(2) : pf) : "—", c: pf != null && typeof pf === "number" ? (pf >= 1 ? "#4ade80" : "#f87171") : "#64748b" },
+                            { l: "PROFIT FACTOR", v: fmtPF(pf), c: pfColor(pf) },
                           ].map(s => (
                             <div key={s.l} style={{ background: "#0a0e1a", borderRadius: 4, padding: "8px 10px" }}>
                               <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 3 }}>{s.l}</div>
@@ -3989,7 +4017,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                           {netTrend === "improving" ? "Second half of month outperformed first — momentum building." :
                            netTrend === "declining" ? "Performance declined through the month — review fatigue or rule drift." :
                            "Consistent performance across the month."}
-                          {pf != null && typeof pf === "number" && pf < 1 && " Profit factor below 1 — exits need review."}
+                          {pf != null && isFinite(pf) && pf < 1 && " Profit factor below 1 — exits need review."}
                         </div>
                       </div>
                     )}
@@ -4082,66 +4110,6 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                 );
               })()}
 
-              {/* MISTAKE CROSS-REFERENCE */}
-              {monthEntries.length > 0 && (() => {
-                const mistakePerf = {};
-                for (const e of monthEntries) {
-                  const ms = (e.sessionMistakes || []).filter(m => m !== "No Mistakes — Executed the Plan ✓");
-                  if (ms.length === 0) continue;
-                  const pnl = netPnl(e);
-                  for (const m of ms) {
-                    if (!mistakePerf[m]) mistakePerf[m] = { sessions: 0, totalPnl: 0, wins: 0, cleanPnl: 0, cleanSessions: 0 };
-                    mistakePerf[m].sessions++;
-                    mistakePerf[m].totalPnl += pnl;
-                    if (pnl > 0) mistakePerf[m].wins++;
-                  }
-                }
-                // Also compute avg P&L on clean sessions for comparison
-                const cleanSessions = monthEntries.filter(e => e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓"));
-                const cleanAvg = cleanSessions.length ? cleanSessions.reduce((s,e) => s + netPnl(e), 0) / cleanSessions.length : null;
-                const entries2 = Object.entries(mistakePerf).sort((a,b) => a[1].totalPnl - b[1].totalPnl);
-                if (entries2.length === 0) return null;
-                return (
-                  <div>
-                    <SectionHeader label="MISTAKE IMPACT" skey="mistakeimpact"
-                      summary={<span style={{ color: "#64748b" }}>{entries2.length} patterns tracked</span>} />
-                    {!collapsed.mistakeimpact && (
-                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
-                        {cleanAvg !== null && (
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
-                            <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Clean session avg</span>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: "#4ade80" }}>{cleanAvg >= 0 ? "+" : "-"}${Math.abs(cleanAvg).toFixed(0)}</span>
-                          </div>
-                        )}
-                        {entries2.map(([mistake, d]) => {
-                          const avg = d.sessions ? d.totalPnl / d.sessions : 0;
-                          const wr = d.sessions ? Math.round(d.wins / d.sessions * 100) : 0;
-                          const delta = cleanAvg !== null ? avg - cleanAvg : null;
-                          return (
-                            <div key={mistake} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid #1e293b" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                                <span style={{ fontSize: 11, color: "#e2e8f0", flex: 1 }}>{mistake}</span>
-                                <span style={{ fontSize: 10, color: "#64748b", marginLeft: 8 }}>{d.sessions}× · {wr}% WR</span>
-                              </div>
-                              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                                <div style={{ flex: 1, background: "#0a0e1a", borderRadius: 2, height: 4, overflow: "hidden" }}>
-                                  <div style={{ width: `${Math.min(Math.abs(avg) / Math.max(...entries2.map(([,x]) => Math.abs(x.totalPnl/x.sessions))) * 100, 100)}%`, height: "100%", background: avg >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
-                                </div>
-                                <span style={{ fontSize: 12, fontWeight: 600, color: avg >= 0 ? "#4ade80" : "#f87171", minWidth: 60, textAlign: "right" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)} avg</span>
-                                {delta !== null && <span style={{ fontSize: 10, color: delta < -50 ? "#f87171" : delta < 0 ? "#f59e0b" : "#4ade80", minWidth: 55, textAlign: "right" }}>{delta >= 0 ? "+" : "-"}${Math.abs(delta).toFixed(0)} vs clean</span>}
-                              </div>
-                            </div>
-                          );
-                        })}
-                        <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.7 }}>
-                          <span style={{ color: "#3b82f6" }}>💡 </span>
-                          Sessions with mistakes are compared to your clean-session average. Negative delta = performance drag from that pattern.
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
 
 
           </div>
@@ -4291,7 +4259,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                       </div>
                       {wA.profitFactor && <div>
                         <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>PROFIT FACTOR</div>
-                        <div style={{ fontSize: 12, color: wA.profitFactor >= 1 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{wA.profitFactor.toFixed(2)}</div>
+                        <div style={{ fontSize: 12, color: pfColor(wA.profitFactor), fontWeight: 600 }}>{fmtPF(wA.profitFactor)}</div>
                       </div>}
                     </>}
                   </div>
@@ -4643,7 +4611,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                       <span style={{ color: "#64748b" }}> days</span>
                     </div>
                     {a && <div style={{ fontSize: 10, color: "#94a3b8" }}>{trades.length} trades · <span style={{ letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{a.winners}</span><span style={{ color: "#475569" }}>/</span><span style={{ color: "#f87171" }}>{a.losers}</span></span> · <span style={{ color: a.winRate >= 50 ? "#4ade80" : "#f87171" }}>{a.winRate.toFixed(0)}% WR</span></div>}
-                    {a && <div style={{ fontSize: 10, color: "#64748b" }}>PF {a.profitFactor ? a.profitFactor.toFixed(2) : "—"}</div>}
+                    {a && <div style={{ fontSize: 10, color: "#64748b" }}>PF {fmtPF(a.profitFactor)}</div>}
                   </div>
                 </>
               ) : (
@@ -4786,7 +4754,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                         { l: "WINNERS", v: a.winners, c: "#4ade80" },
                         { l: "LOSERS", v: a.losers, c: "#f87171" },
                         { l: "WIN RATE", v: `${a.winRate.toFixed(1)}%`, c: a.winRate >= 50 ? "#4ade80" : "#f87171" },
-                        { l: "PROFIT FACTOR", v: a.profitFactor ? a.profitFactor.toFixed(2) : "—", c: a.profitFactor >= 1 ? "#4ade80" : "#f87171" },
+                        { l: "PROFIT FACTOR", v: fmtPF(a.profitFactor), c: pfColor(a.profitFactor) },
                         { l: "AVG CONTRACT SIZE", v: `${a.avgQty.toFixed(1)} cts`, c: "#e2e8f0" },
                         { l: "AVG WIN", v: fmtPnl(a.avgWin), c: "#4ade80" },
                         { l: "AVG LOSS", v: fmtPnl(a.avgLoss), c: "#f87171" },
@@ -4824,7 +4792,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                             const d = a.byDirection[key];
                             const wr = Math.round(d.wins / d.trades * 100);
                             const avg = d.pnl / d.trades;
-                            const pf = d.grossLoss > 0 ? (d.grossWin / d.grossLoss) : d.grossWin > 0 ? null : null;
+                            const pf = d.grossLoss > 0 ? (d.grossWin / d.grossLoss) : d.grossWin > 0 ? Infinity : null;
                             const sharePct = Math.round(d.trades / totalTrades * 100);
                             return (
                               <div key={key} style={{ background: bgColor, border: `1px solid ${dimColor}`, borderRadius: 5, padding: "12px 14px", position: "relative", overflow: "hidden" }}>
@@ -4852,7 +4820,7 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                                   </div>
                                   <div style={{ background: "#0a0e1a", borderRadius: 3, padding: "6px 8px" }}>
                                     <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 2 }}>PROF. FACTOR</div>
-                                    <div style={{ fontSize: 13, color: pf != null ? (pf >= 1 ? "#4ade80" : "#f87171") : "#475569", fontWeight: 600 }}>{pf != null ? pf.toFixed(2) : "—"}</div>
+                                    <div style={{ fontSize: 13, color: pfColor(pf), fontWeight: 600 }}>{fmtPF(pf)}</div>
                                     <div style={{ fontSize: 9, color: "#334155", marginTop: 1 }}>+${d.grossWin.toFixed(0)} / -${d.grossLoss.toFixed(0)}</div>
                                   </div>
                                 </div>
@@ -5176,129 +5144,115 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
   };
 
   const buildPrompt = (periodEntries, label) => {
-    // Per-entry data — compact trade log + full written notes
-    const notes = periodEntries.map(e => {
-      const trades = e.parsedTrades || [];
-      const winners = trades.filter(t => t.pnl > 0);
-      const losers  = trades.filter(t => t.pnl < 0);
-      const avgWin  = winners.length ? (winners.reduce((s,t)=>s+t.pnl,0)/winners.length).toFixed(0) : null;
-      const avgLoss = losers.length  ? Math.abs(losers.reduce((s,t)=>s+t.pnl,0)/losers.length).toFixed(0) : null;
-      const pf      = losers.length  ? (winners.reduce((s,t)=>s+t.pnl,0)/Math.abs(losers.reduce((s,t)=>s+t.pnl,0))).toFixed(2) : null;
-      const maxDD   = trades.reduce((acc,t)=>{acc.peak=Math.max(acc.peak,acc.running+=t.pnl);acc.dd=Math.min(acc.dd,acc.running-acc.peak);return acc;},{running:0,peak:0,dd:0}).dd;
-      // Compact trade log: one line per trade, no redundant labels
-      const tradeLog = trades.map((t,i) => {
-        const time = (t.sellTime||t.buyTime||"").split(" ")[1]||"?";
-        const net  = (t.pnl-(t.commission||0)).toFixed(0);
-        const noteStr = t.notes ? ` "${t.notes}"` : "";
-        return `  T${i+1}: ${t.symbol} ${(t.direction||"").slice(0,1).toUpperCase()||"?"} ${t.qty}ct | ${t.orderType||"MKT"} | @${time} hold:${t.duration||"?"} | net$${net}${noteStr}`;
-      }).join("\n");
+    const sorted = [...periodEntries].sort((a,b) => a.date.localeCompare(b.date));
 
-      const parts = [];
-      parts.push(`DATE: ${e.date} (${new Date(e.date+"T12:00:00").toLocaleDateString("en-US",{weekday:"short"})})`);
-      parts.push(`  P&L: net$${netPnl(e).toFixed(0)} gross$${parseFloat(e.pnl||0).toFixed(0)} fees$${parseFloat(e.commissions||0).toFixed(0)}`);
-      if (e.grade) parts.push(`  Grade:${e.grade}`);
-      if (e.bias)  parts.push(`  Bias:${e.bias}`);
-      const moods = e.moods?.length ? e.moods : e.mood ? [e.mood] : [];
-      if (moods.length) parts.push(`  Mood:${moods.join(", ")}`);
-      if (e.sessionMistakes?.length) parts.push(`  Mistakes:${e.sessionMistakes.join(" | ")}`);
-      if (e.executionScore!=null||e.decisionScore!=null) parts.push(`  Scores: exec:${e.executionScore??"—"}/10 dec:${e.decisionScore??"—"}/10`);
-      if (e.mistakeCosts) {
-        const rows = Object.entries(e.mistakeCosts).filter(([,v])=>v!=null&&Number(v)>0);
-        if (rows.length) parts.push(`  MistakeCost:${rows.map(([t,c])=>`${t}=$${Number(c).toFixed(0)}`).join(" | ")}`);
+    // ── Aggregate stats (lean, no per-trade lines) ──────────────────────────
+    const totalPnl = sorted.reduce((s,e) => s + netPnl(e), 0);
+    const winDays  = sorted.filter(e => netPnl(e) > 0).length;
+    const lossDays = sorted.filter(e => netPnl(e) < 0).length;
+    const allTrades   = sorted.flatMap(e => e.parsedTrades || []);
+    const allWinners  = allTrades.filter(t => t.pnl > 0);
+    const allLosers   = allTrades.filter(t => t.pnl < 0);
+    const overallWR   = allTrades.length ? ((allWinners.length/allTrades.length)*100).toFixed(1) : "0";
+    const overallPF   = allLosers.length
+      ? allWinners.reduce((s,t)=>s+t.pnl,0)/Math.abs(allLosers.reduce((s,t)=>s+t.pnl,0))
+      : allWinners.length > 0 ? Infinity : null;
+    const totalFees = allTrades.reduce((s,t)=>s+(t.commission||0),0);
+    const avgWin  = allWinners.length ? (allWinners.reduce((s,t)=>s+t.pnl,0)/allWinners.length).toFixed(0) : "0";
+    const avgLoss = allLosers.length  ? Math.abs(allLosers.reduce((s,t)=>s+t.pnl,0)/allLosers.length).toFixed(0) : "0";
+
+    // Session P&L
+    const getSess = t => { const p=(t.sellTime||"").split(" ")[1]||""; const [h=0,m=0]=p.split(":").map(Number); const mins=h*60+m; return mins<720?"NY Open":mins<900?"Afternoon":mins<960?"Power Hr":"Other"; };
+    const sessMap = {};
+    for (const t of allTrades) { const k=getSess(t); if(!sessMap[k])sessMap[k]={pnl:0,t:0,w:0}; sessMap[k].pnl+=t.pnl;sessMap[k].t++;if(t.pnl>0)sessMap[k].w++; }
+    const sessLine = Object.entries(sessMap).sort((a,b)=>b[1].pnl-a[1].pnl).map(([k,d])=>`${k}:$${d.pnl.toFixed(0)}(${Math.round(d.w/d.t*100)}%WR)`).join(" | ")||"none";
+
+    // Mistake frequency
+    const mCounts = {};
+    for (const e of sorted) for (const m of (e.sessionMistakes||[])) if(m!=="No Mistakes — Executed the Plan ✓") mCounts[m]=(mCounts[m]||0)+1;
+    const cleanDays = sorted.filter(e=>e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓")).length;
+    const mistakeLine = Object.entries(mCounts).sort((a,b)=>b[1]-a[1]).map(([m,n])=>`"${m}":${n}x`).join(", ")||"none";
+
+    const grades = sorted.filter(e=>e.grade).map(e=>`${e.date.slice(5)}:${e.grade}`).join(", ")||"none";
+
+    // ── Per-day summary: date + daily stats + ALL written notes ─────────────
+    // No per-trade lines — just the day-level numbers + every word the trader wrote
+    const dayBlocks = sorted.map(e => {
+      const trades = e.parsedTrades || [];
+      const dWins = trades.filter(t=>t.pnl>0).length;
+      const dNet  = netPnl(e).toFixed(0);
+      const moods = (e.moods?.length ? e.moods : e.mood ? [e.mood] : []).join(", ");
+      const lines = [`[${e.date}] Net:$${dNet} | ${dWins}W/${trades.length-dWins}L | Grade:${e.grade||"?"} | Mood:${moods||"?"}`];
+      if (e.sessionMistakes?.length) lines.push(`  Mistakes flagged: ${e.sessionMistakes.filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(" | ")||"none"}`);
+      const noteFields = [
+        ["Market notes",  e.marketNotes],
+        ["Rules",         e.rules],
+        ["Lessons",       e.lessonsLearned],
+        ["Mistakes note", e.mistakes],
+        ["Improvements",  e.improvements],
+        ["Best trade",    e.bestTrade],
+        ["Worst trade",   e.worstTrade],
+        ["Reinforce",     e.reinforceRule],
+        ["Tomorrow plan", e.tomorrow],
+      ];
+      for (const [label, val] of noteFields) {
+        if (val?.trim()) lines.push(`  ${label}: ${val.trim()}`);
       }
-      if (trades.length) {
-        parts.push(`  Trades:${trades.length} ${winners.length}W/${losers.length}L avgW:$${avgWin||0} avgL:$${avgLoss||0} PF:${pf||"N/A"}${maxDD<0?` maxDD:$${maxDD.toFixed(0)}`:""}`);
-        parts.push(tradeLog);
-      }
-      const erw = e.aiRewrites || {};
-      const n = (key) => (erw[key]?.trim() || e[key] || "");
-      if (e.aiNoteSummary)     parts.push(`  Narrative: ${e.aiNoteSummary}`);
-      if (n("marketNotes"))    parts.push(`  MarketNotes: ${n("marketNotes")}`);
-      if (n("rules"))          parts.push(`  Rules: ${n("rules")}`);
-      if (n("lessonsLearned")) parts.push(`  Lessons: ${n("lessonsLearned")}`);
-      if (n("mistakes"))       parts.push(`  MistakesNote: ${n("mistakes")}`);
-      if (n("improvements"))   parts.push(`  Improvements: ${n("improvements")}`);
-      if (n("reinforceRule"))  parts.push(`  Reinforce: ${n("reinforceRule")}`);
-      if (n("bestTrade"))      parts.push(`  BestTrade: ${n("bestTrade")}`);
-      if (n("worstTrade"))     parts.push(`  WorstTrade: ${n("worstTrade")}`);
-      if (n("tomorrow"))       parts.push(`  TomorrowPlan: ${n("tomorrow")}`);
-      return parts.join("\n");
+      return lines.join("\n");
     }).join("\n\n");
 
-    const totalPnl = periodEntries.reduce((s, e) => s + netPnl(e), 0);
-    const wins = periodEntries.filter(e => netPnl(e) > 0).length;
-    const losses = periodEntries.filter(e => netPnl(e) < 0).length;
-    const allTrades = periodEntries.flatMap(e => e.parsedTrades || []);
-    const allWinners = allTrades.filter(t => t.pnl > 0);
-    const allLosers = allTrades.filter(t => t.pnl < 0);
-    const overallWR = allTrades.length ? ((allWinners.length/allTrades.length)*100).toFixed(1) : "N/A";
-    const overallPF = allLosers.length ? (allWinners.reduce((s,t)=>s+t.pnl,0)/Math.abs(allLosers.reduce((s,t)=>s+t.pnl,0))).toFixed(2) : "N/A";
-    const avgDailyPnl = (totalPnl / periodEntries.length).toFixed(0);
-    const periodTotalComm = allTrades.reduce((s,t)=>s+(t.commission||0),0);
-    const periodGross = allTrades.reduce((s,t)=>s+t.pnl,0);
-    const periodCommDrag = Math.abs(periodGross)>0 ? (periodTotalComm/Math.abs(periodGross)*100).toFixed(1) : "0";
-
-    const periodOT = {};
-    for (const t of allTrades) { const k=t.orderType||"MKT"; if(!periodOT[k])periodOT[k]={trades:0,pnl:0,wins:0}; periodOT[k].trades++; periodOT[k].pnl+=t.pnl; if(t.pnl>0)periodOT[k].wins++; }
-    const orderTypeSummary = Object.entries(periodOT).filter(([,d])=>d.trades>0).map(([ot,d])=>`${ot}:${d.trades}t ${Math.round(d.wins/d.trades*100)}%WR $${d.pnl.toFixed(0)}`).join(" | ")||"none";
-
-    const periodDurBuckets = {"<1m":{t:0,w:0,pnl:0},"1-5m":{t:0,w:0,pnl:0},"5-15m":{t:0,w:0,pnl:0},"15-60m":{t:0,w:0,pnl:0},">1h":{t:0,w:0,pnl:0}};
-    for (const t of allTrades) { const s=t.durationSecs||0; const k=s<60?"<1m":s<300?"1-5m":s<900?"5-15m":s<3600?"15-60m":">1h"; periodDurBuckets[k].t++; periodDurBuckets[k].pnl+=t.pnl; if(t.pnl>0)periodDurBuckets[k].w++; }
-    const durationSummary = Object.entries(periodDurBuckets).filter(([,d])=>d.t>0).map(([k,d])=>`${k}:${d.t}t ${Math.round(d.w/d.t*100)}%WR $${d.pnl.toFixed(0)}`).join(" | ")||"none";
-
-    const periodSess = {};
-    const _getSess = (sellTime) => { if(!sellTime) return "?"; const p=(sellTime.indexOf(" ")!==-1?sellTime.split(" ")[1]:sellTime).trim(); const cp=p.split(":"); let h=0,m=0; if(cp.length>=2){h=+cp[0];m=+cp[1];}else if(/^\d{6}$/.test(p)){h=+p.slice(0,2);m=+p.slice(2,4);}else return "?"; const mins=h*60+m; return mins<360?"Asian":mins<570?"London":mins<720?"NY Open":mins<900?"Deadzone":mins<960?"Power Hr":"After Hrs"; };
-    for (const t of allTrades) { const k=_getSess(t.sellTime); if(!periodSess[k])periodSess[k]={t:0,pnl:0,w:0}; periodSess[k].t++;periodSess[k].pnl+=t.pnl;if(t.pnl>0)periodSess[k].w++; }
-    const sessionSummary = Object.entries(periodSess).filter(([,d])=>d.t>0).sort((a,b)=>b[1].pnl-a[1].pnl).map(([k,d])=>`${k}:${d.t}t ${Math.round(d.w/d.t*100)}%WR $${d.pnl.toFixed(0)}`).join(" | ")||"none";
-
-    const periodSyms = {};
-    for (const t of allTrades) { if(!periodSyms[t.symbol])periodSyms[t.symbol]={t:0,pnl:0,w:0}; periodSyms[t.symbol].t++;periodSyms[t.symbol].pnl+=t.pnl;if(t.pnl>0)periodSyms[t.symbol].w++; }
-    const symbolSummary = Object.entries(periodSyms).sort((a,b)=>b[1].pnl-a[1].pnl).map(([sym,d])=>`${sym}:${d.t}t $${d.pnl.toFixed(0)}`).join(" | ")||"none";
-
-    const mistakeCounts = {};
-    for (const e of periodEntries) for (const m of (e.sessionMistakes||[])) mistakeCounts[m]=(mistakeCounts[m]||0)+1;
-    const mistakeTally = Object.entries(mistakeCounts).sort((a,b)=>b[1]-a[1]).map(([m,n])=>`${m}:${n}x`).join(", ")||"none";
-
-    const grades = periodEntries.filter(e=>e.grade).map(e=>e.grade);
-    const gradeDist = grades.length ? [...new Set(grades)].map(g=>`${g}:${grades.filter(x=>x===g).length}`).join(",") : "none";
-
-    // Plan vs execution — only if plans exist (keeps prompt short when no data)
-    const sortedEntries = [...periodEntries].sort((a,b)=>a.date.localeCompare(b.date));
+    // ── Plan vs actual cross-reference ──────────────────────────────────────
     const planLines = [];
-    for (let i=1;i<sortedEntries.length;i++) {
-      const prev=sortedEntries[i-1], curr=sortedEntries[i];
-      if (prev.tomorrow?.trim()) planLines.push(`[${prev.date}→${curr.date}] Planned:"${prev.tomorrow.slice(0,120)}" | Actual grade:${curr.grade||"?"} P&L:$${netPnl(curr).toFixed(0)} mistakes:${(curr.sessionMistakes||[]).join(",")||"none"}`);
+    for (let i=1;i<sorted.length;i++) {
+      const prev=sorted[i-1], curr=sorted[i];
+      if (prev.tomorrow?.trim()) {
+        planLines.push(`  ${prev.date} wrote: "${prev.tomorrow.slice(0,150)}"\n  ${curr.date} actual: grade ${curr.grade||"?"} $${netPnl(curr).toFixed(0)} | mistakes: ${(curr.sessionMistakes||[]).filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(", ")||"none"}`);
+      }
     }
 
-    return `Trading coach: analyze this journal for ${label}. Data is complete — every trade, every note.
+    const totalChars = dayBlocks.length;
+    const isMonthly = label.length > 12; // rough heuristic: monthly labels are longer
 
-STATS: ${wins}W/${losses}L days | Net $${totalPnl.toFixed(0)} | Avg/day $${avgDailyPnl} | ${allTrades.length} trades ${overallWR}%WR PF:${overallPF} | Fees $${periodTotalComm.toFixed(0)} (${periodCommDrag}% drag)
-GRADES: ${gradeDist}
-SESSIONS: ${sessionSummary}
-HOLD TIME: ${durationSummary}
-ORDER TYPES: ${orderTypeSummary}
-SYMBOLS: ${symbolSummary}
-MISTAKES: ${mistakeTally}
-${planLines.length ? `PLAN vs ACTUAL:\n${planLines.join("\n")}` : ""}
+    return `You are a trading coach reviewing a futures trader's journal for: ${label}
 
-JOURNAL ENTRIES (full trade log + all notes per day):
-${notes}
+PERIOD SUMMARY
+Days: ${sorted.length} | Day W/L: ${winDays}W/${lossDays}L | Net P&L: $${totalPnl.toFixed(0)} | Avg/day: $${(totalPnl/sorted.length).toFixed(0)}
+Trades: ${allTrades.length} | Trade WR: ${overallWR}% | PF: ${fmtPF(overallPF)} | Avg win: $${avgWin} | Avg loss: $${avgLoss} | Fees: $${totalFees.toFixed(0)}
+Sessions: ${sessLine}
+Grades: ${grades}
+Mistakes flagged: ${mistakeLine}${cleanDays>0?` | Clean days: ${cleanDays}`:""}
+${planLines.length ? `\nPLAN vs ACTUAL\n${planLines.join("\n\n")}` : ""}
 
-OUTPUT: Bullet points only. Cite dates and $ amounts. Complete all 7 sections:
+DAILY JOURNAL ENTRIES (every word the trader wrote)
+${dayBlocks}
 
-**📊 PERFORMANCE OVERVIEW** — key numbers, best/worst session, hold time edge, verdict
+---
+YOUR JOB: You are not a summarizer. You are a trading coach who has just read every entry above. Your value is in finding what the trader cannot see themselves — patterns across days, contradictions between intentions and actions, recurring blind spots, and what the data actually says vs. what they think is happening.
 
-**🔑 KEY LESSONS IDENTIFIED** — recurring themes across multiple days (quote exact words + date, count appearances, did behavior change?)
+RULES:
+- Every insight must reference a specific date, dollar amount, or direct quote from their notes
+- Do NOT restate the period summary stats — the trader already sees those
+- If a section has no relevant data, skip it entirely (do not write placeholder text)
+- Keep each bullet to one clear finding. No filler, no encouragement, no generic advice
+- Total response: 400-600 words
 
-**⚠️ PATTERNS & MISTAKES** — flagged mistakes with frequency + P&L impact; blind spots in trade data not mentioned in notes
+WRITE THESE SECTIONS (skip any with no data):
 
-**🚩 RED FLAGS — PLAN VS EXECUTION** — for each plan written: HONORED or VIOLATED with evidence (skip if no plans)
+**📓 NOTES ANALYSIS**
+Read every word written across all days. Find: the same theme written multiple times (quote it with dates), lessons written but then contradicted by next-day behavior, intentions that never materialized. This is the most important section — the trader's own words are the most valuable data.
 
-**🧠 BEHAVIORAL TRENDS** — 3 data-backed patterns trader hasn't noticed (session/time/order type/direction)
+**📊 WHAT THE NUMBERS SAY**
+2-3 bullets only. One data pattern the trader likely hasn't connected — e.g. a session that consistently bleeds, a hold time where edge disappears, a day-of-week pattern. Must be something not obvious from glancing at the stats.
 
-**💡 STRENGTHS TO BUILD ON** — 2 specific positives with exact numbers
+**🚩 PLAN vs REALITY**
+For each Tomorrow Plan written: did the next day honor it? Quote the plan, state what actually happened. Label HONORED or VIOLATED. Skip if no plans were written.
 
-**🎯 ACTIONABLE FOCUS POINTS** — 3 rules: [Root cause] → [Measurable threshold]`;
+**💡 ONE STRENGTH**
+The single most consistent positive backed by specific data. Be precise.
+
+**🎯 THREE RULES FOR NEXT ${isMonthly ? "MONTH" : "WEEK"}**
+Format: [Root cause identified from notes/data] → [Specific measurable rule]
+These must directly address what the notes reveal, not generic trading advice.`;
   };
 
   const generateSummary = async (period) => {
@@ -8766,6 +8720,35 @@ export default function TradingJournal() {
   const viewDetail = (entry) => { setActiveEntry(entry); setView("detail"); };
 
   const f = (field, val) => setForm(p => ({ ...p, [field]: val }));
+
+  // Auto-bullet: on paste into any notes field, prefix every non-empty line with "- "
+  // Normalises •, *, –, — and existing - to uniform "- " prefix
+  const autoBulletPaste = (field) => (e) => {
+    const pasted = e.clipboardData?.getData('text');
+    if (!pasted) return;
+    e.preventDefault();
+    const lines = pasted.split('\n');
+    const formatted = lines
+      .map(line => {
+        const trimmed = line.trimEnd();
+        if (!trimmed.trim()) return ''; // keep blank lines as blank
+        // Strip any existing bullet-like prefix
+        const stripped = trimmed.replace(/^[\s]*[-–—•*]\s*/, '');
+        return `- ${stripped}`;
+      })
+      .join('\n');
+    // Insert at cursor position if possible, otherwise replace full value
+    const el = e.target;
+    const start = el.selectionStart ?? 0;
+    const end   = el.selectionEnd   ?? 0;
+    const current = el.value;
+    const newVal = current.slice(0, start) + formatted + current.slice(end);
+    f(field, newVal);
+    // Restore cursor after state update
+    requestAnimationFrame(() => {
+      el.selectionStart = el.selectionEnd = start + formatted.length;
+    });
+  };
   const pnlColor = (n) => { const v = parseFloat(n); return isNaN(v) ? "#e2e8f0" : v > 0 ? "#4ade80" : v < 0 ? "#f87171" : "#e2e8f0"; };
   const gradeColor = (g) => {
     if (!g) return "#94a3b8";
@@ -8779,6 +8762,9 @@ export default function TradingJournal() {
     return "#f87171";             // red for D and below
   };
   const fmtPnl = (n) => { const v = parseFloat(n); if (isNaN(v)) return "-"; return `${v >= 0 ? "+" : "-"}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; };
+  // Format profit factor — handles Infinity (perfect day: 0 losses) gracefully
+  const fmtPF = (pf) => { if (pf == null) return "—"; if (!isFinite(pf)) return "∞"; return pf.toFixed(2); };
+  const pfColor = (pf) => { if (pf == null) return "#64748b"; if (!isFinite(pf)) return "#4ade80"; return pf >= 1 ? "#4ade80" : "#f87171"; };
 
   const months = [...new Set(entries.map(e => e.date?.slice(0, 7)))].sort().reverse();
   const filtered = filterMonth ? entries.filter(e => e.date?.startsWith(filterMonth)) : entries;
@@ -9949,7 +9935,7 @@ export default function TradingJournal() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 8 }}>
                   {[
                     { l: "TRADE WIN RATE", v: `${Math.round(globalAnalytics.winRate)}%`, c: globalAnalytics.winRate >= 50 ? "#4ade80" : "#f87171" },
-                    { l: "PROFIT FACTOR", v: globalAnalytics.profitFactor != null ? (typeof globalAnalytics.profitFactor === "number" ? globalAnalytics.profitFactor.toFixed(2) : globalAnalytics.profitFactor) : "—", c: globalAnalytics.profitFactor != null && globalAnalytics.profitFactor >= 1 ? "#4ade80" : "#f87171" },
+                    { l: "PROFIT FACTOR", v: fmtPF(globalAnalytics.profitFactor), c: pfColor(globalAnalytics.profitFactor) },
                     { l: "EXPECTANCY", v: globalAnalytics.expectancy != null ? `${globalAnalytics.expectancy >= 0 ? "+" : ""}$${Math.abs(globalAnalytics.expectancy * Math.abs(globalAnalytics.avgLoss || 1)).toFixed(0)}` : "—", c: globalAnalytics.expectancy != null && globalAnalytics.expectancy >= 0 ? "#4ade80" : "#f87171" },
                     { l: "MAX DRAWDOWN", v: globalAnalytics.maxDD != null ? `-$${Math.abs(globalAnalytics.maxDD).toFixed(0)}` : "—", c: "#f87171" },
                     { l: "TOTAL TRADES", v: globalAnalytics.total || filtered.length, c: "#e2e8f0" },
@@ -10304,10 +10290,10 @@ export default function TradingJournal() {
                                   <span style={{ color: "#f87171" }}>{a.losers}</span>
                                 </div>
                               </div>
-                              {a.profitFactor !== null && a.profitFactor !== undefined && (
+                              {a.profitFactor != null && (
                                 <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                                   <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase" }}>Prof. Factor</div>
-                                  <div style={{ fontSize: 15, color: a.profitFactor >= 1 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{typeof a.profitFactor === "number" ? a.profitFactor.toFixed(2) : "—"}</div>
+                                  <div style={{ fontSize: 15, color: pfColor(a.profitFactor), fontWeight: 600 }}>{fmtPF(a.profitFactor)}</div>
                                 </div>
                               )}
                               {parseFloat(entry.commissions) > 0 && (
@@ -10669,21 +10655,21 @@ export default function TradingJournal() {
                     </div>
                   );
                 })()}
-                <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>MARKET / TAPE NOTES</label><textarea rows={4} placeholder="Price action, key levels, macro context, structure..." value={form.marketNotes} onChange={e => f("marketNotes", e.target.value)} /></div>
-                <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>RULES FOLLOWED / BROKEN</label><textarea rows={3} placeholder="Did you follow your trading plan?" value={form.rules} onChange={e => f("rules", e.target.value)} /></div>
+                <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>MARKET / TAPE NOTES</label><textarea rows={4} placeholder="Price action, key levels, macro context, structure..." value={form.marketNotes} onChange={e => f("marketNotes", e.target.value)} onPaste={autoBulletPaste("marketNotes")} /></div>
+                <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>RULES FOLLOWED / BROKEN</label><textarea rows={3} placeholder="Did you follow your trading plan?" value={form.rules} onChange={e => f("rules", e.target.value)} onPaste={autoBulletPaste("rules")} /></div>
                 </> /* end session sub-tab */}
 
                 {/* ── LESSONS sub-tab ── */}
                 {sessionInnerTab === "lessons" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>LESSONS LEARNED TODAY</label><textarea rows={5} placeholder="What did the market teach you today?" value={form.lessonsLearned} onChange={e => f("lessonsLearned", e.target.value)} /></div>
-                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>MISTAKES TO AVOID</label><textarea rows={4} placeholder="Be specific. e.g. 'Don't trade after 2 back-to-back losses'" value={form.mistakes} onChange={e => f("mistakes", e.target.value)} /></div>
-                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>AREAS FOR IMPROVEMENT</label><textarea rows={3} placeholder="Entry timing? Holding winners? Cutting losers?" value={form.improvements} onChange={e => f("improvements", e.target.value)} /></div>
-                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>BEST TRADE OF THE DAY</label><textarea rows={3} placeholder="What setup worked? What went right?" value={form.bestTrade} onChange={e => f("bestTrade", e.target.value)} /></div>
-                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>WORST TRADE / MISTAKE</label><textarea rows={3} placeholder="What went wrong? Revenge trade? Poor sizing?" value={form.worstTrade} onChange={e => f("worstTrade", e.target.value)} /></div>
+                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>LESSONS LEARNED TODAY</label><textarea rows={5} placeholder="What did the market teach you today?" value={form.lessonsLearned} onChange={e => f("lessonsLearned", e.target.value)} onPaste={autoBulletPaste("lessonsLearned")} /></div>
+                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>MISTAKES TO AVOID</label><textarea rows={4} placeholder="Be specific. e.g. 'Don't trade after 2 back-to-back losses'" value={form.mistakes} onChange={e => f("mistakes", e.target.value)} onPaste={autoBulletPaste("mistakes")} /></div>
+                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>AREAS FOR IMPROVEMENT</label><textarea rows={3} placeholder="Entry timing? Holding winners? Cutting losers?" value={form.improvements} onChange={e => f("improvements", e.target.value)} onPaste={autoBulletPaste("improvements")} /></div>
+                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>BEST TRADE OF THE DAY</label><textarea rows={3} placeholder="What setup worked? What went right?" value={form.bestTrade} onChange={e => f("bestTrade", e.target.value)} onPaste={autoBulletPaste("bestTrade")} /></div>
+                    <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>WORST TRADE / MISTAKE</label><textarea rows={3} placeholder="What went wrong? Revenge trade? Poor sizing?" value={form.worstTrade} onChange={e => f("worstTrade", e.target.value)} onPaste={autoBulletPaste("worstTrade")} /></div>
                     <div style={{ border: "1px solid #1e3a5f", borderRadius: 6, padding: "14px 16px", background: "#0a1628" }}>
                       <label style={{ fontSize: 10, color: "#93c5fd", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>ONE RULE TO REINFORCE TOMORROW?</label>
-                      <textarea rows={2} placeholder="e.g. 'No trades during the Afternoon Deadzone' or 'Size down after first loss'" value={form.reinforceRule || ""} onChange={e => f("reinforceRule", e.target.value)} />
+                      <textarea rows={2} placeholder="e.g. 'No trades during the Afternoon Deadzone' or 'Size down after first loss'" value={form.reinforceRule || ""} onChange={e => f("reinforceRule", e.target.value)} onPaste={autoBulletPaste("reinforceRule")} />
                     </div>
                   </div>
                 )}
@@ -10838,7 +10824,7 @@ export default function TradingJournal() {
 
 
             {tab === "tomorrow" && (
-              <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>PLAN FOR TOMORROW</label><textarea rows={7} placeholder="Key levels, economic events, intended setups, max loss for the day, goals..." value={form.tomorrow} onChange={e => f("tomorrow", e.target.value)} /></div>
+              <div><label style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6, display: "block" }}>PLAN FOR TOMORROW</label><textarea rows={7} placeholder="Key levels, economic events, intended setups, max loss for the day, goals..." value={form.tomorrow} onChange={e => f("tomorrow", e.target.value)} onPaste={autoBulletPaste("tomorrow")} /></div>
             )}
 
             <ChartScreenshotZone
