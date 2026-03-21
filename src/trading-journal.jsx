@@ -1013,14 +1013,16 @@ const calcAnalytics = (trades, tzLock = false) => {
   const grossWin = winners.reduce((s, t) => s + t.pnl, 0);
   const grossLoss = Math.abs(losers.reduce((s, t) => s + t.pnl, 0));
   const profitFactor = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : null;
-  const largestWin = Math.max(...trades.map(t => t.pnl));
-  const largestLoss = Math.min(...trades.map(t => t.pnl));
   const avgQty = trades.reduce((s, t) => s + t.qty, 0) / trades.length;
 
   let running = 0;
   const equityCurve = trades.map((t) => { running += t.pnl; return { pnl: running, trade: t }; });
 
-  let runPeak = 0, maxDD = 0;
+  // maxDD: peak-to-trough drawdown on the equity curve.
+  // Initialise runPeak to the first curve point so sessions that open negative
+  // are handled correctly (not anchored to 0 as a false peak).
+  let runPeak = equityCurve.length ? equityCurve[0].pnl : 0;
+  let maxDD = 0;
   for (const pt of equityCurve) {
     if (pt.pnl > runPeak) runPeak = pt.pnl;
     const dd = runPeak - pt.pnl;
@@ -2259,28 +2261,39 @@ function TopFindings({ entry, a, ai }) {
     ).join(" | ") : "none";
     const totalComm = trades.reduce((s,t) => s+(t.commission||0), 0);
     const commDragPct = Math.abs(parseFloat(entry.pnl||0)) > 0 ? (totalComm/Math.abs(parseFloat(entry.pnl||0))*100).toFixed(1) : "N/A";
-    const flaggedNotes = trades.filter(t=>t.notes).map(t=>`Trade ${trades.indexOf(t)+1}: ${t.notes}`).join(", ") || "none";
+    const flaggedNotes = trades.filter(t=>t.notes && t.notes !== "overnight-carry").map(t=>`Trade ${trades.indexOf(t)+1}: ${t.notes}`).join(", ") || "none";
+    const carryTrades  = trades.filter(t=>t.notes==="overnight-carry");
     const durationBreakdown = a?.DURATION_BUCKETS ? a.DURATION_BUCKETS.filter(b=>a.byDuration[b.key]?.trades>0).map(b=>{
       const bd = a.byDuration[b.key]; return `${b.key}: ${bd.trades}t ${Math.round(bd.wins/bd.trades*100)}%WR $${bd.pnl.toFixed(0)}`;
     }).join(" | ") : "none";
+    // Direction breakdown — key edge signal for TopFindings
+    const dirBreakdownTF = a?.byDirection ? ["long","short"].filter(k=>a.byDirection[k].trades>0).map(k => {
+      const d = a.byDirection[k];
+      const wr = d.trades ? Math.round(d.wins/d.trades*100) : 0;
+      const commEst = trades.filter(t2=>(t2.direction||"long")===k).reduce((s,t2)=>s+(t2.commission||0),0);
+      const net = (d.pnl - commEst).toFixed(2);
+      const pf = d.grossLoss > 0 ? (d.grossWin/d.grossLoss).toFixed(2) : d.grossWin > 0 ? "inf" : "0";
+      return `${k.toUpperCase()}: ${d.trades}t ${wr}%WR gross $${d.pnl.toFixed(2)} net ~$${net} PF ${pf}`;
+    }).join(" | ") : "none";
 
-    const prompt = `You are an expert futures trading analyst. Analyze this trader's full day of data and give exactly 3 findings — the most insightful, non-obvious patterns that will directly improve their profitability. Each finding must be data-backed with specific numbers. No fluff, no generic advice.
+    const prompt = `You are an expert futures trading analyst. Analyze this trader's full day of data and surface exactly 3 findings — the most insightful, non-obvious patterns that will directly improve their profitability. Each finding must be data-backed with specific numbers. No fluff, no generic advice.
 
 DATE: ${entry.date} (${new Date(entry.date+"T12:00:00").toLocaleDateString("en-US",{weekday:"long"})})
 INSTRUMENTS: ${(entry.instruments?.length ? entry.instruments : [entry.instrument||"?"]).join(", ")}
 GRADE: ${entry.grade||"?"} | BIAS: ${entry.bias||"?"} | MOOD: ${(entry.moods||[entry.mood]).filter(Boolean).join(", ")||"?"}
 SESSION MISTAKES: ${(entry.sessionMistakes||[]).join(", ")||"none"}
-GROSS P&L: $${entry.pnl||0} | NET P&L: $${(parseFloat(entry.pnl||0)-parseFloat(entry.commissions||0)).toFixed(2)} | FEES: $${entry.commissions||0}
-TOTAL TRADES: ${trades.length} | WINNERS: ${winners.length} | LOSERS: ${losers.length}
+GROSS P&L: $${entry.pnl||0} | NET P&L: $${(parseFloat(entry.pnl||0)-parseFloat(entry.commissions||0)).toFixed(2)} | FEES: $${entry.commissions||0} (${commDragPct}% of gross)
+TOTAL TRADES: ${trades.length} | WINNERS: ${winners.length} | LOSERS: ${losers.length}${carryTrades.length > 0 ? ` | CARRY-FORWARD: ${carryTrades.length}` : ""}
 WIN RATE: ${trades.length ? ((winners.length/trades.length)*100).toFixed(1) : 0}%
 AVG WIN: $${avgWin} | AVG LOSS: $${avgLoss} | BIGGEST WIN: $${biggestWin} | BIGGEST LOSS: $${biggestLoss}
 PROFIT FACTOR: ${fmtPF(a?.profitFactor)} | EXPECTANCY: ${a?.expectancy?.toFixed(2)||"N/A"}R
-BY SESSION: ${sessionBreakdown}
+BY DIRECTION: ${dirBreakdownTF}
+BY SESSION (exit time): ${sessionBreakdown}
 BY SYMBOL: ${bySymbol}
 BY ORDER TYPE: ${orderTypeBreakdown}
 BY DURATION BUCKET: ${durationBreakdown}
 COMMISSIONS: total $${totalComm.toFixed(2)} (${commDragPct}% of gross P&L)
-BROKER FLAGS (partial fills etc): ${flaggedNotes}
+BROKER FLAGS: ${flaggedNotes}
 GRADE: ${entry.grade||"none"} | EXECUTION SCORE: ${entry.executionScore != null ? entry.executionScore+"/10" : "not logged"} | DECISION SCORE: ${entry.decisionScore != null ? entry.decisionScore+"/10" : "not logged"}
 MOOD: ${(entry.moods?.length ? entry.moods : entry.mood ? [entry.mood] : []).join(", ")||"not logged"}
 BIAS: ${entry.bias||"none"}
@@ -2294,12 +2307,12 @@ BEST TRADE (own words): ${note("bestTrade")}
 WORST TRADE (own words): ${note("worstTrade")}
 RULE TO REINFORCE: ${note("reinforceRule")}
 PLAN FOR TOMORROW: ${note("tomorrow")}
-${(() => { const costs = entry.mistakeCosts||{}; const rows = Object.entries(costs).filter(([,v])=>v!=null&&Number(v)>0); if(!rows.length) return "MISTAKE COSTS: none attributed"; const total = rows.reduce((s,[,v])=>s+Number(v),0); return `MISTAKE COST BREAKDOWN: ${rows.map(([tag,v])=>`${tag}: $${Number(v).toFixed(0)}`).join(", ")} — total $${total.toFixed(0)}${entry.mistakeCostNotes?" · Notes: "+entry.mistakeCostNotes:""}`; })()}
+${(() => { const costs = entry.mistakeCosts||{}; const rows = Object.entries(costs).filter(([,v])=>v!=null&&Number(v)>0); if(!rows.length) return "MISTAKE COSTS: none attributed"; const total = rows.reduce((s,[,v])=>s+Number(v),0); return `MISTAKE COST BREAKDOWN: ${rows.map(([tag,v])=>`${tag}: $${Number(v).toFixed(0)}`).join(", ")} — total $${total.toFixed(0)}${entry.mistakeCostNotes?" · Notes: "+entry.mistakeCostNotes:""}`;})()}
 
 FULL TRADE LOG:
 ${tradeLog||"No trade data imported"}
 
-CRITICAL INSTRUCTION: Cross-reference the trader's OWN WRITTEN NOTES against the trade data. Look for: (1) contradictions — they said they'd do X but the trades show Y, (2) patterns they haven't named — recurring timing or behavior visible in the log but absent from their notes, (3) cost of their stated mistakes — if they flagged a mistake, find the exact trade(s) it cost them and quantify it. At least one finding must reference something from their written notes directly.
+CRITICAL INSTRUCTION: Before generating findings, check these in order: (1) Is one direction (long/short) net-negative while the other is profitable? That is finding-worthy. (2) Is commission drag above 25% of gross? Name the exact % and dollar amount. (3) Which session window had the worst net P&L — and is it concentrated in a specific time window? Then cross-reference the trader's OWN WRITTEN NOTES against the trade data. Look for: contradictions between stated intentions and actual trades, patterns visible in the log but absent from notes, and cost of flagged mistakes. At least one finding must reference something from their written notes directly.
 
 Return EXACTLY this format, nothing else:
 
@@ -2402,9 +2415,26 @@ function DailyAIAnalysis({ entry, a, ai, priorPlan = null }) {
     const note = (key) => (rw[key]?.trim() || entry[key] || "None");
     const noteSummary = entry.aiNoteSummary || "";
 
-    const sessionBreakdown = a?.bySession ? Object.entries(a.bySession).map(([s, d]) =>
-      `  ${s}: ${d.trades} trades, ${Math.round(d.wins/d.trades*100)}% win rate, $${d.pnl.toFixed(2)} P&L`
-    ).join("\n") : "No session data";
+    // Session breakdown — net P&L (not just gross) to expose commission drag per session
+    const sessionBreakdown = a?.bySession ? Object.entries(a.bySession).map(([s, d]) => {
+      const net = d.pnl - (d.pnl > 0
+        ? trades.filter(t2 => {
+            const et = t2.direction==="short"?(t2.buyTime||t2.sellTime):(t2.sellTime||t2.buyTime);
+            return et && (()=>{const m=et.match(/^\d{8}\s(\d{2})(\d{2})/);if(!m)return false;const h=parseInt(m[1])+parseInt(m[2])/60;if(h>=20)return s==="Asian";if(h<4)return s==="London Overnight";if(h<9.5)return s==="Pre-Market";if(h<12)return s==="NY Morning";if(h<16)return s==="NY Afternoon";return s==="After Hours";})();
+          }).reduce((acc,t2)=>acc+(t2.commission||0),0) : 0);
+      const wr = d.trades ? Math.round(d.wins/d.trades*100) : 0;
+      return `  ${s}: ${d.trades} trades, ${wr}% WR, gross $${d.pnl.toFixed(2)}, net ~$${d.pnl.toFixed(2)} P&L`;
+    }).join("\n") : "No session data";
+
+    // Direction breakdown — reveals long vs short edge asymmetry
+    const dirBreakdown = a?.byDirection ? ["long","short"].filter(k=>a.byDirection[k].trades>0).map(k => {
+      const d = a.byDirection[k];
+      const wr = d.trades ? Math.round(d.wins/d.trades*100) : 0;
+      const commEst = trades.filter(t2=>(t2.direction||"long")===k).reduce((s,t2)=>s+(t2.commission||0),0);
+      const net = (d.pnl - commEst).toFixed(2);
+      const pf = d.grossLoss > 0 ? (d.grossWin/d.grossLoss).toFixed(2) : d.grossWin > 0 ? "∞" : "0.00";
+      return `  ${k.toUpperCase()}: ${d.trades} trades | ${wr}% WR | gross $${d.pnl.toFixed(2)} | net ~$${net} | PF ${pf}`;
+    }).join("\n") : "No direction data";
 
     const tradeLog = trades.map((t, i) => {
       const netT = (t.pnl - (t.commission||0)).toFixed(2);
@@ -2457,8 +2487,11 @@ TRADE STATISTICS:
   Largest single win: $${a?.largestWin?.toFixed(2) || "N/A"}
   Largest single loss: $${a?.largestLoss?.toFixed(2) || "N/A"}
 
-SESSION BREAKDOWN (P&L by time window):
+SESSION BREAKDOWN (P&L by time window — uses exit time):
 ${sessionBreakdown}
+
+DIRECTION BREAKDOWN (long vs short edge):
+${dirBreakdown}
 
 ORDER TYPE BREAKDOWN (LMT/STP/MKT performance):
 ${orderTypeStats}
@@ -2494,8 +2527,7 @@ CRITICAL CROSS-REFERENCE REQUIRED: Compare the previous plan above against today
 Provide a deep, data-driven daily analysis with exactly these sections. Use specific numbers from the data. Be like a sharp trading coach, not a cheerleader. Cross-reference the trade log with stated notes — call out discrepancies.
 
 **🔬 DATA SNAPSHOT**
-3-4 sentences on what the raw numbers reveal. Lead with the single most important stat (profit factor, expectancy, R-ratio, or drawdown). Mention if fees are eating a material % of gross. If execution/decision scores were logged, note whether they align with the actual trade performance — a high execution score on a losing day signals self-rating bias worth flagging. Be specific.
-
+3-4 sentences on what the raw numbers reveal. Mandatory checks: (1) Is one direction (long/short) net-negative while the other is profitable? Name it with exact figures. (2) Which session window drove the most P&L — and which drained it? (3) Commission drag: if fees exceed 20% of gross, name the exact % and dollar impact. (4) Lead with the single most important stat (profit factor, expectancy, or a direction/session edge). If execution/decision scores were logged, note whether they align with actual performance. Be specific — cite numbers, not generalities.
 **✅ WHAT WORKED TODAY**
 2-3 specific things backed by the data. Reference actual trades by number, time window, or price. If a session window dominated, name it. If the R-ratio was strong, say so. Be concrete — no generic praise.
 
@@ -5583,7 +5615,7 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
   const buildPrompt = (periodEntries, label) => {
     const sorted = [...periodEntries].sort((a,b) => a.date.localeCompare(b.date));
 
-    // ── Aggregate stats (lean, no per-trade lines) ──────────────────────────
+    // ── Aggregate stats ──────────────────────────────────────────────────────
     const totalPnl = sorted.reduce((s,e) => s + netPnl(e), 0);
     const winDays  = sorted.filter(e => netPnl(e) > 0).length;
     const lossDays = sorted.filter(e => netPnl(e) < 0).length;
@@ -5594,15 +5626,64 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
     const overallPF   = allLosers.length
       ? allWinners.reduce((s,t)=>s+t.pnl,0)/Math.abs(allLosers.reduce((s,t)=>s+t.pnl,0))
       : allWinners.length > 0 ? Infinity : null;
+    const grossPnl  = allTrades.reduce((s,t) => s + t.pnl, 0);
     const totalFees = allTrades.reduce((s,t)=>s+(t.commission||0),0);
+    const commDragPct = Math.abs(grossPnl) > 0 ? (totalFees / Math.abs(grossPnl) * 100).toFixed(1) : "0";
     const avgWin  = allWinners.length ? (allWinners.reduce((s,t)=>s+t.pnl,0)/allWinners.length).toFixed(0) : "0";
     const avgLoss = allLosers.length  ? Math.abs(allLosers.reduce((s,t)=>s+t.pnl,0)/allLosers.length).toFixed(0) : "0";
 
-    // Session P&L
-    const getSess = t => { const p=(t.sellTime||"").split(" ")[1]||""; const [h=0,m=0]=p.split(":").map(Number); const mins=h*60+m; return mins<720?"NY Open":mins<900?"Afternoon":mins<960?"Power Hr":"Other"; };
+    // Direction breakdown (long vs short) — key edge signal
+    const byDir = { long: { t:0, w:0, pnl:0, comm:0 }, short: { t:0, w:0, pnl:0, comm:0 } };
+    for (const t of allTrades) {
+      const d = byDir[t.direction === "short" ? "short" : "long"];
+      d.t++; d.pnl += t.pnl; d.comm += (t.commission||0);
+      if (t.pnl > 0) d.w++;
+    }
+    const dirLine = ["long","short"].filter(k=>byDir[k].t>0).map(k => {
+      const d = byDir[k];
+      const wr = d.t ? Math.round(d.w/d.t*100) : 0;
+      const net = (d.pnl - d.comm).toFixed(0);
+      const sign = d.pnl >= 0 ? "+" : "";
+      return `${k.toUpperCase()}: ${d.t} trades ${wr}% WR gross ${sign}$${d.pnl.toFixed(0)} net ${sign}$${net}`;
+    }).join(" | ") || "none";
+
+    // Session breakdown — proper ET hour buckets matching journal getSession logic
+    const getSessET = t => {
+      const ts = t.direction === "short" ? (t.buyTime || t.sellTime) : (t.sellTime || t.buyTime);
+      if (!ts) return "Unknown";
+      const m = ts.match(/^\d{8}\s(\d{2})(\d{2})/);
+      if (!m) return "Unknown";
+      const h = parseInt(m[1]) + parseInt(m[2]) / 60;
+      if (h >= 20) return "Asian";
+      if (h < 4)   return "London Overnight";
+      if (h < 9.5) return "Pre-Market";
+      if (h < 12)  return "NY Morning";
+      if (h < 16)  return "NY Afternoon";
+      return "After Hours";
+    };
     const sessMap = {};
-    for (const t of allTrades) { const k=getSess(t); if(!sessMap[k])sessMap[k]={pnl:0,t:0,w:0}; sessMap[k].pnl+=t.pnl;sessMap[k].t++;if(t.pnl>0)sessMap[k].w++; }
-    const sessLine = Object.entries(sessMap).sort((a,b)=>b[1].pnl-a[1].pnl).map(([k,d])=>`${k}:$${d.pnl.toFixed(0)}(${Math.round(d.w/d.t*100)}%WR)`).join(" | ")||"none";
+    for (const t of allTrades) {
+      const k = getSessET(t);
+      if (!sessMap[k]) sessMap[k] = { pnl:0, t:0, w:0, comm:0 };
+      sessMap[k].pnl  += t.pnl;
+      sessMap[k].t++;
+      sessMap[k].comm += (t.commission||0);
+      if (t.pnl > 0) sessMap[k].w++;
+    }
+    const sessOrder = ["Asian","London Overnight","Pre-Market","NY Morning","NY Afternoon","After Hours","Unknown"];
+    const sessLine = sessOrder.filter(k=>sessMap[k]).map(k => {
+      const d = sessMap[k];
+      const wr = Math.round(d.w/d.t*100);
+      const net = (d.pnl - d.comm).toFixed(0);
+      const sign = d.pnl >= 0 ? "+" : "";
+      return `${k}: ${d.t}t ${wr}%WR gross ${sign}$${d.pnl.toFixed(0)} net ${sign}$${net}`;
+    }).join(" | ") || "none";
+    const sessEntries = Object.entries(sessMap).filter(([,d])=>d.t>0);
+    const bestSess  = sessEntries.length ? sessEntries.reduce((a,b) => (b[1].pnl-b[1].comm) > (a[1].pnl-a[1].comm) ? b : a) : null;
+    const worstSess = sessEntries.length ? sessEntries.reduce((a,b) => (b[1].pnl-b[1].comm) < (a[1].pnl-a[1].comm) ? b : a) : null;
+
+    // Carry-forward count
+    const carryCount = allTrades.filter(t=>t.notes==="overnight-carry").length;
 
     // Mistake frequency
     const mCounts = {};
@@ -5612,33 +5693,38 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
 
     const grades = sorted.filter(e=>e.grade).map(e=>`${e.date.slice(5)}:${e.grade}`).join(", ")||"none";
 
-    // ── Per-day summary: date + daily stats + ALL written notes ─────────────
-    // No per-trade lines — just the day-level numbers + every word the trader wrote
+    // ── Per-day summary with per-trade lines ────────────────────────────────
     const dayBlocks = sorted.map(e => {
       const trades = e.parsedTrades || [];
-      const dWins = trades.filter(t=>t.pnl>0).length;
-      const dNet  = netPnl(e).toFixed(0);
-      const moods = (e.moods?.length ? e.moods : e.mood ? [e.mood] : []).join(", ");
-      const lines = [`[${e.date}] Net:$${dNet} | ${dWins}W/${trades.length-dWins}L | Grade:${e.grade||"?"} | Mood:${moods||"?"}`];
-      if (e.sessionMistakes?.length) lines.push(`  Mistakes flagged: ${e.sessionMistakes.filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(" | ")||"none"}`);
+      const dWins  = trades.filter(t=>t.pnl>0).length;
+      const dGross = trades.reduce((s,t)=>s+t.pnl,0);
+      const dComm  = trades.reduce((s,t)=>s+(t.commission||0),0);
+      const dNet   = netPnl(e).toFixed(0);
+      const moods  = (e.moods?.length ? e.moods : e.mood ? [e.mood] : []).join(", ");
+      const tradeLines = trades.map((t,i) => {
+        const net = (t.pnl-(t.commission||0)).toFixed(2);
+        const exitT = t.direction==="short" ? (t.buyTime||t.sellTime) : (t.sellTime||t.buyTime);
+        const exitHHMM = exitT ? exitT.replace(/^\d{8}\s/,"").slice(0,4) : "?";
+        const carry = t.notes==="overnight-carry" ? " [carry-forward]" : "";
+        return `    T${i+1} ${(t.direction||"long").toUpperCase()} @${exitHHMM} gross $${t.pnl.toFixed(2)} net $${net}${carry}`;
+      }).join("\n");
+      const lines = [`[${e.date}] Net:$${dNet} Gross:$${dGross.toFixed(0)} Fees:-$${dComm.toFixed(0)} | ${dWins}W/${trades.length-dWins}L | Grade:${e.grade||"?"} | Mood:${moods||"?"}`];
+      if (tradeLines) lines.push(tradeLines);
+      if (e.sessionMistakes?.length) lines.push(`  Mistakes: ${e.sessionMistakes.filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(" | ")||"none"}`);
       const noteFields = [
-        ["Market notes",  e.marketNotes],
-        ["Rules",         e.rules],
-        ["Lessons",       e.lessonsLearned],
-        ["Mistakes note", e.mistakes],
-        ["Improvements",  e.improvements],
-        ["Best trade",    e.bestTrade],
-        ["Worst trade",   e.worstTrade],
-        ["Reinforce",     e.reinforceRule],
+        ["Market notes",  e.marketNotes],  ["Rules",        e.rules],
+        ["Lessons",       e.lessonsLearned],["Mistakes note",e.mistakes],
+        ["Improvements",  e.improvements],  ["Best trade",   e.bestTrade],
+        ["Worst trade",   e.worstTrade],    ["Reinforce",    e.reinforceRule],
         ["Tomorrow plan", e.tomorrow],
       ];
-      for (const [label, val] of noteFields) {
-        if (val?.trim()) lines.push(`  ${label}: ${val.trim()}`);
+      for (const [lbl, val] of noteFields) {
+        if (val?.trim()) lines.push(`  ${lbl}: ${val.trim()}`);
       }
       return lines.join("\n");
     }).join("\n\n");
 
-    // ── Plan vs actual cross-reference ──────────────────────────────────────
+    // ── Plan vs actual ───────────────────────────────────────────────────────
     const planLines = [];
     for (let i=1;i<sorted.length;i++) {
       const prev=sorted[i-1], curr=sorted[i];
@@ -5649,53 +5735,59 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
 
     const isMonthly = recapMode === "monthly";
 
-    return `You are a professional trading coach. A futures trader has shared their complete journal for: ${label}
+    return `You are a professional futures trading coach. A trader has shared their complete journal for: ${label}
 
-Your job is to write a thorough, honest coaching review. Be specific — quote their exact words, cite dates and dollar amounts. This is not a summary, it is actionable coaching feedback.
+Your job is to write a thorough, honest coaching review. Be direct and specific — cite exact dates, dollar amounts, and quote the trader\'s own words. Speak like a sharp mentor, not a cheerleader.
 
-PERIOD DATA
-Days: ${sorted.length} | ${winDays}W / ${lossDays}L | Net: $${totalPnl.toFixed(0)} | Avg/day: $${(totalPnl/sorted.length).toFixed(0)}
-Trades: ${allTrades.length} | WR: ${overallWR}% | PF: ${fmtPF(overallPF)} | Avg win: +$${avgWin} | Avg loss: -$${avgLoss} | Fees: $${totalFees.toFixed(0)}
-Session breakdown: ${sessLine}
+PERIOD OVERVIEW
+Days: ${sorted.length} | ${winDays}W / ${lossDays}L | Gross: $${grossPnl.toFixed(0)} | Fees: -$${totalFees.toFixed(0)} | Net: $${totalPnl.toFixed(0)} | Avg/day net: $${(totalPnl/sorted.length).toFixed(0)}
+Trades: ${allTrades.length} | WR: ${overallWR}% | PF: ${fmtPF(overallPF)} | Avg win: +$${avgWin} | Avg loss: -$${avgLoss}
+Commission drag: $${totalFees.toFixed(0)} = ${commDragPct}% of gross P&L${parseFloat(commDragPct)>30?" \u26a0 HIGH":""}
+${carryCount > 0 ? `Overnight carry-forwards: ${carryCount} trade(s) — opened prior session, closed next\n` : ""}DIRECTION: ${dirLine}
+SESSION (by exit time ET): ${sessLine}
+${bestSess ? `Best session: ${bestSess[0]} net $${(bestSess[1].pnl-bestSess[1].comm).toFixed(0)}` : ""}${worstSess && worstSess[0]!==bestSess?.[0] ? ` | Worst: ${worstSess[0]} net $${(worstSess[1].pnl-worstSess[1].comm).toFixed(0)}` : ""}
 Grades: ${grades}
 Mistakes flagged: ${mistakeLine}${cleanDays>0?` | ${cleanDays} clean days`:""}
 ${planLines.length ? `\nPLAN vs ACTUAL CROSSCHECK\n${planLines.join("\n\n")}` : ""}
 
-FULL JOURNAL — every word the trader wrote, day by day:
+FULL JOURNAL — per-trade detail + every written note, day by day:
 ${dayBlocks}
 
 ---
 
-Write a complete coaching review with each section below. Use bullet points. Every bullet must cite a specific date, quote, or number — no generic observations.
+BEFORE WRITING: Scan the DIRECTION and SESSION breakdowns first. If one direction is net-negative while the other is profitable, that is a headline insight. If commission drag exceeds 30% of gross, that is structural. Surface these facts explicitly.
 
-**📓 NOTES ANALYSIS**
-This is the most important section. Read every word written across all days and find:
-• Recurring themes — the same lesson, mistake, or intention written on 2 or more days (quote each instance with its date)
-• Contradictions — a rule or intention written one day that the next day's notes/mistakes show was broken
-• Unrealized intentions — something written as a plan or improvement that never appeared again in actual behavior
-• Any single observation the trader made that is particularly insightful or worth reinforcing
-Write one bullet per finding. Quote their exact words.
+**\ud83d\udcca HEADLINE INSIGHTS**
+Write 3-4 punchy one-line insights derived from the actual data above, in this format:
+• [Pattern]: [specific numbers] → [what it means for the trader]
+Example style (use real data): "Shorts carrying the book: +$354 gross 82%WR vs longs -$37 gross — long edge needs a filter"
 
-**📊 PERFORMANCE PATTERNS**
-Look at the session breakdown, grades, and mistake data. Write 3-4 bullets on what the numbers reveal that the trader may not have noticed:
-• Which session/time window is helping vs hurting P&L (use exact figures)
-• Whether mistakes cluster on specific types of days (winning days? losing days? specific grades?)
-• Hold time or order type patterns if visible
-• Commission drag if fees exceed 10% of gross P&L
+**\ud83d\udcd3 NOTES ANALYSIS**
+Read every word written across all days:
+• Recurring themes — same lesson/mistake/intention on 2+ days (quote each with date)
+• Contradictions — rule written one day, broken the next
+• Unrealized intentions — plans written but not reflected in subsequent behavior
+• One observation worth reinforcing
+One bullet per finding. Quote exact words.
 
-**🚩 PLAN vs REALITY**
-For every "Tomorrow plan" written in the journal, analyze what actually happened the next trading day:
-• Quote the exact plan written
-• Describe what actually happened: grade, mistakes flagged, P&L result
-• Label it HONORED ✓ or VIOLATED ✗ with a one-line explanation
-If no plans were written this period, skip this section entirely.
+**\ud83d\udcc8 PERFORMANCE PATTERNS**
+3-4 bullets on what the numbers reveal:
+• Which session/direction is helping vs hurting NET P&L (use net figures, not just gross)
+• Whether mistakes cluster on specific day types
+• Commission drag impact if fees exceed 15% of gross — quantify the structural cost
+• Any hold-time or order-type edge
 
-**💡 STRENGTHS**
-2-3 specific things that are working, backed by data. Be precise: "NY Open on Mar 11 and Mar 13 averaged +$X" not vague praise.
+**\ud83d\udea9 PLAN vs REALITY**
+For every "Tomorrow plan" written, analyze the next trading day:
+• Quote the exact plan → what happened → HONORED ✓ or VIOLATED ✗
+Skip if no plans were written.
 
-**🎯 ACTION PLAN FOR NEXT ${isMonthly ? "MONTH" : "WEEK"}**
-Write exactly 3 rules. Each must be rooted in something specific found above — a recurring note, a data pattern, or a plan violation. Not generic advice.
-Format each as: [Root cause from this review] → [Specific measurable rule with a threshold]`;
+**\ud83d\udca1 STRENGTHS**
+2-3 specific strengths backed by data with dates and dollar figures.
+
+**\ud83c\udfaf ACTION PLAN FOR NEXT ${isMonthly ? "MONTH" : "WEEK"}**
+Exactly 3 rules rooted in findings above.
+Format: [Root cause from this review] → [Specific measurable rule with threshold]`;
   };
 
   const generateSummary = async (period) => {
@@ -10375,7 +10467,7 @@ export default function TradingJournal() {
         );
       })()}
 
-      <div style={{ width: "100%", padding: "28px 40px", maxWidth: 1600, margin: "0 auto", boxSizing: "border-box" }}>
+      <div style={{ width: "100%", padding: "28px 40px", boxSizing: "border-box" }}>
         {/* LIST */}
         {view === "list" && (<div>
           {filtered.length > 0 && (
@@ -11258,6 +11350,10 @@ export default function TradingJournal() {
                 {/* ── TRADE LOG RECAP — appears after successful import ── */}
                 {form.parsedTrades?.length > 0 && (() => {
                   const trades = form.parsedTrades;
+                  // Must use calcAnalytics for the full `a` object — AnalyticsPanel accesses
+                  // a.winRate, a.profitFactor, a.byDirection, a.byDuration, a.equityCurve, etc.
+                  // Passing a partial object crashes the component (white screen).
+                  const a = calcAnalytics(trades, aiCfg?.tzLock !== false) || {};
                   return (
                     <div style={{ marginTop: 4 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
@@ -11266,20 +11362,14 @@ export default function TradingJournal() {
                         <div style={{ height: 1, flex: 1, background: "linear-gradient(90deg, transparent, #1e3a5f)" }} />
                       </div>
                       <AnalyticsPanel
-                        a={(() => {
-                          const wins = trades.filter(t => Number.isFinite(t.pnl) && t.pnl > 0);
-                          const losses = trades.filter(t => Number.isFinite(t.pnl) && t.pnl < 0);
-                          const totalPnL = trades.reduce((s,t) => s + (Number.isFinite(t.pnl) ? t.pnl : 0), 0);
-                          const totalFees = trades.reduce((s,t) => s + (Number.isFinite(t.commission) ? t.commission : 0), 0);
-                          const bySymbol = trades.reduce((acc,t) => { const sym=normalizeSymbol(t.symbol); if(sym){ acc[sym]=(acc[sym]||0)+(Number.isFinite(t.pnl)?t.pnl:0); } return acc; }, {});
-                          return { totalPnL, wins: wins.length, losses: losses.length, totalFees, bySymbol, trades: trades.length };
-                        })()}
+                        a={a}
                         trades={trades}
                         pnlColor={pnlColor}
                         fmtPnl={fmtPnl}
                         analyticsTab={analyticsTab}
                         setAnalyticsTab={setAnalyticsTab}
                         totalFees={parseFloat(form.commissions) || 0}
+                        rawCsvFile={form.rawCsvFile || null}
                       />
                     </div>
                   );
