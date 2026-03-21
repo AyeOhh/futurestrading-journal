@@ -152,15 +152,19 @@ const AI_PROVIDER_REGISTRY = [
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (recommended ✓)' },
       { id: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (fastest free tier)' },
     ],
-    async request(ai, { messages, max_tokens = 600, model, timeoutMs = 120000 }) {
+    async request(ai, { messages, max_tokens = 600, model, timeoutMs = 120000, thinkingBudget }) {
       const contents = messages.map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: m.content }],
       }));
       const mdl = model || ai.model;
+      // thinkingBudget: 0 disables internal reasoning tokens so the full
+      // maxOutputTokens budget goes to the actual response (critical for long recaps)
+      const genConfig = { maxOutputTokens: max_tokens, temperature: 0.7 };
+      if (thinkingBudget != null) genConfig.thinkingConfig = { thinkingBudget };
       const body = JSON.stringify({
         contents,
-        generationConfig: { maxOutputTokens: max_tokens, temperature: 0.7 },
+        generationConfig: genConfig,
         safetySettings: [
           { category: 'HARM_CATEGORY_HARASSMENT',        threshold: 'BLOCK_NONE' },
           { category: 'HARM_CATEGORY_HATE_SPEECH',       threshold: 'BLOCK_NONE' },
@@ -1749,59 +1753,63 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
               <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 14 }}>LONG vs SHORT</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {[
-                  { key: "long",  label: "Long", emoji: "📈", winColor: "#4ade80", lossColor: "#f87171" },
-                  { key: "short", label: "Short", emoji: "📉", winColor: "#4ade80", lossColor: "#f87171" },
-                ].map(({ key, label, emoji, winColor, lossColor }) => {
+                  { key: "long",  label: "Long",  emoji: "📈" },
+                  { key: "short", label: "Short", emoji: "📉" },
+                ].map(({ key, label, emoji }) => {
                   const d = a.byDirection[key];
                   if (!d || d.trades === 0) return null;
                   const wr = Math.round(d.wins / d.trades * 100);
-                  const avgWin  = d.wins   > 0 ? (d.grossWin  / d.wins).toFixed(0)   : "0";
+                  const avgWin  = d.wins   > 0 ? (d.grossWin  / d.wins).toFixed(0)  : "0";
                   const avgLoss = d.losses > 0 ? (d.grossLoss / d.losses).toFixed(0) : "0";
                   const pf = d.grossLoss > 0 ? d.grossWin / d.grossLoss : d.grossWin > 0 ? Infinity : null;
+                  // Win/loss bar: split bar showing gross wins (green) vs gross losses (red)
+                  const total = d.grossWin + d.grossLoss;
+                  const winBarPct  = total > 0 ? (d.grossWin  / total * 100).toFixed(1) : "50";
+                  const lossBarPct = total > 0 ? (d.grossLoss / total * 100).toFixed(1) : "50";
                   return (
                     <div key={key} style={{ background: "#0a0e1a", borderRadius: 4, padding: "10px 12px" }}>
-                      {/* Header row */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      {/* Header */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                         <span style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 600 }}>{emoji} {label}</span>
                         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                           <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
                           <span style={{ fontSize: 10 }}>
                             <span style={{ color: "#4ade80" }}>{d.wins}W</span>
-                            <span style={{ color: "#475569" }}> / </span>
+                            <span style={{ color: "#475569" }}>/</span>
                             <span style={{ color: "#f87171" }}>{d.losses}L</span>
                           </span>
                           <span style={{ fontSize: 10, color: "#475569" }}>{d.trades} trades</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: d.pnl >= 0 ? "#4ade80" : "#f87171" }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: d.pnl >= 0 ? "#4ade80" : "#f87171" }}>
                             {d.pnl >= 0 ? "+" : "-"}${Math.abs(d.pnl).toFixed(0)} net
                           </span>
                         </div>
                       </div>
-                      {/* Stats row */}
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-                        <div style={{ textAlign: "center" }}>
-                          <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.08em", marginBottom: 2 }}>GROSS WIN</div>
-                          <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 600 }}>+${d.grossWin.toFixed(0)}</div>
+                      {/* Win/Loss split bar */}
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ display: "flex", height: 8, borderRadius: 4, overflow: "hidden", gap: 1 }}>
+                          <div style={{ width: `${winBarPct}%`, background: "rgba(74,222,128,0.7)", borderRadius: "3px 0 0 3px" }} title={`Gross wins: +$${d.grossWin.toFixed(0)}`} />
+                          <div style={{ width: `${lossBarPct}%`, background: "rgba(248,113,113,0.7)", borderRadius: "0 3px 3px 0" }} title={`Gross losses: -$${d.grossLoss.toFixed(0)}`} />
                         </div>
-                        <div style={{ textAlign: "center" }}>
-                          <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.08em", marginBottom: 2 }}>GROSS LOSS</div>
-                          <div style={{ fontSize: 11, color: "#f87171", fontWeight: 600 }}>-${d.grossLoss.toFixed(0)}</div>
-                        </div>
-                        <div style={{ textAlign: "center" }}>
-                          <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.08em", marginBottom: 2 }}>AVG WIN</div>
-                          <div style={{ fontSize: 11, color: "#4ade80" }}>+${avgWin}</div>
-                        </div>
-                        <div style={{ textAlign: "center" }}>
-                          <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.08em", marginBottom: 2 }}>AVG LOSS</div>
-                          <div style={{ fontSize: 11, color: "#f87171" }}>-${avgLoss}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                          <span style={{ fontSize: 9, color: "#4ade80" }}>+${d.grossWin.toFixed(0)} gross wins ({winBarPct}%)</span>
+                          <span style={{ fontSize: 9, color: "#f87171" }}>-${d.grossLoss.toFixed(0)} gross losses ({lossBarPct}%)</span>
                         </div>
                       </div>
-                      {/* PF row */}
-                      {pf != null && (
-                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.08em" }}>PROFIT FACTOR</span>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: pfColor(pf) }}>{fmtPF(pf)}</span>
+                      {/* Avg stats row */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                        <div style={{ background: "#0f1729", borderRadius: 3, padding: "6px 8px", textAlign: "center" }}>
+                          <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.08em", marginBottom: 2 }}>AVG WIN</div>
+                          <div style={{ fontSize: 12, color: "#4ade80", fontWeight: 600 }}>+${avgWin}</div>
                         </div>
-                      )}
+                        <div style={{ background: "#0f1729", borderRadius: 3, padding: "6px 8px", textAlign: "center" }}>
+                          <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.08em", marginBottom: 2 }}>AVG LOSS</div>
+                          <div style={{ fontSize: 12, color: "#f87171", fontWeight: 600 }}>{d.losses > 0 ? `-$${avgLoss}` : "—"}</div>
+                        </div>
+                        <div style={{ background: "#0f1729", borderRadius: 3, padding: "6px 8px", textAlign: "center" }}>
+                          <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.08em", marginBottom: 2 }}>PROF. FACTOR</div>
+                          <div style={{ fontSize: 12, color: pfColor(pf), fontWeight: 600 }}>{fmtPF(pf)}</div>
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -4153,6 +4161,11 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
   const calcNetPnl = calcNetPnlProp;
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedWeek, setSelectedWeek] = useState(null);
+  const [collapsedNotes, setCollapsedNotes] = useState({}); // key: fieldKey, val: bool
+  const [dayByDayCollapsed, setDayByDayCollapsed] = useState({}); // key: entry.id
+  const [compiledCollapsed, setCompiledCollapsed] = useState(true); // whole compiled section collapsed by default
+  const toggleNote = (key) => setCollapsedNotes(p => ({ ...p, [key]: !p[key] }));
+  const toggleDay = (id) => setDayByDayCollapsed(p => ({ ...p, [id]: !p[id] }));
 
   const getISOWeek = (dateStr) => {
     const d = new Date(dateStr + "T12:00:00");
@@ -4472,55 +4485,77 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
           <div>
             <div style={{ height: 1, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", marginBottom: 16, opacity: 0.4 }} />
             <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 16 }}>📓 WEEKLY NOTES REVIEW</div>
-            {/* Compiled by field */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+
+            {/* Compiled by field — each section individually collapsible, all collapsed by default */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
               {noteFields.map(({ key, label, icon, color }) => {
                 const entries_with_note = wEntries.filter(e => getNote(e, key));
                 if (!entries_with_note.length) return null;
+                const isOpen = collapsedNotes[key] === true; // default collapsed (undefined = closed)
                 return (
-                  <div key={key} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "14px 16px" }}>
-                    <div style={{ fontSize: 10, color, letterSpacing: "0.1em", marginBottom: 10 }}>{icon} {label}</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {entries_with_note.map((e, i) => {
-                        const dow = new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-                        return (
-                          <div key={i} style={{ paddingLeft: 10, borderLeft: `2px solid ${color}33` }}>
-                            <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.08em", marginBottom: 3 }}>{dow}</div>
-                            <div style={{ fontSize: 12, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{getNote(e, key)}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                  <div key={key} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, overflow: "hidden" }}>
+                    <button
+                      onClick={() => toggleNote(key)}
+                      style={{ width: "100%", background: "transparent", border: "none", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", fontFamily: "inherit" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 13 }}>{icon}</span>
+                        <span style={{ fontSize: 10, color, letterSpacing: "0.1em" }}>{label}</span>
+                        <span style={{ fontSize: 9, color: "#475569", background: "#0a0e1a", padding: "1px 6px", borderRadius: 2 }}>{entries_with_note.length} day{entries_with_note.length !== 1 ? "s" : ""}</span>
+                      </div>
+                      <span style={{ fontSize: 10, color: "#475569", transition: "transform .15s", display: "inline-block", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+                    </button>
+                    {isOpen && (
+                      <div style={{ padding: "0 16px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+                        {entries_with_note.map((e, i) => {
+                          const dow = new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                          return (
+                            <div key={i} style={{ paddingLeft: 10, borderLeft: `2px solid ${color}44` }}>
+                              <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.08em", marginBottom: 3 }}>{dow}</div>
+                              <div style={{ fontSize: 12, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{getNote(e, key)}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
-            {/* Day by day */}
-            <div style={{ fontSize: 10, color: "#475569", letterSpacing: "0.12em", marginBottom: 12 }}>DAY BY DAY</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+
+            {/* Day by day — each day individually collapsible, all collapsed by default */}
+            <div style={{ fontSize: 10, color: "#475569", letterSpacing: "0.12em", marginBottom: 10 }}>DAY BY DAY</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {wEntries.map(e => {
                 if (!noteFields.some(({ key }) => getNote(e, key))) return null;
                 const dow = new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+                const isOpen = dayByDayCollapsed[e.id] === true;
                 return (
-                  <div key={e.id} style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 5, padding: "14px 16px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                      <div style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 600 }}>{dow}</div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        {e.grade && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 3, background: "#0f172a", border: `1px solid ${pnlColor(calcNetPnl(e))}44`, color: pnlColor(calcNetPnl(e)) }}>{e.grade}</span>}
-                        <span style={{ fontSize: 12, fontWeight: 700, color: pnlColor(calcNetPnl(e)) }}>{fmtPnl(calcNetPnl(e))}</span>
+                  <div key={e.id} style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 5, overflow: "hidden" }}>
+                    <button
+                      onClick={() => toggleDay(e.id)}
+                      style={{ width: "100%", background: "transparent", border: "none", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", fontFamily: "inherit" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 600 }}>{dow}</span>
+                        {e.grade && <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 3, background: "#0f172a", border: `1px solid ${pnlColor(calcNetPnl(e))}44`, color: pnlColor(calcNetPnl(e)) }}>{e.grade}</span>}
                       </div>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {noteFields.map(({ key, label, icon, color }) => {
-                        const val = getNote(e, key); if (!val) return null;
-                        return (
-                          <div key={key}>
-                            <div style={{ fontSize: 9, color, letterSpacing: "0.08em", marginBottom: 3 }}>{icon} {label}</div>
-                            <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{val}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: pnlColor(calcNetPnl(e)) }}>{fmtPnl(calcNetPnl(e))}</span>
+                        <span style={{ fontSize: 10, color: "#475569", transition: "transform .15s", display: "inline-block", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+                      </div>
+                    </button>
+                    {isOpen && (
+                      <div style={{ padding: "0 16px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+                        {noteFields.map(({ key, label, icon, color }) => {
+                          const val = getNote(e, key); if (!val) return null;
+                          return (
+                            <div key={key}>
+                              <div style={{ fontSize: 9, color, letterSpacing: "0.08em", marginBottom: 3 }}>{icon} {label}</div>
+                              <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{val}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -5489,8 +5524,9 @@ Format each as: [Root cause from this review] → [Specific measurable rule with
       }
 
       const txt = await aiRequestText(ai, {
-        max_tokens: 4096,
+        max_tokens: 8192,
         timeoutMs: 120000,
+        thinkingBudget: 0,
         messages: [{ role: 'user', content: prompt }],
       });
       setSummary(txt);
