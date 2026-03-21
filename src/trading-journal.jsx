@@ -4157,10 +4157,34 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
   );
 }
 
-function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, calcAnalytics }) {
+function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, calcAnalytics, ai }) {
   const calcNetPnl = calcNetPnlProp;
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedWeek, setSelectedWeek] = useState(null);
+
+  // ── Saved weekly recaps: { [weekKey]: { text, generatedAt, notesHash } } ──
+  const WEEKLY_RECAP_KEY = 'tj-weekly-recaps-v1';
+  const [weeklyRecaps, setWeeklyRecaps] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(WEEKLY_RECAP_KEY) || '{}'); } catch { return {}; }
+  });
+  const saveWeeklyRecap = (weekKey, text, notesHash) => {
+    const updated = { ...weeklyRecaps, [weekKey]: { text, generatedAt: Date.now(), notesHash } };
+    setWeeklyRecaps(updated);
+    try { localStorage.setItem(WEEKLY_RECAP_KEY, JSON.stringify(updated)); } catch {}
+  };
+  const [recapLoading, setRecapLoading] = useState(false);
+  const [recapError, setRecapError] = useState('');
+
+  // Hash of all notes for a set of entries — used to detect staleness
+  const notesHash = (wEntries) => {
+    const str = wEntries.map(e =>
+      [e.lessonsLearned, e.mistakes, e.improvements, e.rules, e.reinforceRule, e.tomorrow, e.marketNotes, e.bestTrade, e.worstTrade].join('|')
+    ).join('||');
+    // Simple fast hash — not crypto, just staleness detection
+    let h = 0;
+    for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0; }
+    return String(h);
+  };
   const [collapsedNotes, setCollapsedNotes] = useState({}); // key: fieldKey, val: bool
   const [dayByDayCollapsed, setDayByDayCollapsed] = useState({}); // key: entry.id
   const [compiledCollapsed, setCompiledCollapsed] = useState(true); // whole compiled section collapsed by default
@@ -4479,6 +4503,154 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
             )}
           </div>
         )}
+
+        {/* ── AI RECAP OF THE WEEK ── */}
+        {(() => {
+          const currentHash = notesHash(wEntries);
+          const saved = weeklyRecaps[selectedWeek];
+          const isStale = saved && saved.notesHash !== currentHash;
+          const generatedDate = saved ? new Date(saved.generatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
+
+          const generateRecap = async () => {
+            if (!ai?.enabled || !ai?.apiKey) {
+              setRecapError('AI not configured. Add your API key in Settings (⚙).');
+              return;
+            }
+            setRecapLoading(true);
+            setRecapError('');
+            try {
+              // Build prompt from week entries — reuse same structure as AIRecapView
+              const sorted = wEntries;
+              const totalPnl = sorted.reduce((s,e) => s + calcNetPnl(e), 0);
+              const winDays  = sorted.filter(e => calcNetPnl(e) > 0).length;
+              const lossDays = sorted.filter(e => calcNetPnl(e) < 0).length;
+              const allT = sorted.flatMap(e => e.parsedTrades || []);
+              const allW = allT.filter(t => t.pnl > 0);
+              const allL = allT.filter(t => t.pnl < 0);
+              const wr   = allT.length ? ((allW.length/allT.length)*100).toFixed(1) : "0";
+              const pfv  = allL.length ? allW.reduce((s,t)=>s+t.pnl,0)/Math.abs(allL.reduce((s,t)=>s+t.pnl,0)) : allW.length > 0 ? Infinity : null;
+              const fees = allT.reduce((s,t)=>s+(t.commission||0),0);
+              const avgW = allW.length ? (allW.reduce((s,t)=>s+t.pnl,0)/allW.length).toFixed(0) : "0";
+              const avgL = allL.length ? Math.abs(allL.reduce((s,t)=>s+t.pnl,0)/allL.length).toFixed(0) : "0";
+              const mCounts = {};
+              let cDays = 0;
+              for (const e of sorted) {
+                if (e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓")) cDays++;
+                for (const m of (e.sessionMistakes||[])) { if (m !== "No Mistakes — Executed the Plan ✓") mCounts[m]=(mCounts[m]||0)+1; }
+              }
+              const mistakeLine = Object.entries(mCounts).sort((a,b)=>b[1]-a[1]).map(([m,n])=>`"${m}":${n}x`).join(", ")||"none";
+              const grades = sorted.filter(e=>e.grade).map(e=>`${e.date.slice(5)}:${e.grade}`).join(", ")||"none";
+              const planLines = [];
+              for (let i=1;i<sorted.length;i++) {
+                const prev=sorted[i-1], curr=sorted[i];
+                if (prev.tomorrow?.trim()) planLines.push(`  ${prev.date}: "${prev.tomorrow.slice(0,150)}" → ${curr.date}: grade ${curr.grade||"?"} $${calcNetPnl(curr).toFixed(0)} mistakes:${(curr.sessionMistakes||[]).filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(", ")||"none"}`);
+              }
+              const dayBlocks = sorted.map(e => {
+                const t = e.parsedTrades || [];
+                const lines = [`[${e.date}] Net:$${calcNetPnl(e).toFixed(0)} | ${t.filter(x=>x.pnl>0).length}W/${t.filter(x=>x.pnl<0).length}L | Grade:${e.grade||"?"} | Mood:${(e.moods?.length?e.moods:e.mood?[e.mood]:[]).join(",")||"?"}`];
+                if (e.sessionMistakes?.filter(m=>m!=="No Mistakes — Executed the Plan ✓").length) lines.push(`  Flagged: ${e.sessionMistakes.filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(" | ")}`);
+                const nf = [["Market notes",e.marketNotes],["Rules",e.rules],["Lessons",e.lessonsLearned],["Mistakes note",e.mistakes],["Improvements",e.improvements],["Best trade",e.bestTrade],["Worst trade",e.worstTrade],["Reinforce",e.reinforceRule],["Tomorrow plan",e.tomorrow]];
+                for (const [lbl,val] of nf) if (val?.trim()) lines.push(`  ${lbl}: ${val.trim()}`);
+                return lines.join("\n");
+              }).join("\n\n");
+
+              const prompt = `You are a professional trading coach. A futures trader has shared their complete journal for: ${weekLabel}
+
+PERIOD DATA
+Days: ${sorted.length} | ${winDays}W / ${lossDays}L | Net: $${totalPnl.toFixed(0)} | Avg/day: $${(totalPnl/sorted.length).toFixed(0)}
+Trades: ${allT.length} | WR: ${wr}% | PF: ${fmtPF(pfv)} | Avg win: +$${avgW} | Avg loss: -$${avgL} | Fees: $${fees.toFixed(0)}
+Grades: ${grades}
+Mistakes flagged: ${mistakeLine}${cDays>0?` | ${cDays} clean days`:""}
+${planLines.length ? `\nPLAN vs ACTUAL\n${planLines.join("\n")}` : ""}
+
+FULL JOURNAL — every word the trader wrote, day by day:
+${dayBlocks}
+
+---
+
+Write a complete coaching review with each section below. Use bullet points. Every bullet must cite a specific date, quote, or number.
+
+**📓 NOTES ANALYSIS**
+Read every word written across all days. Find recurring themes (quote each with date), contradictions between intentions and next-day behavior, and unrealized plans. This is the most important section.
+
+**📊 PERFORMANCE PATTERNS**
+3-4 bullets: which session helps vs hurts P&L, whether mistakes cluster on specific day types, hold time or order type edges, commission drag if >10% of gross.
+
+**🚩 PLAN vs REALITY**
+For every Tomorrow Plan written: quote it, describe what happened next day (grade, mistakes, P&L), label HONORED ✓ or VIOLATED ✗. Skip if no plans exist.
+
+**💡 STRENGTHS**
+2-3 specific positives with exact data.
+
+**🎯 ACTION PLAN FOR NEXT WEEK**
+Exactly 3 rules rooted in findings above. Format: [Root cause] → [Measurable rule with threshold]`;
+
+              const txt = await aiRequestText(ai, {
+                max_tokens: 8192,
+                timeoutMs: 120000,
+                thinkingBudget: 0,
+                messages: [{ role: 'user', content: prompt }],
+              });
+              saveWeeklyRecap(selectedWeek, txt, currentHash);
+            } catch (err) {
+              const f = friendlyAiError(err);
+              setRecapError(f.message || 'Failed to generate recap. Try again.');
+            }
+            setRecapLoading(false);
+          };
+
+          return (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ height: 2, background: "linear-gradient(90deg,#7c3aed,#818cf8,#38bdf8,transparent)", borderRadius: 1, marginBottom: 16 }} />
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 22 }}>🤖</span>
+                  <div>
+                    <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: "0.1em", background: "linear-gradient(135deg,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>AI RECAP OF THE WEEK</div>
+                    {generatedDate && <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", marginTop: 1 }}>Generated {generatedDate}</div>}
+                  </div>
+                </div>
+                <button onClick={generateRecap} disabled={recapLoading}
+                  style={{ background: saved ? "transparent" : "linear-gradient(135deg,#7c3aed,#818cf8)", color: saved ? "#818cf8" : "white", border: saved ? "1px solid rgba(129,140,248,0.4)" : "none", padding: "8px 18px", borderRadius: 5, fontFamily: "inherit", fontSize: 11, cursor: recapLoading ? "not-allowed" : "pointer", letterSpacing: "0.06em", fontWeight: 600, opacity: recapLoading ? 0.6 : 1, transition: "all .15s" }}>
+                  {recapLoading ? "⏳ GENERATING..." : saved ? "↺ RE-RUN" : "✦ GENERATE RECAP"}
+                </button>
+              </div>
+
+              {isStale && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.3)", borderRadius: 4, marginBottom: 12, fontSize: 11, color: "#fbbf24" }}>
+                  ⚠ Your notes were updated after this recap was generated. Hit ↺ RE-RUN to refresh.
+                </div>
+              )}
+
+              {recapError && (
+                <div style={{ padding: "10px 14px", background: "rgba(127,29,29,0.2)", border: "1px solid #7f1d1d", borderRadius: 4, marginBottom: 12, fontSize: 11, color: "#f87171" }}>
+                  {recapError}
+                </div>
+              )}
+
+              {recapLoading && (
+                <div style={{ padding: "40px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                  <style>{`@keyframes aiPulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
+                  <div style={{ fontSize: 11, color: "#818cf8", letterSpacing: "0.15em", animation: "aiPulse 1.8s infinite" }}>✦ ANALYSING YOUR WEEK...</div>
+                  <div style={{ fontSize: 10, color: "#334155" }}>Reading all notes, trades, and behavioral patterns</div>
+                </div>
+              )}
+
+              {!recapLoading && saved?.text && (
+                <div style={{ background: "linear-gradient(135deg,rgba(124,58,237,0.06),rgba(129,140,248,0.08),rgba(56,189,248,0.04))", border: "1px solid rgba(129,140,248,0.2)", borderRadius: 6, padding: "20px 24px" }}>
+                  <RenderAI text={saved.text} />
+                </div>
+              )}
+
+              {!recapLoading && !saved && !recapError && (
+                <div style={{ padding: "32px 20px", textAlign: "center", background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 6 }}>
+                  <div style={{ fontSize: 22, marginBottom: 10 }}>🤖</div>
+                  <div style={{ fontSize: 12, color: "#475569", lineHeight: 1.7 }}>No recap yet for this week.<br />Hit <span style={{ color: "#818cf8" }}>✦ GENERATE RECAP</span> to get your AI coaching review.</div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Notes Section */}
         {wEntries.some(e => noteFields.some(({ key }) => getNote(e, key))) && (
@@ -10299,7 +10471,7 @@ export default function TradingJournal() {
   </div>
   <div className="helper-text" style={{ marginTop: 4 }}>WEEK BY WEEK PROGRESS · SPOT YOUR PATTERNS</div>
 </div>
-              <WeeklyPerformance entries={entries} netPnl={netPnl} fmtPnl={fmtPnl} pnlColor={pnlColor} calcAnalytics={calcAnalytics} />
+              <WeeklyPerformance entries={entries} netPnl={netPnl} fmtPnl={fmtPnl} pnlColor={pnlColor} calcAnalytics={calcAnalytics} ai={aiCfg} />
             </>
           ) : listMode === "performance" ? (
             <>
