@@ -666,6 +666,9 @@ const parseTrades = (raw) => {
 // AI-powered universal broker parser
 // ── Deterministic IBKR Flex Query CSV parser ─────────────────────────────────
 // Handles the exact IBKR format: FifoPnlRealized + AssetClass + TradePrice + Buy/Sell
+// Supports overnight traders: closing fills with no matching entry in this file
+// are treated as carry-forwards (opened in prior session) — P&L is preserved,
+// entry price/time is left empty, notes="overnight-carry" is set.
 // Returns array of trades or null if format not recognised
 const parseIbkrCsv = (raw) => {
   try {
@@ -750,30 +753,43 @@ const parseIbkrCsv = (raw) => {
         openLongs.push(r);
       } else if (r.qty < 0 && r.pnl !== 0) {
         const entry = openLongs.shift();
-        const dur = getDuration(entry ? entry.dt : r.dt, r.dt);
+        // When no matching entry exists, this is an overnight carry-forward (opened in prior session's CSV).
+        // PNL from FifoPnlRealized is still accurate; entry price/time are unknown for this file.
+        const isCarry = !entry;
+        const dur = isCarry ? { str: 'prior-session', secs: 86400 } : getDuration(entry.dt, r.dt);
         trades.push({
           symbol: r.sym, qty: Math.abs(r.qty), direction: 'long',
-          buyPrice: entry ? entry.price : 0, buyTime: entry ? entry.dt : r.dt,
+          buyPrice: entry ? entry.price : 0,
+          buyTime: entry ? entry.dt : '',          // empty = entry was in prior session's CSV
           sellPrice: r.price, sellTime: r.dt,
           pnl: r.pnl, commission: Math.round((Math.abs(r.comm) + Math.abs(entry ? entry.comm : 0)) * 100) / 100,
           orderType: r.ot === 'LMT' || r.ot === 'LIMIT' ? 'LMT' : r.ot === 'STP' || r.ot === 'STOP' ? 'STP' : 'MKT',
-          multiplier: r.mult, notes: '', duration: dur.str, durationSecs: dur.secs,
+          multiplier: r.mult,
+          notes: isCarry ? 'overnight-carry' : '',
+          duration: dur.str, durationSecs: dur.secs,
         });
       } else if (r.qty < 0 && r.pnl === 0) {
         openShorts.push(r);
       } else if (r.qty > 0 && r.pnl !== 0) {
         const entry = openShorts.shift();
-        const dur = getDuration(entry ? entry.dt : r.dt, r.dt);
+        // When no matching entry exists, this is an overnight carry-forward (opened in prior session's CSV).
+        // PNL from FifoPnlRealized is still accurate; entry price/time are unknown for this file.
+        const isCarry = !entry;
+        const dur = isCarry ? { str: 'prior-session', secs: 86400 } : getDuration(entry.dt, r.dt);
         trades.push({
           symbol: r.sym, qty: Math.abs(r.qty), direction: 'short',
           buyPrice: r.price, buyTime: r.dt,
-          sellPrice: entry ? entry.price : 0, sellTime: entry ? entry.dt : r.dt,
+          sellPrice: entry ? entry.price : 0,
+          sellTime: entry ? entry.dt : '',     // empty = entry was in prior session's CSV
           pnl: r.pnl, commission: Math.round((Math.abs(r.comm) + Math.abs(entry ? entry.comm : 0)) * 100) / 100,
           orderType: r.ot === 'LMT' || r.ot === 'LIMIT' ? 'LMT' : r.ot === 'STP' || r.ot === 'STOP' ? 'STP' : 'MKT',
-          multiplier: r.mult, notes: '', duration: dur.str, durationSecs: dur.secs,
+          multiplier: r.mult,
+          notes: isCarry ? 'overnight-carry' : '',
+          duration: dur.str, durationSecs: dur.secs,
         });
       }
-      // qty>0 pnl=0 already handled; qty<0 pnl=0 = short entry; rows with pnl=0 and no match = skip (open overnight)
+      // qty>0 pnl=0 already handled (long entry); qty<0 pnl=0 = short entry queued for FIFO match.
+      // rows with qty<0 pnl=0 and no close in this file = still-open position → correctly left in openShorts and not emitted.
     }
 
     return trades.length > 0 ? trades : null;
@@ -794,21 +810,30 @@ The key insight for IBKR data: FifoPnlRealized is ONLY non-zero on the CLOSING f
 - A row with Quantity > 0 (BUY) and FifoPnlRealized ≠ 0 → SHORT EXIT (closing a short, completing a short trade)
 Match each CLOSING fill to its most recent ENTRY fill of the same symbol using FIFO order.
 Skip ALL rows where AssetClass is not FUT — ignore CASH, forex hedges (e.g. USD.CAD), STK, OPT rows entirely.
-Skip rows where FifoPnlRealized = 0 AND there is no matching close — these are open positions.
+Skip rows where FifoPnlRealized = 0 AND there is no matching close in this file — these are still-open positions.
+
+OVERNIGHT CARRY-FORWARD RULE (critical for overnight traders):
+A CLOSING fill (FifoPnlRealized ≠ 0) with NO matching ENTRY fill in this file = position was opened in a PRIOR session's CSV.
+DO NOT skip these — include them as completed trades with:
+  - buyTime or sellTime = empty string "" (entry timestamp is unknown/in prior file)
+  - buyPrice or sellPrice = 0 (entry price is unknown/in prior file), whichever is the entry leg
+  - Use FifoPnlRealized as pnl — it is correct regardless of missing entry data
+  - Set notes = "overnight-carry" to flag this trade
 
 GENERAL RULES:
-1. Only include completed round-trip trades — entry + exit both present
-2. Use FifoPnlRealized directly as pnl when available — do not recalculate
-3. TradePrice on the entry row = buyPrice for longs OR sellPrice for shorts
-4. TradePrice on the exit row = sellPrice for longs OR buyPrice for shorts
+1. Include completed round-trip trades where BOTH entry and exit are present in this file
+2. Also include overnight-carry trades: closing fills (FifoPnlRealized ≠ 0) with no matching entry in this file (see OVERNIGHT CARRY-FORWARD RULE above)
+3. Use FifoPnlRealized directly as pnl when available — do not recalculate
+4. TradePrice on the entry row = buyPrice for longs OR sellPrice for shorts
+5. TradePrice on the exit row = sellPrice for longs OR buyPrice for shorts
    Example long: entry BUY TradePrice=6778.5 → buyPrice=6778.5, exit SELL TradePrice=6780.5 → sellPrice=6780.5
    Example short: entry SELL TradePrice=6755.0 → sellPrice=6755.0, exit BUY TradePrice=6753.5 → buyPrice=6753.5
-5. If TradePrice is missing or 0, use 0 for that price field — the P&L from FifoPnlRealized is still correct
-6. The last open position (no matching close) must be SKIPPED — it is an overnight hold, not a completed trade
-6. IBCommission is negative in IBKR data — use absolute value, sum both legs for commission field
-7. Duration = seconds between entry DateTime and exit DateTime
-8. Use these multipliers: MES=$5/pt, ES=$50/pt, MNQ=$2/pt, NQ=$20/pt, MYM=$0.50/pt, YM=$5/pt, MGC=$10/pt, GC=$100/pt, MCL=$100/pt, CL=$1000/pt, RTY=$10/pt, M2K=$10/pt
-9. For partial fills on the same order, combine into one trade
+6. If TradePrice is missing or 0, use 0 for that price field — the P&L from FifoPnlRealized is still correct
+7. SKIP only rows where FifoPnlRealized = 0 AND no matching close exists in this file — these are still-open positions carried to the next session
+8. IBCommission is negative in IBKR data — use absolute value, sum both legs for commission field (use 0 if entry leg unknown for carry-forward)
+9. Duration = seconds between entry DateTime and exit DateTime. For overnight-carry trades with no entry time, use 86400 (24h placeholder) and duration string "prior-session"
+10. Use these multipliers: MES=$5/pt, ES=$50/pt, MNQ=$2/pt, NQ=$20/pt, MYM=$0.50/pt, YM=$5/pt, MGC=$10/pt, GC=$100/pt, MCL=$100/pt, CL=$1000/pt, RTY=$10/pt, M2K=$10/pt
+11. For partial fills on the same order, combine into one trade
 
 CRITICAL OUTPUT RULE: Return ONLY a raw JSON array. No markdown. No code fences. No backticks of any kind. No explanation before or after. No trailing commas. All property names and string values must use double quotes only. Your response must begin with [ and end with ]. Anything other than a valid JSON array will break the parser. Each trade object must have exactly these fields:
 {
@@ -1013,7 +1038,13 @@ const calcAnalytics = (trades, tzLock = false) => {
 
   const bySession = {};
   for (const t of trades) {
-    const sess = getSession(t.sellTime, tzLock);
+    // Use exit time for session attribution so all trades are bucketed by WHEN they closed.
+    // For longs: exit = sellTime. For shorts: exit = buyTime (buy-to-cover).
+    // Overnight-carry trades may have an empty entry timestamp — fall back to whichever is populated.
+    const exitTime = t.direction === 'short'
+      ? (t.buyTime  || t.sellTime)
+      : (t.sellTime || t.buyTime);
+    const sess = getSession(exitTime, tzLock);
     if (!bySession[sess]) bySession[sess] = { trades: 0, pnl: 0, wins: 0 };
     bySession[sess].trades++;
     bySession[sess].pnl += t.pnl;
@@ -8553,12 +8584,16 @@ const validateTradesSoft = (trades) => {
   const clean = [], flagged = [];
   for (const t of trades) {
     const warnings = [];
+    const isCarry = t.notes === 'overnight-carry';
     if (t.durationSecs > 0 && t.durationSecs < 2) warnings.push("⚡ Sub-2s duration — verify fill");
-    if (t.buyPrice <= 0 || t.sellPrice <= 0) warnings.push("⚠ Price missing — P&L taken from broker data");
+    // Overnight-carry trades legitimately have one missing price (entry was in prior session's file)
+    if (!isCarry && (t.buyPrice <= 0 || t.sellPrice <= 0)) warnings.push("⚠ Price missing — P&L taken from broker data");
+    if (isCarry) warnings.push("🌙 Overnight carry-forward — entry opened in prior session's CSV · P&L is accurate");
     if (Math.abs(t.pnl) > 50000) warnings.push("💰 Very large P&L — confirm correct");
     else if (Math.abs(t.pnl) > 5000 && (t.symbol?.startsWith("M") || t.qty < 3)) warnings.push("💰 Large P&L for micro — confirm correct");
     if (t.pnl === 0) warnings.push("⚪ Zero P&L — breakeven or parse error?");
-    if (!t.buyTime && !t.sellTime) warnings.push("🕐 No timestamps — session attribution unavailable");
+    // Carry-forward trades have one empty timestamp by design — not an error
+    if (!isCarry && !t.buyTime && !t.sellTime) warnings.push("🕐 No timestamps — session attribution unavailable");
     if (warnings.length) flagged.push({ trade: t, warnings });
     else clean.push(t);
   }
@@ -9025,29 +9060,45 @@ export default function TradingJournal() {
     const totalPnL = trades.reduce((s, t) => s + t.pnl, 0);
     const totalComm = trades.reduce((s, t) => s + (t.commission || 0), 0);
 
-    // Auto-detect date from earliest trade timestamp
+    // Auto-detect trading day from trade timestamps.
+    // Uses the MODE (most-frequent calendar date) across ALL entry+exit timestamps so that
+    // overnight sessions starting on the prior evening are attributed to the correct
+    // trading day (e.g. a file spanning Mar 11 evening → Mar 12 close = "2026-03-12").
     const autoDate = (() => {
-      const timestamps = trades.map(t => t.buyTime || t.sellTime).filter(Boolean);
-      if (!timestamps.length) return null;
-      // Sort timestamps to find the earliest
-      timestamps.sort();
-      const raw = timestamps[0].trim();
-      // Try to parse various broker date formats
-      const patterns = [
-        // YYYYMMDD HHMMSS  → "20260311 132635"
-        { re: /^(\d{4})(\d{2})(\d{2})\s/, fn: m => `${m[1]}-${m[2]}-${m[3]}` },
-        // YYYY/MM/DD or YYYY-MM-DD
-        { re: /^(\d{4})[\/\-](\d{2})[\/\-](\d{2})/, fn: m => `${m[1]}-${m[2]}-${m[3]}` },
-        // MM/DD/YYYY HH:MM:SS or MM/DD/YYYY
-        { re: /^(\d{1,2})\/(\d{1,2})\/(\d{4})/, fn: m => `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` },
-        // MM-DD-YYYY
-        { re: /^(\d{1,2})-(\d{1,2})-(\d{4})/, fn: m => `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` },
-      ];
-      for (const { re, fn } of patterns) {
-        const m = raw.match(re);
-        if (m) return fn(m);
+      // Helper: extract YYYY-MM-DD from any supported broker timestamp format
+      const extractDate = (raw) => {
+        if (!raw) return null;
+        const s = raw.trim();
+        const patterns = [
+          // YYYYMMDD HHMMSS  → "20260311 132635"
+          { re: /^(\d{4})(\d{2})(\d{2})[\s;]/, fn: m => `${m[1]}-${m[2]}-${m[3]}` },
+          // YYYYMMDD (no time)
+          { re: /^(\d{4})(\d{2})(\d{2})$/, fn: m => `${m[1]}-${m[2]}-${m[3]}` },
+          // YYYY/MM/DD or YYYY-MM-DD
+          { re: /^(\d{4})[\/\-](\d{2})[\/\-](\d{2})/, fn: m => `${m[1]}-${m[2]}-${m[3]}` },
+          // MM/DD/YYYY
+          { re: /^(\d{1,2})\/(\d{1,2})\/(\d{4})/, fn: m => `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` },
+          // MM-DD-YYYY
+          { re: /^(\d{1,2})-(\d{1,2})-(\d{4})/, fn: m => `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` },
+        ];
+        for (const { re, fn } of patterns) { const m = s.match(re); if (m) return fn(m); }
+        return null;
+      };
+
+      // Collect both entry and exit timestamps from every trade.
+      // Overnight-carry trades have one empty timestamp — skip it.
+      const dateCounts = {};
+      for (const t of trades) {
+        for (const ts of [t.buyTime, t.sellTime]) {
+          const d = extractDate(ts);
+          if (d) dateCounts[d] = (dateCounts[d] || 0) + 1;
+        }
       }
-      return null;
+      const dates = Object.keys(dateCounts);
+      if (!dates.length) return null;
+      // The trading day is the date that appears most across all timestamps.
+      // Even in heavy overnight sessions the actual calendar trading day dominates.
+      return dates.reduce((best, d) => dateCounts[d] >= dateCounts[best] ? d : best);
     })();
 
     // Use local date (not UTC) for today comparison to avoid timezone issues
