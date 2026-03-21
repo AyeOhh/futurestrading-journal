@@ -1747,33 +1747,61 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
           {a.byDirection && (a.byDirection.long.trades > 0 || a.byDirection.short.trades > 0) && (
             <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
               <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 14 }}>LONG vs SHORT</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {[
-                  { key: "long",  label: "Long  📈", color: "#4ade80" },
-                  { key: "short", label: "Short 📉", color: "#f87171" },
-                ].map(({ key, label, color }) => {
+                  { key: "long",  label: "Long", emoji: "📈", winColor: "#4ade80", lossColor: "#f87171" },
+                  { key: "short", label: "Short", emoji: "📉", winColor: "#4ade80", lossColor: "#f87171" },
+                ].map(({ key, label, emoji, winColor, lossColor }) => {
                   const d = a.byDirection[key];
                   if (!d || d.trades === 0) return null;
                   const wr = Math.round(d.wins / d.trades * 100);
-                  const maxPnl = Math.max(Math.abs(a.byDirection.long.pnl), Math.abs(a.byDirection.short.pnl), 1);
-                  const barW = Math.abs(d.pnl) / maxPnl * 100;
-                  const avg = d.pnl / d.trades;
+                  const avgWin  = d.wins   > 0 ? (d.grossWin  / d.wins).toFixed(0)   : "0";
+                  const avgLoss = d.losses > 0 ? (d.grossLoss / d.losses).toFixed(0) : "0";
+                  const pf = d.grossLoss > 0 ? d.grossWin / d.grossLoss : d.grossWin > 0 ? Infinity : null;
                   return (
-                    <div key={key}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 5 }}>
-                        <div>
-                          <span style={{ fontSize: 11, color: "#e2e8f0", fontWeight: 500 }}>{label}</span>
-                          <span style={{ fontSize: 9, color: "#64748b", marginLeft: 8 }}>{d.trades} trades · avg {avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(2)}</span>
-                        </div>
-                        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                    <div key={key} style={{ background: "#0a0e1a", borderRadius: 4, padding: "10px 12px" }}>
+                      {/* Header row */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <span style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 600 }}>{emoji} {label}</span>
+                        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
                           <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
-                          <span style={{ fontSize: 10 }}><span style={{ color: "#4ade80" }}>{d.wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{d.losses}</span></span>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: d.pnl >= 0 ? "#4ade80" : "#f87171", minWidth: 80, textAlign: "right" }}>{d.pnl >= 0 ? "+" : "-"}${Math.abs(d.pnl).toFixed(2)}</span>
+                          <span style={{ fontSize: 10 }}>
+                            <span style={{ color: "#4ade80" }}>{d.wins}W</span>
+                            <span style={{ color: "#475569" }}> / </span>
+                            <span style={{ color: "#f87171" }}>{d.losses}L</span>
+                          </span>
+                          <span style={{ fontSize: 10, color: "#475569" }}>{d.trades} trades</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: d.pnl >= 0 ? "#4ade80" : "#f87171" }}>
+                            {d.pnl >= 0 ? "+" : "-"}${Math.abs(d.pnl).toFixed(0)} net
+                          </span>
                         </div>
                       </div>
-                      <div style={{ background: "#0a0e1a", borderRadius: 2, height: 5, overflow: "hidden" }}>
-                        <div style={{ width: `${barW}%`, height: "100%", background: d.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                      {/* Stats row */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.08em", marginBottom: 2 }}>GROSS WIN</div>
+                          <div style={{ fontSize: 11, color: "#4ade80", fontWeight: 600 }}>+${d.grossWin.toFixed(0)}</div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.08em", marginBottom: 2 }}>GROSS LOSS</div>
+                          <div style={{ fontSize: 11, color: "#f87171", fontWeight: 600 }}>-${d.grossLoss.toFixed(0)}</div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.08em", marginBottom: 2 }}>AVG WIN</div>
+                          <div style={{ fontSize: 11, color: "#4ade80" }}>+${avgWin}</div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 8, color: "#475569", letterSpacing: "0.08em", marginBottom: 2 }}>AVG LOSS</div>
+                          <div style={{ fontSize: 11, color: "#f87171" }}>-${avgLoss}</div>
+                        </div>
                       </div>
+                      {/* PF row */}
+                      {pf != null && (
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.08em" }}>PROFIT FACTOR</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: pfColor(pf) }}>{fmtPF(pf)}</span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -3825,14 +3853,14 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               if (!hasMistakes && !hasMoods) return null;
 
               return (
-                <div style={{ display: "flex", flexDirection: "row", gap: 16, alignItems: "flex-start" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "stretch" }}>
 
                   {/* LEFT — Mistake Frequency */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
                     <SectionHeader label="MISTAKE FREQUENCY" skey="mistakes"
                       summary={<span style={{ color: "#64748b" }}>{mistakeSorted.length} types · {cleanSessions} clean day{cleanSessions !== 1 ? "s" : ""}</span>} />
                     {!collapsed.mistakes && (
-                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
+                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", flex: 1, display: "flex", flexDirection: "column" }}>
                         {cleanSessions > 0 && (
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: mistakeSorted.length ? 10 : 0, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
                             <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Executed the Plan</span>
@@ -3873,11 +3901,11 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                   </div>
 
                   {/* RIGHT — Mood vs Performance */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                     <SectionHeader label="MOOD VS PERFORMANCE" skey="mood"
                       summary={<span style={{ color: "#64748b" }}>{moodEntries.length} mood{moodEntries.length !== 1 ? "s" : ""} tracked</span>} />
                     {!collapsed.mood && (
-                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
                         {hasMoods ? moodEntries.map(([mood, s]) => {
                           const avg = s.pnl / s.sessions;
                           const wr = Math.round((s.wins / s.sessions) * 100);
@@ -4124,6 +4152,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
 function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, calcAnalytics }) {
   const calcNetPnl = calcNetPnlProp;
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [selectedWeek, setSelectedWeek] = useState(null);
 
   const getISOWeek = (dateStr) => {
     const d = new Date(dateStr + "T12:00:00");
@@ -4132,8 +4161,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
     startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
     const diff = d - startOfWeek1;
     const week = Math.floor(diff / (7 * 24 * 60 * 60 * 1000)) + 1;
-    const yr = d.getFullYear();
-    return `${yr}-W${String(week).padStart(2, "0")}`;
+    return `${d.getFullYear()}-W${String(week).padStart(2, "0")}`;
   };
 
   const getWeekRange = (weekKey) => {
@@ -4144,18 +4172,15 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
     startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
     const monday = new Date(startOfWeek1);
     monday.setDate(startOfWeek1.getDate() + (week - 1) * 7);
-    const friday = new Date(monday);
-    friday.setDate(monday.getDate() + 4);
+    const friday = new Date(monday); friday.setDate(monday.getDate() + 4);
     const fmt = d => d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return `${fmt(monday)} – ${fmt(friday)}`;
+    return { label: `${fmt(monday)} – ${fmt(friday)}, ${year}`, monday, friday };
   };
 
   const years = [...new Set(entries.map(e => e.date?.slice(0, 4)).filter(Boolean))].map(Number).sort((a, b) => b - a);
   if (!years.includes(new Date().getFullYear())) years.unshift(new Date().getFullYear());
 
   const yearEntries = entries.filter(e => e.date?.startsWith(String(selectedYear)));
-
-  // Group by ISO week
   const byWeek = {};
   for (const e of yearEntries) {
     const wk = getISOWeek(e.date);
@@ -4164,33 +4189,357 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
   }
   const weeks = Object.keys(byWeek).sort();
 
-  if (weeks.length === 0) return (
-    <div style={{ textAlign: "center", padding: "60px 0", color: "#64748b", fontSize: 12 }}>No entries for {selectedYear}.</div>
-  );
+  const SESSION_META = {
+    "Asian Session (6PM\u201312AM)":       { short: "Asian",     emoji: "\u{1F319}" },
+    "London Session (12AM\u20139:30AM)":   { short: "London",    emoji: "\u{1F1EC}\u{1F1E7}" },
+    "NY Open (9:30AM\u201312PM)":          { short: "NY Open",   emoji: "\u{1F525}" },
+    "Afternoon Deadzone (12\u20133PM)":    { short: "Midday",    emoji: "\u{1F634}" },
+    "Power Hour (3\u20134PM)":             { short: "Power Hr",  emoji: "\u26A1" },
+    "After Hours (4\u20136PM)":            { short: "After Hrs", emoji: "\u{1F306}" },
+  };
 
-  // Year summary
-  const yearNet = yearEntries.reduce((s, e) => s + netPnl(e), 0);
-  const yearWinDays = yearEntries.filter(e => netPnl(e) > 0).length;
-  const yearLossDays = yearEntries.filter(e => netPnl(e) < 0).length;
-  const yearTrades = yearEntries.flatMap(e => e.parsedTrades || []);
-  const yearA = calcAnalytics(yearTrades, true);
+  // ── WEEK DETAIL VIEW ──────────────────────────────────────────────────────
+  if (selectedWeek && byWeek[selectedWeek]) {
+    const wEntries = (byWeek[selectedWeek] || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+    const { label: weekLabel } = getWeekRange(selectedWeek);
+    const weekNum = selectedWeek.split("-W")[1];
+    const wNet   = wEntries.reduce((s, e) => s + calcNetPnl(e), 0);
+    const wGross = wEntries.reduce((s, e) => s + (parseFloat(e.pnl) || 0), 0);
+    const wFees  = wEntries.reduce((s, e) => s + (parseFloat(e.commissions) || 0), 0);
+    const wWinDays = wEntries.filter(e => calcNetPnl(e) > 0).length;
+    const wLossDays = wEntries.filter(e => calcNetPnl(e) < 0).length;
+    const wTrades = wEntries.flatMap(e => e.parsedTrades || []);
+    const wA = calcAnalytics(wTrades, true);
+    const maxDayAbs = Math.max(...wEntries.map(e => Math.abs(calcNetPnl(e))), 1);
 
-  // Equity curve across weeks
-  let running = 0;
-  const equityPoints = weeks.map(wk => {
-    const wEntries = byWeek[wk] || [];
-    const wNet = wEntries.reduce((s, e) => s + netPnl(e), 0);
-    running += wNet;
-    return running;
-  });
+    // Mistake frequency
+    const mistakeCounts = {};
+    let cleanDays = 0;
+    for (const e of wEntries) {
+      if (e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓")) cleanDays++;
+      for (const m of (e.sessionMistakes || [])) {
+        if (m === "No Mistakes — Executed the Plan ✓") continue;
+        mistakeCounts[m] = (mistakeCounts[m] || 0) + 1;
+      }
+    }
+    const mistakeSorted = Object.entries(mistakeCounts).sort((a, b) => b[1] - a[1]);
+    const maxMistake = mistakeSorted[0]?.[1] || 1;
+
+    // Mood
+    const moodStats = {};
+    for (const e of wEntries) {
+      const moods = e.moods?.length ? e.moods : e.mood ? [e.mood] : [];
+      const ep = calcNetPnl(e);
+      for (const m of moods) {
+        if (!moodStats[m]) moodStats[m] = { pnl: 0, sessions: 0, wins: 0 };
+        moodStats[m].pnl += ep; moodStats[m].sessions++; if (ep > 0) moodStats[m].wins++;
+      }
+    }
+    const moodSorted = Object.entries(moodStats).sort((a, b) => (b[1].pnl / b[1].sessions) - (a[1].pnl / a[1].sessions));
+    const maxMoodAvg = Math.max(...moodSorted.map(([, s]) => Math.abs(s.pnl / s.sessions)), 1);
+
+    // Best/worst trade
+    const allWeekTrades = wTrades;
+    const bestTrade  = allWeekTrades.length ? allWeekTrades.reduce((a, b) => (a.pnl||0) > (b.pnl||0) ? a : b) : null;
+    const worstTrade = allWeekTrades.length ? allWeekTrades.reduce((a, b) => (a.pnl||0) < (b.pnl||0) ? a : b) : null;
+
+    const noteFields = [
+      { key: "lessonsLearned", label: "LESSONS LEARNED",    icon: "📚", color: "#93c5fd" },
+      { key: "mistakes",       label: "MISTAKES TO AVOID",  icon: "⚠️", color: "#f87171" },
+      { key: "improvements",   label: "IMPROVEMENTS",       icon: "📈", color: "#4ade80" },
+      { key: "rules",          label: "RULES",              icon: "📋", color: "#a78bfa" },
+      { key: "reinforceRule",  label: "RULES TO REINFORCE", icon: "🔒", color: "#fbbf24" },
+      { key: "tomorrow",       label: "PLANS WRITTEN",      icon: "🎯", color: "#38bdf8" },
+      { key: "marketNotes",    label: "MARKET NOTES",       icon: "📊", color: "#64748b" },
+    ];
+    const getNote = (e, key) => (e[key] || "").trim();
+    const fmtSecs = (s) => !s ? "—" : s < 60 ? `${Math.round(s)}s` : s < 3600 ? `${Math.floor(s/60)}m ${Math.round(s%60)}s` : `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+
+    return (
+      <div>
+        {/* Back */}
+        <button onClick={() => setSelectedWeek(null)}
+          style={{ background: "transparent", border: "1px solid rgba(129,140,248,0.3)", color: "#818cf8", padding: "7px 16px", borderRadius: 5, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.08em", marginBottom: 20 }}
+          onMouseEnter={e => e.currentTarget.style.borderColor="#818cf8"}
+          onMouseLeave={e => e.currentTarget.style.borderColor="rgba(129,140,248,0.3)"}>
+          ← BACK TO WEEKS
+        </button>
+
+        {/* Header */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", borderRadius: 1, marginBottom: 14 }} />
+          <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 9, color: "#818cf8", letterSpacing: "0.28em", marginBottom: 4 }}>WEEKLY REVIEW</div>
+              <div style={{ fontFamily: "\'Bebas Neue\',sans-serif", fontSize: 38, letterSpacing: "0.1em", lineHeight: 1, background: "linear-gradient(135deg,#38bdf8 0%,#818cf8 55%,#c084fc 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>WEEK {weekNum}</div>
+              <div style={{ fontFamily: "\'DM Mono\',monospace", fontSize: 13, color: "#64748b", letterSpacing: "0.15em", marginTop: 4 }}>{weekLabel}</div>
+            </div>
+            <div style={{ position: "relative", padding: 1, borderRadius: 7, background: wNet >= 0 ? "linear-gradient(135deg,#38bdf8,#4ade80)" : "linear-gradient(135deg,#f87171,#818cf8)", flexShrink: 0 }}>
+              <div style={{ background: "#070d1a", borderRadius: 6, padding: "12px 20px", textAlign: "right", minWidth: 140 }}>
+                <div style={{ fontSize: 9, color: "#818cf8", letterSpacing: "0.15em", marginBottom: 4 }}>WEEK NET P&L</div>
+                <div style={{ fontSize: 34, color: pnlColor(wNet), fontWeight: 700, lineHeight: 1 }}>{fmtPnl(wNet)}</div>
+                {wFees > 0 && <div style={{ fontSize: 9, color: "#475569", marginTop: 4 }}>gross {fmtPnl(wGross)} · fees -${wFees.toFixed(0)}</div>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Key Stats */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8, marginBottom: 20 }}>
+          {[
+            { l: "TRADING DAYS",   v: `${wWinDays}W / ${wLossDays}L`, c: "#e2e8f0" },
+            { l: "TOTAL TRADES",   v: wTrades.length, c: "#e2e8f0" },
+            { l: "TRADE WIN RATE", v: wA ? `${wA.winRate.toFixed(0)}%` : "—", c: wA && wA.winRate >= 50 ? "#4ade80" : "#f87171" },
+            { l: "PROFIT FACTOR",  v: wA ? fmtPF(wA.profitFactor) : "—", c: wA ? pfColor(wA.profitFactor) : "#64748b" },
+            { l: "AVG WIN",  v: wA && wA.avgWin  ? `+$${wA.avgWin.toFixed(0)}`  : "—", c: "#4ade80" },
+            { l: "AVG LOSS", v: wA && wA.avgLoss ? `-$${Math.abs(wA.avgLoss).toFixed(0)}` : "—", c: "#f87171" },
+          ].map(({ l, v, c }) => (
+            <div key={l} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "10px 12px" }}>
+              <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>{l}</div>
+              <div style={{ fontSize: 14, color: c, fontWeight: 700 }}>{v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Daily P&L Bar Chart */}
+        <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "14px 16px", marginBottom: 20 }}>
+          <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 14 }}>DAILY P&L BREAKDOWN</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", height: 80 }}>
+            {wEntries.map(e => {
+              const dn = calcNetPnl(e);
+              const barH = Math.max(4, Math.abs(dn) / maxDayAbs * 72);
+              const dayLabel = new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
+              return (
+                <div key={e.id} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4, height: "100%" }}>
+                  <div style={{ fontSize: 9, color: pnlColor(dn), fontWeight: 600 }}>{fmtPnl(dn)}</div>
+                  <div style={{ width: "100%", height: barH, background: dn >= 0 ? "rgba(74,222,128,0.7)" : "rgba(248,113,113,0.7)", borderRadius: 2, border: `1px solid ${dn >= 0 ? "#166534" : "#7f1d1d"}` }} />
+                  <div style={{ fontSize: 9, color: "#64748b" }}>{dayLabel}</div>
+                  {e.grade && <div style={{ fontSize: 8, color: "#475569" }}>{e.grade}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Session + Holding Time */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+          {wA?.bySession && Object.values(wA.bySession).some(s => s.trades > 0) && (() => {
+            const sessOrder = ["Asian Session (6PM\u201312AM)","London Session (12AM\u20139:30AM)","NY Open (9:30AM\u201312PM)","Afternoon Deadzone (12\u20133PM)","Power Hour (3\u20134PM)","After Hours (4\u20136PM)"];
+            const sessData = sessOrder.map(s => ({ name: s, ...(wA.bySession[s] || { trades: 0, pnl: 0, wins: 0 }) })).filter(s => s.trades > 0);
+            const maxAbs = Math.max(...sessData.map(s => Math.abs(s.pnl)), 1);
+            const best = sessData.reduce((a, b) => a.pnl > b.pnl ? a : b);
+            return (
+              <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "14px 16px" }}>
+                <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 12 }}>TIME OF DAY</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {sessData.map(s => {
+                    const meta = SESSION_META[s.name] || { short: s.name, emoji: "📊" };
+                    const wr = Math.round(s.wins / s.trades * 100);
+                    const barW = Math.abs(s.pnl) / maxAbs * 100;
+                    const isBest = s.name === best.name && s.pnl > 0;
+                    return (
+                      <div key={s.name}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                          <span style={{ fontSize: 11, color: "#e2e8f0" }}>{meta.emoji} {meta.short}{isBest && <span style={{ marginLeft: 6, fontSize: 8, color: "#4ade80", background: "rgba(16,63,33,0.6)", padding: "1px 5px", borderRadius: 2 }}>BEST</span>}</span>
+                          <div style={{ display: "flex", gap: 10 }}>
+                            <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: s.pnl >= 0 ? "#4ade80" : "#f87171" }}>{s.pnl >= 0 ? "+" : "-"}${Math.abs(s.pnl).toFixed(0)}</span>
+                          </div>
+                        </div>
+                        <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4 }}>
+                          <div style={{ width: `${barW}%`, height: "100%", background: s.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+          {wA?.byDuration && Object.values(wA.byDuration).some(b => b.trades > 0) && (
+            <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "14px 16px" }}>
+              <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 12 }}>HOLDING TIME</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {(wA.DURATION_BUCKETS || []).map(bucket => {
+                  const b = wA.byDuration[bucket.key];
+                  if (!b || b.trades === 0) return null;
+                  const wr = Math.round(b.wins / b.trades * 100);
+                  const maxPnl = Math.max(...(wA.DURATION_BUCKETS || []).map(bk => Math.abs(wA.byDuration[bk.key]?.pnl || 0)), 1);
+                  const barW = Math.abs(b.pnl) / maxPnl * 100;
+                  const avg = b.pnl / b.trades;
+                  return (
+                    <div key={bucket.key}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, color: "#e2e8f0" }}>{bucket.label}<span style={{ fontSize: 9, color: "#64748b", marginLeft: 6 }}>avg {fmtSecs(b.avgSecs)}</span></span>
+                        <div style={{ display: "flex", gap: 10 }}>
+                          <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171" }}>{wr}% WR</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: avg >= 0 ? "#4ade80" : "#f87171" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)}/t</span>
+                        </div>
+                      </div>
+                      <div style={{ background: "#0a0e1a", borderRadius: 2, height: 4 }}>
+                        <div style={{ width: `${barW}%`, height: "100%", background: b.pnl >= 0 ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Behavioral Edge */}
+        {wA && (wA.afterLoss?.total > 0 || wA.afterWin?.total > 0 || wA.first3?.total > 0) && (
+          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "14px 16px", marginBottom: 20 }}>
+            <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 12 }}>BEHAVIORAL EDGE CHECKS</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+              {[{label:"AFTER A LOSS",data:wA.afterLoss},{label:"AFTER A WIN",data:wA.afterWin},{label:"FIRST 3 TRADES",data:wA.first3},{label:"REST OF SESSION",data:wA.rest}].map(card => (
+                <div key={card.label} style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 4, padding: "10px 12px" }}>
+                  <div style={{ fontSize: 8, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 6 }}>{card.label}</div>
+                  {card.data?.total ? (
+                    <>
+                      <div style={{ fontSize: 14, color: "#e2e8f0", fontWeight: 700 }}>{card.data.winRate.toFixed(0)}% WR</div>
+                      <div style={{ fontSize: 11, color: card.data.avgPnl >= 0 ? "#4ade80" : "#f87171", marginTop: 2 }}>{card.data.avgPnl >= 0 ? "+" : "-"}${Math.abs(card.data.avgPnl).toFixed(0)}/trade</div>
+                      <div style={{ fontSize: 9, color: "#475569", marginTop: 4 }}>n={card.data.total}</div>
+                    </>
+                  ) : <div style={{ fontSize: 10, color: "#475569" }}>No data</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Mistake + Mood side by side */}
+        {(mistakeSorted.length > 0 || cleanDays > 0 || moodSorted.length > 0) && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20, alignItems: "stretch" }}>
+            <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+              <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 12 }}>MISTAKE FREQUENCY</div>
+              {cleanDays > 0 && <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 8px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 3, marginBottom: mistakeSorted.length ? 10 : 0 }}><span style={{ fontSize: 10, color: "#4ade80" }}>✓ Clean days</span><span style={{ fontSize: 10, fontWeight: 600, color: "#4ade80" }}>{cleanDays}</span></div>}
+              {mistakeSorted.length === 0 && cleanDays === 0 && <div style={{ fontSize: 11, color: "#475569" }}>No mistakes logged.</div>}
+              {mistakeSorted.map(([mistake, count]) => (
+                <div key={mistake} style={{ marginBottom: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}><span style={{ fontSize: 10, color: "#e2e8f0" }}>{mistake}</span><span style={{ fontSize: 10, fontWeight: 600, color: "#f87171" }}>{count}×</span></div>
+                  <div style={{ background: "#0a0e1a", borderRadius: 2, height: 3 }}><div style={{ width: `${(count / maxMistake) * 100}%`, height: "100%", background: "#f87171", borderRadius: 2, opacity: 0.7 }} /></div>
+                </div>
+              ))}
+            </div>
+            <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "14px 16px", display: "flex", flexDirection: "column" }}>
+              <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 12 }}>MOOD VS PERFORMANCE</div>
+              {moodSorted.length === 0 && <div style={{ fontSize: 11, color: "#475569" }}>No mood data logged.</div>}
+              {moodSorted.map(([mood, s]) => {
+                const avg = s.pnl / s.sessions; const isPos = avg >= 0; const wr = Math.round((s.wins/s.sessions)*100);
+                return (
+                  <div key={mood} style={{ marginBottom: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                      <span style={{ fontSize: 10, color: "#e2e8f0" }}>{mood}</span>
+                      <div style={{ display: "flex", gap: 8 }}><span style={{ fontSize: 9, color: "#94a3b8" }}>{wr}% WR</span><span style={{ fontSize: 10, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)}</span></div>
+                    </div>
+                    <div style={{ background: "#0a0e1a", borderRadius: 2, height: 3 }}><div style={{ width: `${Math.abs(avg) / maxMoodAvg * 100}%`, height: "100%", background: isPos ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} /></div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Best + Worst Trade */}
+        {(bestTrade || worstTrade) && bestTrade?.pnl !== worstTrade?.pnl && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+            {bestTrade && bestTrade.pnl > 0 && (
+              <div style={{ background: "rgba(16,63,33,0.4)", border: "1px solid #166534", borderRadius: 5, padding: "14px 16px" }}>
+                <div style={{ fontSize: 10, color: "#4ade80", letterSpacing: "0.1em", marginBottom: 8 }}>✅ BEST TRADE OF THE WEEK</div>
+                <div style={{ display: "flex", gap: 12, alignItems: "baseline", marginBottom: 4 }}>
+                  <span style={{ fontSize: 22, color: "#4ade80", fontWeight: 700 }}>+${bestTrade.pnl.toFixed(0)}</span>
+                  <span style={{ fontSize: 11, color: "#94a3b8" }}>{bestTrade.symbol} · {(bestTrade.direction||"").toUpperCase()} · {bestTrade.qty}ct</span>
+                </div>
+                {wEntries.find(e => e.bestTrade) && <div style={{ fontSize: 11, color: "#4ade80", fontStyle: "italic", lineHeight: 1.6 }}>{wEntries.find(e => e.bestTrade)?.bestTrade}</div>}
+              </div>
+            )}
+            {worstTrade && worstTrade.pnl < 0 && (
+              <div style={{ background: "rgba(63,16,16,0.4)", border: "1px solid #7f1d1d", borderRadius: 5, padding: "14px 16px" }}>
+                <div style={{ fontSize: 10, color: "#f87171", letterSpacing: "0.1em", marginBottom: 8 }}>❌ WORST TRADE OF THE WEEK</div>
+                <div style={{ display: "flex", gap: 12, alignItems: "baseline", marginBottom: 4 }}>
+                  <span style={{ fontSize: 22, color: "#f87171", fontWeight: 700 }}>-${Math.abs(worstTrade.pnl).toFixed(0)}</span>
+                  <span style={{ fontSize: 11, color: "#94a3b8" }}>{worstTrade.symbol} · {(worstTrade.direction||"").toUpperCase()} · {worstTrade.qty}ct</span>
+                </div>
+                {wEntries.find(e => e.worstTrade) && <div style={{ fontSize: 11, color: "#f87171", fontStyle: "italic", lineHeight: 1.6 }}>{wEntries.find(e => e.worstTrade)?.worstTrade}</div>}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Notes Section */}
+        {wEntries.some(e => noteFields.some(({ key }) => getNote(e, key))) && (
+          <div>
+            <div style={{ height: 1, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc,transparent)", marginBottom: 16, opacity: 0.4 }} />
+            <div style={{ fontSize: 11, color: "#93c5fd", letterSpacing: "0.1em", marginBottom: 16 }}>📓 WEEKLY NOTES REVIEW</div>
+            {/* Compiled by field */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 24 }}>
+              {noteFields.map(({ key, label, icon, color }) => {
+                const entries_with_note = wEntries.filter(e => getNote(e, key));
+                if (!entries_with_note.length) return null;
+                return (
+                  <div key={key} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 5, padding: "14px 16px" }}>
+                    <div style={{ fontSize: 10, color, letterSpacing: "0.1em", marginBottom: 10 }}>{icon} {label}</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {entries_with_note.map((e, i) => {
+                        const dow = new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                        return (
+                          <div key={i} style={{ paddingLeft: 10, borderLeft: `2px solid ${color}33` }}>
+                            <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.08em", marginBottom: 3 }}>{dow}</div>
+                            <div style={{ fontSize: 12, color: "#e2e8f0", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{getNote(e, key)}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Day by day */}
+            <div style={{ fontSize: 10, color: "#475569", letterSpacing: "0.12em", marginBottom: 12 }}>DAY BY DAY</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {wEntries.map(e => {
+                if (!noteFields.some(({ key }) => getNote(e, key))) return null;
+                const dow = new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+                return (
+                  <div key={e.id} style={{ background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 5, padding: "14px 16px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <div style={{ fontSize: 12, color: "#e2e8f0", fontWeight: 600 }}>{dow}</div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        {e.grade && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 3, background: "#0f172a", border: `1px solid ${pnlColor(calcNetPnl(e))}44`, color: pnlColor(calcNetPnl(e)) }}>{e.grade}</span>}
+                        <span style={{ fontSize: 12, fontWeight: 700, color: pnlColor(calcNetPnl(e)) }}>{fmtPnl(calcNetPnl(e))}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {noteFields.map(({ key, label, icon, color }) => {
+                        const val = getNote(e, key); if (!val) return null;
+                        return (
+                          <div key={key}>
+                            <div style={{ fontSize: 9, color, letterSpacing: "0.08em", marginBottom: 3 }}>{icon} {label}</div>
+                            <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{val}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── WEEK LIST ──────────────────────────────────────────────────────────────
+  if (weeks.length === 0) return <div style={{ textAlign: "center", padding: "60px 0", color: "#64748b", fontSize: 12 }}>No entries for {selectedYear}.</div>;
 
   return (
     <div>
-      {/* Year selector */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", gap: 6 }}>
           {years.map(y => (
-            <button key={y} onClick={() => setSelectedYear(y)}
+            <button key={y} onClick={() => { setSelectedYear(y); setSelectedWeek(null); }}
               style={{ padding: "5px 12px", borderRadius: 3, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.05em", transition: "all .15s", background: selectedYear === y ? "#1e3a5f" : "transparent", border: `1px solid ${selectedYear === y ? "#3b82f6" : "#1e293b"}`, color: selectedYear === y ? "#93c5fd" : "#94a3b8" }}>
               {y}
             </button>
@@ -4198,207 +4547,57 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
         </div>
         <div style={{ fontSize: 10, color: "#64748b" }}>{weeks.length} weeks · {yearEntries.length} trading days</div>
       </div>
-      {/* Year display header — gradient style */}
-      <div style={{ marginBottom: 18, position: "relative" }}>
+      <div style={{ marginBottom: 18 }}>
         <div style={{ height: 1, background: "linear-gradient(90deg, #38bdf8, #818cf8, #c084fc, transparent)", marginBottom: 10, opacity: 0.5 }} />
         <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-          <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 38, letterSpacing: "0.1em", lineHeight: 1, background: "linear-gradient(135deg,#38bdf8 0%,#818cf8 55%,#c084fc 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
-            WEEKLY BREAKDOWN
-          </div>
-          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: "#475569", letterSpacing: "0.18em", paddingBottom: 3 }}>
-            {selectedYear}
-          </div>
+          <div style={{ fontFamily: "\'Bebas Neue\',sans-serif", fontSize: 38, letterSpacing: "0.1em", lineHeight: 1, background: "linear-gradient(135deg,#38bdf8 0%,#818cf8 55%,#c084fc 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>WEEKLY BREAKDOWN</div>
+          <div style={{ fontFamily: "\'DM Mono\',monospace", fontSize: 14, color: "#475569", letterSpacing: "0.18em", paddingBottom: 3 }}>{selectedYear}</div>
         </div>
         <div style={{ height: 1, background: "linear-gradient(90deg, transparent, #818cf8, #c084fc, transparent)", marginTop: 8, opacity: 0.25 }} />
       </div>
-
-      {/* Weekly cards */}
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {weeks.slice().reverse().map((wk, idx) => {
+        {weeks.slice().reverse().map((wk) => {
           const wEntries = byWeek[wk] || [];
-          const wNet = wEntries.reduce((s, e) => s + netPnl(e), 0);
+          const wNet = wEntries.reduce((s, e) => s + calcNetPnl(e), 0);
           const wGross = wEntries.reduce((s, e) => s + (parseFloat(e.pnl) || 0), 0);
           const wFees = wEntries.reduce((s, e) => s + (parseFloat(e.commissions) || 0), 0);
-          const wWinDays = wEntries.filter(e => netPnl(e) > 0).length;
-          const wLossDays = wEntries.filter(e => netPnl(e) < 0).length;
+          const wWinDays = wEntries.filter(e => calcNetPnl(e) > 0).length;
+          const wLossDays = wEntries.filter(e => calcNetPnl(e) < 0).length;
           const wTrades = wEntries.flatMap(e => e.parsedTrades || []);
           const wA = calcAnalytics(wTrades, true);
           const isPos = wNet >= 0;
           const weekNum = wk.split("-W")[1];
+          const { label: wLabel } = getWeekRange(wk);
+          const hasNotes = wEntries.some(e => e.lessonsLearned || e.mistakes || e.improvements || e.tomorrow || e.rules);
+          const hasMistakes = wEntries.some(e => (e.sessionMistakes||[]).some(m => m !== "No Mistakes — Executed the Plan ✓"));
           return (
-            <div key={wk} style={{ background: "#0a0e1a", border: `1px solid ${isPos ? "#166534" : wNet < 0 ? "#7f1d1d" : "#1e293b"}`, borderRadius: 6, overflow: "hidden" }}>
-              {/* Week header */}
-              <div style={{ padding: "14px 18px 14px 15px", background: isPos ? "#061f0f" : wNet < 0 ? "#1f0606" : "#0f1729", display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center", borderLeft: "3px solid transparent", borderImage: "linear-gradient(180deg,#38bdf8,#818cf8,#c084fc) 1" }}>
+            <div key={wk} onClick={() => setSelectedWeek(wk)}
+              style={{ background: "#0a0e1a", border: `1px solid ${isPos ? "#166534" : wNet < 0 ? "#7f1d1d" : "#1e293b"}`, borderRadius: 6, overflow: "hidden", cursor: "pointer", transition: "border-color .15s, background .15s" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor="#3b82f6"; e.currentTarget.style.background="#0f1729"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor=isPos?"#166534":wNet<0?"#7f1d1d":"#1e293b"; e.currentTarget.style.background="#0a0e1a"; }}>
+              <div style={{ padding: "14px 18px", background: isPos ? "#061f0f" : wNet < 0 ? "#1f0606" : "#0f1729", display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center", borderLeft: "3px solid transparent", borderImage: "linear-gradient(180deg,#38bdf8,#818cf8,#c084fc) 1" }}>
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 11, color: isPos ? "#4ade80" : wNet < 0 ? "#f87171" : "#93c5fd", letterSpacing: "0.1em", fontWeight: 600 }}>WEEK {weekNum}</span>
-                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{getWeekRange(wk)}</span>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>{wLabel}</span>
+                    {hasNotes && <span style={{ fontSize: 8, color: "#818cf8", background: "rgba(129,140,248,0.1)", padding: "1px 6px", borderRadius: 2 }}>📓 NOTES</span>}
+                    {hasMistakes && <span style={{ fontSize: 8, color: "#f87171", background: "rgba(248,113,113,0.1)", padding: "1px 6px", borderRadius: 2 }}>⚠</span>}
+                    <span style={{ fontSize: 8, color: "#334155", marginLeft: 4 }}>CLICK TO REVIEW →</span>
                   </div>
-                  <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
-                    <div>
-                      <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>TRADING DAYS</div>
-                      <div style={{ fontSize: 12, color: "#e2e8f0" }}>
-                        <span style={{ color: "#4ade80" }}>{wWinDays}W</span>
-                        <span style={{ color: "#475569" }}> / </span>
-                        <span style={{ color: "#f87171" }}>{wLossDays}L</span>
-                        <span style={{ color: "#64748b", fontSize: 10 }}> · {wEntries.length} day{wEntries.length !== 1 ? "s" : ""}</span>
-                      </div>
-                    </div>
+                  <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                    <div><div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>DAYS</div><div style={{ fontSize: 12, color: "#e2e8f0" }}><span style={{ color: "#4ade80" }}>{wWinDays}W</span><span style={{ color: "#475569" }}>/</span><span style={{ color: "#f87171" }}>{wLossDays}L</span></div></div>
                     {wA && <>
-                      <div>
-                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>TRADES</div>
-                        <div style={{ fontSize: 12, color: "#e2e8f0" }}>
-                          <span style={{ color: "#4ade80" }}>{wA.winners}W</span>
-                          <span style={{ color: "#475569" }}> / </span>
-                          <span style={{ color: "#f87171" }}>{wA.losers}L</span>
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>WIN RATE</div>
-                        <div style={{ fontSize: 12, color: wA.winRate >= 50 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{wA.winRate.toFixed(0)}%</div>
-                      </div>
-                      {wA.profitFactor && <div>
-                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>PROFIT FACTOR</div>
-                        <div style={{ fontSize: 12, color: pfColor(wA.profitFactor), fontWeight: 600 }}>{fmtPF(wA.profitFactor)}</div>
-                      </div>}
+                      <div><div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>TRADES</div><div style={{ fontSize: 12 }}><span style={{ color: "#4ade80" }}>{wA.winners}W</span><span style={{ color: "#475569" }}>/</span><span style={{ color: "#f87171" }}>{wA.losers}L</span></div></div>
+                      <div><div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>WIN RATE</div><div style={{ fontSize: 12, color: wA.winRate >= 50 ? "#4ade80" : "#f87171", fontWeight: 600 }}>{wA.winRate.toFixed(0)}%</div></div>
+                      {wA.profitFactor != null && <div><div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>PF</div><div style={{ fontSize: 12, color: pfColor(wA.profitFactor), fontWeight: 600 }}>{fmtPF(wA.profitFactor)}</div></div>}
                     </>}
                   </div>
                 </div>
-                <div style={{ display: "flex", gap: 20, alignItems: "flex-end", textAlign: "right" }}>
-                  {wFees > 0 && <>
-                    <div>
-                      <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>GROSS</div>
-                      <div style={{ fontSize: 13, color: "#94a3b8" }}>{fmtPnl(wGross)}</div>
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>FEES</div>
-                      <div style={{ fontSize: 13, color: "#f87171" }}>−${wFees.toFixed(0)}</div>
-                    </div>
-                  </>}
-                  <div>
-                    <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.08em", marginBottom: 2 }}>NET P&L</div>
-                    <div style={{ fontSize: 22, color: pnlColor(wNet), fontWeight: 700, lineHeight: 1 }}>{fmtPnl(wNet)}</div>
-                  </div>
+                <div style={{ textAlign: "right" }}>
+                  {wFees > 0 && <div style={{ fontSize: 10, color: "#475569", marginBottom: 4 }}>gross {fmtPnl(wGross)}</div>}
+                  <div style={{ fontSize: 22, color: pnlColor(wNet), fontWeight: 700, lineHeight: 1 }}>{fmtPnl(wNet)}</div>
                 </div>
               </div>
-
-              {/* Day breakdown */}
-              <div style={{ padding: "10px 18px 0", display: "flex", flexDirection: "column", gap: 6 }}>
-                {[...wEntries].sort((a, b) => a.date.localeCompare(b.date)).map(e => {
-                  const dayNet = netPnl(e);
-                  const dayGross = parseFloat(e.pnl) || 0;
-                  const dayFees = parseFloat(e.commissions) || 0;
-                  const dayA = calcAnalytics(e.parsedTrades || [], true);
-                  const isClean = e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓");
-                  const mistakeCount = e.sessionMistakes?.filter(m => m !== "No Mistakes — Executed the Plan ✓").length || 0;
-                  return (
-                    <div key={e.id} style={{ display: "grid", gridTemplateColumns: "140px 1fr auto", gap: 14, alignItems: "center", padding: "8px 12px", borderRadius: 4, background: "#0f1729", border: "1px solid #1e293b" }}>
-                      <div>
-                        <div style={{ fontSize: 11, color: "#e2e8f0", fontWeight: 500 }}>{new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long" })}</div>
-                        <div style={{ fontSize: 10, color: "#94a3b8", marginTop: 2 }}>{new Date(e.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>
-                      </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                        {(e.instruments?.length ? e.instruments : e.instrument ? [e.instrument] : []).map(sym => (
-                          <span key={sym} style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: "#1e3a5f", color: "#93c5fd" }}>{sym}</span>
-                        ))}
-                        {e.grade && <span style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: "#0a0e1a", border: `1px solid ${pnlColor(dayNet)}55`, color: pnlColor(dayNet) }}>{e.grade}</span>}
-                        {e.bias && <span style={{ padding: "2px 8px", borderRadius: 3, fontSize: 10, background: e.bias === "Bullish" ? "#052e16" : e.bias === "Bearish" ? "#450a0a" : "#1e1b4b", color: e.bias === "Bullish" ? "#4ade80" : e.bias === "Bearish" ? "#f87171" : "#a5b4fc" }}>{e.bias}</span>}
-                        {dayA && <span style={{ fontSize: 10, color: "#94a3b8" }}><span style={{ color: "#4ade80" }}>{dayA.winners}W</span> / <span style={{ color: "#f87171" }}>{dayA.losers}L</span> · <span style={{ color: dayA.winRate >= 50 ? "#4ade80" : "#f87171" }}>{dayA.winRate.toFixed(0)}%</span></span>}
-                        {isClean && <span style={{ fontSize: 9, color: "#4ade80", background: "#052e16", border: "1px solid #166534", padding: "1px 6px", borderRadius: 2 }}>✓ Clean</span>}
-                        {!isClean && mistakeCount > 0 && <span style={{ fontSize: 9, color: "#f87171", background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", padding: "1px 6px", borderRadius: 2 }}>⚠ {mistakeCount} mistake{mistakeCount !== 1 ? "s" : ""}</span>}
-                      </div>
-                      <div style={{ textAlign: "right" }}>
-                        <div style={{ fontSize: 15, color: pnlColor(dayNet), fontWeight: 700 }}>{fmtPnl(dayNet)}</div>
-                        {dayFees > 0 && <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 2 }}>gross {fmtPnl(dayGross)}</div>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Week-level Mistake Frequency + Mood vs Performance */}
-              {(() => {
-                // Mistakes
-                const mistakeCounts = {};
-                let cleanDays = 0;
-                for (const e of wEntries) {
-                  if (e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓")) cleanDays++;
-                  for (const m of (e.sessionMistakes || [])) {
-                    if (m === "No Mistakes — Executed the Plan ✓") continue;
-                    mistakeCounts[m] = (mistakeCounts[m] || 0) + 1;
-                  }
-                }
-                const mistakeSorted = Object.entries(mistakeCounts).sort((a, b) => b[1] - a[1]);
-                const maxMistake = mistakeSorted[0]?.[1] || 1;
-
-                // Moods
-                const moodStats = {};
-                for (const e of wEntries) {
-                  const moods = e.moods?.length ? e.moods : e.mood ? [e.mood] : [];
-                  const ep = netPnl(e);
-                  for (const m of moods) {
-                    if (!moodStats[m]) moodStats[m] = { pnl: 0, sessions: 0, wins: 0 };
-                    moodStats[m].pnl += ep;
-                    moodStats[m].sessions++;
-                    if (ep > 0) moodStats[m].wins++;
-                  }
-                }
-                const moodSorted = Object.entries(moodStats).sort((a, b) => (b[1].pnl / b[1].sessions) - (a[1].pnl / a[1].sessions));
-                const maxMoodAvg = Math.max(...moodSorted.map(([, s]) => Math.abs(s.pnl / s.sessions)), 1);
-
-                const hasData = mistakeSorted.length > 0 || cleanDays > 0 || moodSorted.length > 0;
-                if (!hasData) return null;
-
-                return (
-                  <div style={{ display: "grid", gridTemplateColumns: mistakeSorted.length > 0 && moodSorted.length > 0 ? "1fr 1fr" : "1fr", gap: 10, padding: "10px 18px 14px", borderTop: "1px solid #1e293b", marginTop: 8 }}>
-                    {/* Mistake Frequency */}
-                    {(mistakeSorted.length > 0 || cleanDays > 0) && (
-                      <div style={{ background: "#0a0e1a", borderRadius: 4, padding: "10px 12px" }}>
-                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 8 }}>MISTAKE FREQUENCY</div>
-                        {cleanDays > 0 && (
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: mistakeSorted.length ? 6 : 0, padding: "4px 8px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 3 }}>
-                            <span style={{ fontSize: 10, color: "#4ade80" }}>✓ Clean days</span>
-                            <span style={{ fontSize: 10, fontWeight: 600, color: "#4ade80" }}>{cleanDays}</span>
-                          </div>
-                        )}
-                        {mistakeSorted.map(([mistake, count]) => (
-                          <div key={mistake} style={{ marginBottom: 6 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                              <span style={{ fontSize: 10, color: "#e2e8f0" }}>{mistake}</span>
-                              <span style={{ fontSize: 10, fontWeight: 600, color: "#f87171" }}>{count}×</span>
-                            </div>
-                            <div style={{ background: "#0f1729", borderRadius: 2, height: 3 }}>
-                              <div style={{ width: `${(count / maxMistake) * 100}%`, height: "100%", background: "#f87171", borderRadius: 2, opacity: 0.7 }} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Mood vs Performance */}
-                    {moodSorted.length > 0 && (
-                      <div style={{ background: "#0a0e1a", borderRadius: 4, padding: "10px 12px" }}>
-                        <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 8 }}>MOOD VS P&L</div>
-                        {moodSorted.map(([mood, s]) => {
-                          const avg = s.pnl / s.sessions;
-                          const isPos = avg >= 0;
-                          return (
-                            <div key={mood} style={{ marginBottom: 6 }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                                <span style={{ fontSize: 10, color: "#e2e8f0" }}>{mood}</span>
-                                <span style={{ fontSize: 10, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171" }}>{avg >= 0 ? "+" : "-"}${Math.abs(avg).toFixed(0)}</span>
-                              </div>
-                              <div style={{ background: "#0f1729", borderRadius: 2, height: 3 }}>
-                                <div style={{ width: `${Math.abs(avg) / maxMoodAvg * 100}%`, height: "100%", background: isPos ? "#4ade80" : "#f87171", borderRadius: 2, opacity: 0.7 }} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
             </div>
           );
         })}
@@ -5004,12 +5203,12 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                   const hasMoods = moodList.length > 0;
                   if (!hasMistakes && !hasMoods) return null;
                   return (
-                    <div style={{ display: "flex", flexDirection: "row", gap: 16, alignItems: "flex-start" }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", flexDirection: "row", gap: 16, alignItems: "stretch" }}>
+                      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                         <MonthSectionHeader label="MISTAKE FREQUENCY" monthKey={expandedMonth} skey="mistakes"
                           summary={<span style={{ color: "#64748b" }}>{mistakeSorted.length} type{mistakeSorted.length !== 1 ? "s" : ""} · {cleanDays} clean</span>} />
                         {!isCollapsed(expandedMonth, "mistakes") && (
-                          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
+                          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", flex: 1, display: "flex", flexDirection: "column" }}>
                             {cleanDays > 0 && (
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: mistakeSorted.length ? 10 : 0, padding: "6px 10px", background: "rgba(16,63,33,0.55)", border: "1px solid #166534", borderRadius: 4 }}>
                                 <span style={{ fontSize: 11, color: "#4ade80" }}>✓ Executed the Plan</span>
@@ -5033,11 +5232,11 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
                           </div>
                         )}
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                         <MonthSectionHeader label="MOOD VS PERFORMANCE" monthKey={expandedMonth} skey="mood"
                           summary={<span style={{ color: "#64748b" }}>{moodList.length} mood{moodList.length !== 1 ? "s" : ""}</span>} />
                         {!isCollapsed(expandedMonth, "mood") && (
-                          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+                          <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
                             {moodList.map(([mood, s]) => {
                               const avg = s.pnl / s.sessions;
                               const wr = Math.round((s.wins / s.sessions) * 100);
@@ -5210,49 +5409,55 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
       }
     }
 
-    const totalChars = dayBlocks.length;
-    const isMonthly = label.length > 12; // rough heuristic: monthly labels are longer
+    const isMonthly = recapMode === "monthly";
 
-    return `You are a trading coach reviewing a futures trader's journal for: ${label}
+    return `You are a professional trading coach. A futures trader has shared their complete journal for: ${label}
 
-PERIOD SUMMARY
-Days: ${sorted.length} | Day W/L: ${winDays}W/${lossDays}L | Net P&L: $${totalPnl.toFixed(0)} | Avg/day: $${(totalPnl/sorted.length).toFixed(0)}
-Trades: ${allTrades.length} | Trade WR: ${overallWR}% | PF: ${fmtPF(overallPF)} | Avg win: $${avgWin} | Avg loss: $${avgLoss} | Fees: $${totalFees.toFixed(0)}
-Sessions: ${sessLine}
+Your job is to write a thorough, honest coaching review. Be specific — quote their exact words, cite dates and dollar amounts. This is not a summary, it is actionable coaching feedback.
+
+PERIOD DATA
+Days: ${sorted.length} | ${winDays}W / ${lossDays}L | Net: $${totalPnl.toFixed(0)} | Avg/day: $${(totalPnl/sorted.length).toFixed(0)}
+Trades: ${allTrades.length} | WR: ${overallWR}% | PF: ${fmtPF(overallPF)} | Avg win: +$${avgWin} | Avg loss: -$${avgLoss} | Fees: $${totalFees.toFixed(0)}
+Session breakdown: ${sessLine}
 Grades: ${grades}
-Mistakes flagged: ${mistakeLine}${cleanDays>0?` | Clean days: ${cleanDays}`:""}
-${planLines.length ? `\nPLAN vs ACTUAL\n${planLines.join("\n\n")}` : ""}
+Mistakes flagged: ${mistakeLine}${cleanDays>0?` | ${cleanDays} clean days`:""}
+${planLines.length ? `\nPLAN vs ACTUAL CROSSCHECK\n${planLines.join("\n\n")}` : ""}
 
-DAILY JOURNAL ENTRIES (every word the trader wrote)
+FULL JOURNAL — every word the trader wrote, day by day:
 ${dayBlocks}
 
 ---
-YOUR JOB: You are not a summarizer. You are a trading coach who has just read every entry above. Your value is in finding what the trader cannot see themselves — patterns across days, contradictions between intentions and actions, recurring blind spots, and what the data actually says vs. what they think is happening.
 
-RULES:
-- Every insight must reference a specific date, dollar amount, or direct quote from their notes
-- Do NOT restate the period summary stats — the trader already sees those
-- If a section has no relevant data, skip it entirely (do not write placeholder text)
-- Keep each bullet to one clear finding. No filler, no encouragement, no generic advice
-- Total response: 400-600 words
-
-WRITE THESE SECTIONS (skip any with no data):
+Write a complete coaching review with each section below. Use bullet points. Every bullet must cite a specific date, quote, or number — no generic observations.
 
 **📓 NOTES ANALYSIS**
-Read every word written across all days. Find: the same theme written multiple times (quote it with dates), lessons written but then contradicted by next-day behavior, intentions that never materialized. This is the most important section — the trader's own words are the most valuable data.
+This is the most important section. Read every word written across all days and find:
+• Recurring themes — the same lesson, mistake, or intention written on 2 or more days (quote each instance with its date)
+• Contradictions — a rule or intention written one day that the next day's notes/mistakes show was broken
+• Unrealized intentions — something written as a plan or improvement that never appeared again in actual behavior
+• Any single observation the trader made that is particularly insightful or worth reinforcing
+Write one bullet per finding. Quote their exact words.
 
-**📊 WHAT THE NUMBERS SAY**
-2-3 bullets only. One data pattern the trader likely hasn't connected — e.g. a session that consistently bleeds, a hold time where edge disappears, a day-of-week pattern. Must be something not obvious from glancing at the stats.
+**📊 PERFORMANCE PATTERNS**
+Look at the session breakdown, grades, and mistake data. Write 3-4 bullets on what the numbers reveal that the trader may not have noticed:
+• Which session/time window is helping vs hurting P&L (use exact figures)
+• Whether mistakes cluster on specific types of days (winning days? losing days? specific grades?)
+• Hold time or order type patterns if visible
+• Commission drag if fees exceed 10% of gross P&L
 
 **🚩 PLAN vs REALITY**
-For each Tomorrow Plan written: did the next day honor it? Quote the plan, state what actually happened. Label HONORED or VIOLATED. Skip if no plans were written.
+For every "Tomorrow plan" written in the journal, analyze what actually happened the next trading day:
+• Quote the exact plan written
+• Describe what actually happened: grade, mistakes flagged, P&L result
+• Label it HONORED ✓ or VIOLATED ✗ with a one-line explanation
+If no plans were written this period, skip this section entirely.
 
-**💡 ONE STRENGTH**
-The single most consistent positive backed by specific data. Be precise.
+**💡 STRENGTHS**
+2-3 specific things that are working, backed by data. Be precise: "NY Open on Mar 11 and Mar 13 averaged +$X" not vague praise.
 
-**🎯 THREE RULES FOR NEXT ${isMonthly ? "MONTH" : "WEEK"}**
-Format: [Root cause identified from notes/data] → [Specific measurable rule]
-These must directly address what the notes reveal, not generic trading advice.`;
+**🎯 ACTION PLAN FOR NEXT ${isMonthly ? "MONTH" : "WEEK"}**
+Write exactly 3 rules. Each must be rooted in something specific found above — a recurring note, a data pattern, or a plan violation. Not generic advice.
+Format each as: [Root cause from this review] → [Specific measurable rule with a threshold]`;
   };
 
   const generateSummary = async (period) => {
@@ -8616,16 +8821,19 @@ export default function TradingJournal() {
     const autoDate = (() => {
       const timestamps = trades.map(t => t.buyTime || t.sellTime).filter(Boolean);
       if (!timestamps.length) return null;
+      // Sort timestamps to find the earliest
       timestamps.sort();
       const raw = timestamps[0].trim();
-      // Try to parse various IBKR date formats: "20260311 132635", "2026/03/11 13:26:35", "03/11/2026 13:26:35"
+      // Try to parse various broker date formats
       const patterns = [
-        // YYYYMMDD HHMMSS  → 20260311 132635
+        // YYYYMMDD HHMMSS  → "20260311 132635"
         { re: /^(\d{4})(\d{2})(\d{2})\s/, fn: m => `${m[1]}-${m[2]}-${m[3]}` },
         // YYYY/MM/DD or YYYY-MM-DD
         { re: /^(\d{4})[\/\-](\d{2})[\/\-](\d{2})/, fn: m => `${m[1]}-${m[2]}-${m[3]}` },
-        // MM/DD/YYYY
-        { re: /^(\d{2})\/(\d{2})\/(\d{4})/, fn: m => `${m[3]}-${m[1]}-${m[2]}` },
+        // MM/DD/YYYY HH:MM:SS or MM/DD/YYYY
+        { re: /^(\d{1,2})\/(\d{1,2})\/(\d{4})/, fn: m => `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` },
+        // MM-DD-YYYY
+        { re: /^(\d{1,2})-(\d{1,2})-(\d{4})/, fn: m => `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}` },
       ];
       for (const { re, fn } of patterns) {
         const m = raw.match(re);
@@ -8633,6 +8841,10 @@ export default function TradingJournal() {
       }
       return null;
     })();
+
+    // Use local date (not UTC) for today comparison to avoid timezone issues
+    const localToday = new Date();
+    const localTodayStr = `${localToday.getFullYear()}-${String(localToday.getMonth()+1).padStart(2,'0')}-${String(localToday.getDate()).padStart(2,'0')}`;
 
     // Auto-detect instruments from symbols
     const syms = [...new Set(trades.map(t => t.symbol))];
@@ -8649,8 +8861,8 @@ export default function TradingJournal() {
       rawTradeData: importRaw,
       rawCsvFile: csvFileName ? { name: csvFileName, content: importRaw, savedAt: new Date().toISOString() } : (prev.rawCsvFile || null),
       parsedTrades: trades,
-      // Auto-fill: only populate if field is currently empty
-      date:        (!prev.date || prev.date === new Date().toISOString().split("T")[0]) && autoDate ? autoDate : prev.date,
+      // Auto-fill date: set if field is empty OR still showing today's placeholder date
+      date:        autoDate && (!prev.date || prev.date === localTodayStr) ? autoDate : prev.date,
       pnl:         !prev.pnl ? totalPnL.toFixed(2) : prev.pnl,
       commissions: !prev.commissions && totalComm > 0 ? totalComm.toFixed(2) : prev.commissions,
       instruments: prev.instruments?.length ? prev.instruments : autoInstrs,
