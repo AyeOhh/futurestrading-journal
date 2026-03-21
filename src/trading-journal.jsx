@@ -277,6 +277,32 @@ const DEFAULT_AI_SETTINGS = {
   tzLock: true,
 };
 
+// ── AI Taglines — user picks one, shown in recap header and daily analysis ──────
+const AI_TAGLINES = [
+  { id: 'analyse', text: 'ANALYSE · REFLECT · IMPROVE' },
+  { id: 'edge',    text: 'Edge is earned in the debrief' },
+  { id: 'review',  text: 'Review the trade, not just the result' },
+  { id: 'noise',   text: 'Data without reflection is just noise' },
+  { id: 'journal', text: 'The journal is the edge' },
+];
+const AI_TAGLINE_KEY = 'tj-ai-tagline-v1';
+const loadTagline = () => { try { return localStorage.getItem(AI_TAGLINE_KEY) || 'analyse'; } catch { return 'analyse'; } };
+const saveTagline = (id) => { try { localStorage.setItem(AI_TAGLINE_KEY, id); } catch {} };
+const getTaglineText = (id) => AI_TAGLINES.find(t => t.id === id)?.text || AI_TAGLINES[0].text;
+
+// ── Shared notes hash — identical algorithm used by both WeeklyPerformance and AIRecapView ──
+// Used to detect staleness: if notes changed since the recap was generated, flag it.
+const calcNotesHash = (periodEntries) => {
+  const str = periodEntries.map(e =>
+    [e.lessonsLearned, e.mistakes, e.improvements, e.rules, e.reinforceRule,
+     e.tomorrow, e.marketNotes, e.bestTrade, e.worstTrade,
+     (e.parsedTrades||[]).length].join('|')
+  ).join('||');
+  let h = 0;
+  for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0; }
+  return String(h);
+};
+
 const BROKER_PRESETS = {
   none:        { label: 'Generic / Other',   hint: '' },
   tradovate:   { label: 'Tradovate',         hint: 'Data is from Tradovate. Columns are typically: Account, Contract, B/S, Qty, Price, Commission, P&L, Fill Time.' },
@@ -2578,7 +2604,7 @@ Keep each section tight. No filler. Maximum value per word. Total response shoul
       <div style={{ padding: "14px 20px", background: "#0a1628", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 12, color: "#93c5fd", letterSpacing: "0.1em", fontWeight: 600 }}>✦ AI DAILY TRADE ANALYSIS</div>
-          <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>Deep coaching insights powered by Claude · Based on your full trade data & notes</div>
+          <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>{getTaglineText(loadTagline())} · Based on your full trade data & notes</div>
         </div>
         <button onClick={generate} disabled={loading}
           style={{ background: loading ? "transparent" : "#1d4ed8", color: loading ? "#475569" : "white", border: loading ? "1px solid #1e293b" : "none", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: loading ? "not-allowed" : "pointer", letterSpacing: "0.06em", transition: "all .15s" }}>
@@ -3203,8 +3229,8 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
   const [collapsed, setCollapsed] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("tj-collapse-cal-v1") || "{}");
-      return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false, direction: false, behavioral: false, holdingtime: false, ...saved };
-    } catch { return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, trendrecap: false, timeofday: false, mistakeimpact: false, cumChart: false, direction: false, behavioral: false, holdingtime: false }; }
+      return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, timeofday: false, mistakeimpact: false, cumChart: false, direction: false, behavioral: false, holdingtime: false, ...saved };
+    } catch { return { pnl: false, trades: false, time: false, symbol: false, dow: false, mistakes: false, mistakecost: false, mood: false, timeofday: false, mistakeimpact: false, cumChart: false, direction: false, behavioral: false, holdingtime: false }; }
   });
   const toggleSection = (key) => setCollapsed(prev => {
     const next = { ...prev, [key]: !prev[key] };
@@ -3379,8 +3405,8 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                           { l: "WIN STREAK", v: `${monthAnalytics.maxConsecWins} trades`, c: "#4ade80" },
                           { l: "LOSS STREAK", v: `${monthAnalytics.maxConsecLoss} trades`, c: "#f87171" },
                         ].map(s => (
-                          <div key={s.l} style={{ background: "#0a0e1a", border: "1px solid #0f1729", borderRadius: 4, padding: "8px 10px" }}>
-                            <div style={{ fontSize: 8, color: "#64748b", letterSpacing: "0.08em", marginBottom: 3 }}>{s.l}</div>
+                          <div key={s.l} style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "8px 10px" }}>
+                            <div style={{ fontSize: 8, color: "#94a3b8", letterSpacing: "0.08em", marginBottom: 3 }}>{s.l}</div>
                             <div style={{ fontSize: 13, color: s.c, fontWeight: 600 }}>{s.v}</div>
                           </div>
                         ))}
@@ -3454,7 +3480,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                 padding: "12px 12px 10px", minHeight: 172, position: "relative",
                 display: "flex", flexDirection: "column",
                 cursor: hasEntry ? "pointer" : (!isWeekend && (isPast || dateStr === today)) ? "pointer" : "default",
-                transition: "all .15s", opacity: isWeekend && !hasEntry ? 0.3 : isFuture && !isWeekend ? 0.5 : 1,
+                transition: "all .15s", opacity: (isWeekend && !hasEntry && !calendarNotes[dateStr]) ? 0.3 : isFuture && !isWeekend ? 0.5 : 1,
                 ...(isToday ? { outline: "2px solid transparent", boxShadow: "0 0 0 2px #818cf8, 0 0 0 3px rgba(56,189,248,0.4), 0 0 0 4px rgba(192,132,252,0.3)" } : {}),
               }}
               onMouseEnter={e => { if (hasEntry || (!isWeekend && (isPast || dateStr === today))) e.currentTarget.style.borderColor = hasEntry ? (n > 0 ? "#22c55e" : n < 0 ? "#ef4444" : "#3b82f6") : "#475569"; }}
@@ -3967,6 +3993,40 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                             Clean day avg: <span style={{ color: "#4ade80", fontWeight: 600 }}>{cleanAvg >= 0 ? "+" : "-"}${Math.abs(cleanAvg).toFixed(0)}</span> · "vs✓" shows drag vs your clean sessions
                           </div>
                         )}
+                        {/* ── Trend Recap insights — moved from removed Trend Recap section ── */}
+                        {(() => {
+                          const topM = Object.entries((() => {
+                            const c = {};
+                            for (const e of monthEntries) {
+                              for (const m of (e.sessionMistakes||[]).filter(x=>x!=="No Mistakes — Executed the Plan ✓")) c[m]=(c[m]||0)+1;
+                            }
+                            return c;
+                          })()).sort((a,b)=>b[1]-a[1])[0];
+                          const netTrend = (() => {
+                            const half = Math.floor(monthEntries.length/2);
+                            const sorted = [...monthEntries].sort((a,b)=>a.date.localeCompare(b.date));
+                            const f = sorted.slice(0,half).reduce((s,e)=>s+netPnl(e),0);
+                            const s = sorted.slice(half).reduce((s,e)=>s+netPnl(e),0);
+                            return s>f?"improving":s<f?"declining":"flat";
+                          })();
+                          const trendColor = netTrend==="improving"?"#4ade80":netTrend==="declining"?"#f87171":"#94a3b8";
+                          const pf = monthAnalytics?.profitFactor;
+                          if (!topM && !netTrend) return null;
+                          return (
+                            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6, paddingTop: 10, borderTop: "1px solid #1e293b" }}>
+                              {topM && (
+                                <div style={{ background: "rgba(63,16,16,0.4)", border: "1px solid #7f1d1d", borderRadius: 4, padding: "7px 10px", fontSize: 10, color: "#f87171" }}>
+                                  ⚠ Most frequent mistake: <strong>{topM[0]}</strong> ({topM[1]}× · {Math.round(topM[1]/monthEntries.length*100)}% of sessions)
+                                </div>
+                              )}
+                              <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.7 }}>
+                                <span style={{ color: "#3b82f6" }}>💡 </span>
+                                <span style={{ color: trendColor }}>{netTrend==="improving"?"Second half outperformed first — momentum building.":netTrend==="declining"?"Performance declined through the month — review fatigue or rule drift.":"Consistent performance across the month."}</span>
+                                {pf!=null && isFinite(pf) && pf<1 && <span style={{ color: "#f59e0b" }}> Profit factor below 1 — exits need review.</span>}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -4066,65 +4126,8 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                 </div>
               );
             })()}
-              {/* TREND RECAP */}
-              {monthEntries.length >= 3 && (() => {
-                const tradWR = tradeWinRate !== null ? tradeWinRate : null;
-                const dayWR = monthEntries.length ? Math.round(monthWins / monthEntries.length * 100) : 0;
-                const pf = monthAnalytics?.profitFactor;
-                const allMistakes = {};
-                let mistakeSessions = 0;
-                for (const e of monthEntries) {
-                  const ms = (e.sessionMistakes || []).filter(m => m !== "No Mistakes — Executed the Plan ✓");
-                  if (ms.length) mistakeSessions++;
-                  for (const m of ms) allMistakes[m] = (allMistakes[m] || 0) + 1;
-                }
-                const topMistake = Object.entries(allMistakes).sort((a,b) => b[1]-a[1])[0];
-                const mistakeRate = Math.round(mistakeSessions / monthEntries.length * 100);
-                const netTrend = (() => {
-                  const half = Math.floor(monthEntries.length / 2);
-                  const sorted = [...monthEntries].sort((a,b) => a.date.localeCompare(b.date));
-                  const firstHalf = sorted.slice(0, half).reduce((s,e) => s + netPnl(e), 0);
-                  const secondHalf = sorted.slice(half).reduce((s,e) => s + netPnl(e), 0);
-                  return secondHalf > firstHalf ? "improving" : secondHalf < firstHalf ? "declining" : "flat";
-                })();
-                const trendColor = netTrend === "improving" ? "#4ade80" : netTrend === "declining" ? "#f87171" : "#94a3b8";
-                return (
-                  <div>
-                    <SectionHeader label="TREND RECAP" skey="trendrecap"
-                      summary={<span style={{ color: trendColor }}>{netTrend.toUpperCase()}</span>} />
-                    {!collapsed.trendrecap && (
-                      <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 4, padding: "14px 16px" }}>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginBottom: 14 }}>
-                          {[
-                            { l: "DAY WIN RATE", v: `${dayWR}%`, c: dayWR >= 50 ? "#4ade80" : "#f87171" },
-                            { l: "TRADE WIN RATE", v: tradWR !== null ? `${tradWR}%` : "—", c: tradWR !== null ? (tradWR >= 50 ? "#4ade80" : "#f87171") : "#64748b" },
-                            { l: "PROFIT FACTOR", v: fmtPF(pf), c: pfColor(pf) },
-                          ].map(s => (
-                            <div key={s.l} style={{ background: "#0a0e1a", borderRadius: 4, padding: "8px 10px" }}>
-                              <div style={{ fontSize: 8, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 3 }}>{s.l}</div>
-                              <div style={{ fontSize: 14, color: s.c, fontWeight: 600 }}>{s.v}</div>
-                            </div>
-                          ))}
-                        </div>
-                        {topMistake && (
-                          <div style={{ background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", borderRadius: 4, padding: "8px 12px", fontSize: 11, color: "#f87171" }}>
-                            ⚠ Most frequent mistake: <strong>{topMistake[0]}</strong> ({topMistake[1]}× · {Math.round(topMistake[1]/monthEntries.length*100)}% of sessions)
-                          </div>
-                        )}
-                        <div style={{ marginTop: 10, fontSize: 10, color: "#64748b", lineHeight: 1.7 }}>
-                          <span style={{ color: "#3b82f6" }}>💡 </span>
-                          {netTrend === "improving" ? "Second half of month outperformed first — momentum building." :
-                           netTrend === "declining" ? "Performance declined through the month — review fatigue or rule drift." :
-                           "Consistent performance across the month."}
-                          {pf != null && isFinite(pf) && pf < 1 && " Profit factor below 1 — exits need review."}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
 
-              {/* TIME OF DAY — session-based analysis (uses same getSession logic as analytics for consistency) */}
+                            {/* TIME OF DAY — session-based analysis (uses same getSession logic as analytics for consistency) */}
               {allMonthTrades.length > 0 && monthAnalytics?.bySession && (() => {
                 // Re-use the bySession data already computed by calcAnalytics (with tzLock=true)
                 // This is consistent with how the rest of the analytics work
@@ -4174,12 +4177,12 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                     <span style={{ fontSize: 12 }}>{meta.emoji}</span>
                                     <span style={{ fontSize: 11, color: isBest ? "#4ade80" : isWorst ? "#f87171" : "#e2e8f0", fontWeight: isBest || isWorst ? 600 : 400 }}>{meta.short}</span>
-                                    <span style={{ fontSize: 9, color: "#475569" }}>{meta.time}</span>
+                                    <span style={{ fontSize: 9, color: "#94a3b8" }}>{meta.time}</span>
                                     {isBest && <span style={{ fontSize: 8, color: "#4ade80", background: "rgba(16,63,33,0.5)", border: "1px solid #166534", padding: "1px 5px", borderRadius: 2, letterSpacing: "0.05em" }}>BEST</span>}
                                     {isWorst && <span style={{ fontSize: 8, color: "#f87171", background: "rgba(63,16,16,0.5)", border: "1px solid #7f1d1d", padding: "1px 5px", borderRadius: 2, letterSpacing: "0.05em" }}>AVOID</span>}
                                   </div>
                                   <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                                    <span style={{ fontSize: 9, color: "#475569" }}>{s.trades}T ({sharePct}%)</span>
+                                    <span style={{ fontSize: 9, color: "#94a3b8" }}>{s.trades}T ({sharePct}%)</span>
                                     <span style={{ fontSize: 10, color: wr >= 50 ? "#4ade80" : "#f87171", minWidth: 42, textAlign: "right" }}>{wr}% WR</span>
                                     <span style={{ fontSize: 12, fontWeight: 600, color: isPos ? "#4ade80" : "#f87171", minWidth: 78, textAlign: "right" }}>{isPos ? "+" : "-"}${Math.abs(s.pnl).toFixed(0)}</span>
                                   </div>
@@ -4189,7 +4192,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                                   <div style={{ width: `${barW}%`, height: "100%", background: isPos ? "#4ade80" : "#f87171", borderRadius: 2, opacity: isBest || isWorst ? 0.9 : 0.55, transition: "width .3s" }} />
                                 </div>
                                 {/* Mini per-trade avg beneath */}
-                                <div style={{ marginTop: 3, fontSize: 9, color: "#334155" }}>
+                                <div style={{ marginTop: 3, fontSize: 9, color: "#64748b" }}>
                                   avg/trade: <span style={{ color: isPos ? "#4ade80" : "#f87171" }}>{isPos ? "+" : "-"}${Math.abs(s.pnl / s.trades).toFixed(0)}</span>
                                   {" · "}wins: <span style={{ color: "#4ade80" }}>{s.wins}</span> · losses: <span style={{ color: "#f87171" }}>{s.trades - s.wins}</span>
                                 </div>
@@ -4220,34 +4223,89 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
   );
 }
 
-function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, calcAnalytics, ai }) {
+function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, calcAnalytics, ai, activeJournal }) {
   const calcNetPnl = calcNetPnlProp;
   const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
   const [selectedWeek, setSelectedWeek] = useState(null);
 
-  // ── Saved weekly recaps: { [weekKey]: { text, generatedAt, notesHash } } ──
-  const WEEKLY_RECAP_KEY = 'tj-weekly-recaps-v1';
-  const [weeklyRecaps, setWeeklyRecaps] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(WEEKLY_RECAP_KEY) || '{}'); } catch { return {}; }
-  });
-  const saveWeeklyRecap = (weekKey, text, notesHash) => {
-    const updated = { ...weeklyRecaps, [weekKey]: { text, generatedAt: Date.now(), notesHash } };
-    setWeeklyRecaps(updated);
-    try { localStorage.setItem(WEEKLY_RECAP_KEY, JSON.stringify(updated)); } catch {}
+  // ── Unified recap storage — same key as AIRecapView, same window.storage ──
+  // Schema: { texts: { [periodKey]: string }, meta: { [periodKey]: ISO }, hashes: { [periodKey]: string } }
+  const journalId  = activeJournal?.id || 'default';
+  const RECAP_KEY  = `ai-recaps-v2-${journalId}`;
+
+  const [weeklyRecaps, setWeeklyRecaps] = useState({});  // { [weekKey]: { text, generatedAt (ISO), notesHash } }
+  const [recapStoreReady, setRecapStoreReady] = useState(false);
+
+  // Load on mount (and whenever journal switches)
+  useEffect(() => {
+    setRecapStoreReady(false);
+    setWeeklyRecaps({});
+    (async () => {
+      try {
+        const r = await storage.get(RECAP_KEY);
+        if (r?.value) {
+          const parsed = JSON.parse(r.value);
+          // Rebuild weeklyRecaps from the shared store's texts + meta + hashes fields
+          const texts   = parsed.texts  || {};
+          const meta    = parsed.meta   || {};
+          const hashes  = parsed.hashes || {};
+          const rebuilt = {};
+          for (const k of Object.keys(texts)) {
+            rebuilt[k] = { text: texts[k], generatedAt: meta[k] || null, notesHash: hashes[k] || null };
+          }
+          setWeeklyRecaps(rebuilt);
+        }
+      } catch {}
+      setRecapStoreReady(true);
+    })();
+  }, [journalId]);
+
+  // Persist to the shared store whenever weeklyRecaps changes (after initial load)
+  useEffect(() => {
+    if (!recapStoreReady) return;
+    if (Object.keys(weeklyRecaps).length === 0) return;
+    // Merge into shared schema: texts + meta + hashes (monthly recaps already stored stay intact)
+    (async () => {
+      try {
+        const r = await storage.get(RECAP_KEY);
+        const existing = r?.value ? JSON.parse(r.value) : {};
+        const existingTexts  = existing.texts  || {};
+        const existingMeta   = existing.meta   || {};
+        const existingHashes = existing.hashes || {};
+        // Write only keys that belong to this component (week keys start with YYYY-W)
+        for (const [k, v] of Object.entries(weeklyRecaps)) {
+          existingTexts[k]  = v.text;
+          existingMeta[k]   = v.generatedAt;
+          existingHashes[k] = v.notesHash;
+        }
+        await storage.set(RECAP_KEY, JSON.stringify({ texts: existingTexts, meta: existingMeta, hashes: existingHashes }));
+      } catch {}
+    })();
+  }, [weeklyRecaps, recapStoreReady]);
+
+  const saveWeeklyRecap = (weekKey, text, hash) => {
+    const now = new Date().toISOString();
+    setWeeklyRecaps(prev => ({ ...prev, [weekKey]: { text, generatedAt: now, notesHash: hash } }));
+  };
+
+  const deleteWeeklyRecap = async (weekKey) => {
+    setWeeklyRecaps(prev => { const n = {...prev}; delete n[weekKey]; return n; });
+    // Also remove from shared store
+    try {
+      const r = await storage.get(RECAP_KEY);
+      if (r?.value) {
+        const parsed = JSON.parse(r.value);
+        delete (parsed.texts  || {})[weekKey];
+        delete (parsed.meta   || {})[weekKey];
+        delete (parsed.hashes || {})[weekKey];
+        await storage.set(RECAP_KEY, JSON.stringify(parsed));
+      }
+    } catch {}
   };
   const [recapLoading, setRecapLoading] = useState(false);
   const [recapError, setRecapError] = useState('');
 
-  // Hash of all notes for a set of entries — used to detect staleness
-  const notesHash = (wEntries) => {
-    const str = wEntries.map(e =>
-      [e.lessonsLearned, e.mistakes, e.improvements, e.rules, e.reinforceRule, e.tomorrow, e.marketNotes, e.bestTrade, e.worstTrade].join('|')
-    ).join('||');
-    // Simple fast hash — not crypto, just staleness detection
-    let h = 0;
-    for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0; }
-    return String(h);
-  };
+  // notesHash moved to module scope as calcNotesHash — shared with AIRecapView
   const [collapsedNotes, setCollapsedNotes] = useState({}); // key: fieldKey, val: bool
   const [dayByDayCollapsed, setDayByDayCollapsed] = useState({}); // key: entry.id
   const [compiledCollapsed, setCompiledCollapsed] = useState(true); // whole compiled section collapsed by default
@@ -4569,7 +4627,7 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
 
         {/* ── AI RECAP OF THE WEEK ── */}
         {(() => {
-          const currentHash = notesHash(wEntries);
+          const currentHash = calcNotesHash(wEntries);
           const saved = weeklyRecaps[selectedWeek];
           const isStale = saved && saved.notesHash !== currentHash;
           const generatedDate = saved ? new Date(saved.generatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
@@ -4608,45 +4666,102 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                 const prev=sorted[i-1], curr=sorted[i];
                 if (prev.tomorrow?.trim()) planLines.push(`  ${prev.date}: "${prev.tomorrow.slice(0,150)}" → ${curr.date}: grade ${curr.grade||"?"} $${calcNetPnl(curr).toFixed(0)} mistakes:${(curr.sessionMistakes||[]).filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(", ")||"none"}`);
               }
+              // Direction breakdown
+              const wByDir = { long:{t:0,w:0,pnl:0,comm:0}, short:{t:0,w:0,pnl:0,comm:0} };
+              for (const t of allT) {
+                const d = wByDir[t.direction==="short"?"short":"long"];
+                d.t++; d.pnl+=t.pnl; d.comm+=(t.commission||0); if(t.pnl>0)d.w++;
+              }
+              const wDirLine = ["long","short"].filter(k=>wByDir[k].t>0).map(k=>{
+                const d=wByDir[k]; const wr2=d.t?Math.round(d.w/d.t*100):0;
+                const net=(d.pnl-d.comm).toFixed(0); const sign=d.pnl>=0?"+":"";
+                return `${k.toUpperCase()}: ${d.t}t ${wr2}%WR gross ${sign}$${d.pnl.toFixed(0)} net ${sign}$${net}`;
+              }).join(" | ")||"none";
+              // Session breakdown with ET buckets
+              const wSessMap={};
+              for (const t of allT) {
+                const ts = t.direction==="short"?(t.buyTime||t.sellTime):(t.sellTime||t.buyTime);
+                const m2 = ts?.match(/^\d{8}\s(\d{2})(\d{2})/);
+                const h = m2 ? parseInt(m2[1])+parseInt(m2[2])/60 : -1;
+                const k = h>=20?"Asian":h<4?"London Overnight":h<9.5?"Pre-Market":h<12?"NY Morning":h<16?"NY Afternoon":h>=16?"After Hours":"Unknown";
+                if(!wSessMap[k])wSessMap[k]={pnl:0,t:0,w:0,comm:0};
+                wSessMap[k].pnl+=t.pnl;wSessMap[k].t++;wSessMap[k].comm+=(t.commission||0);if(t.pnl>0)wSessMap[k].w++;
+              }
+              const sessOrderW=["Asian","London Overnight","Pre-Market","NY Morning","NY Afternoon","After Hours","Unknown"];
+              const wSessLine=sessOrderW.filter(k=>wSessMap[k]).map(k=>{
+                const d=wSessMap[k]; const wr2=Math.round(d.w/d.t*100);
+                const net=(d.pnl-d.comm).toFixed(0); const sign=d.pnl>=0?"+":"";
+                return `${k}: ${d.t}t ${wr2}%WR gross ${sign}$${d.pnl.toFixed(0)} net ${sign}$${net}`;
+              }).join(" | ")||"none";
+              const wSessEntries=Object.entries(wSessMap).filter(([,d])=>d.t>0);
+              const wBestSess=wSessEntries.length?wSessEntries.reduce((a,b)=>(b[1].pnl-b[1].comm)>(a[1].pnl-a[1].comm)?b:a):null;
+              const wWorstSess=wSessEntries.length?wSessEntries.reduce((a,b)=>(b[1].pnl-b[1].comm)<(a[1].pnl-a[1].comm)?b:a):null;
+              const grossPnlW = allT.reduce((s,t)=>s+t.pnl,0);
+              const commDragW = Math.abs(grossPnlW)>0?(fees/Math.abs(grossPnlW)*100).toFixed(1):"0";
+              const carryW = allT.filter(t=>t.notes==="overnight-carry").length;
+
               const dayBlocks = sorted.map(e => {
                 const t = e.parsedTrades || [];
-                const lines = [`[${e.date}] Net:$${calcNetPnl(e).toFixed(0)} | ${t.filter(x=>x.pnl>0).length}W/${t.filter(x=>x.pnl<0).length}L | Grade:${e.grade||"?"} | Mood:${(e.moods?.length?e.moods:e.mood?[e.mood]:[]).join(",")||"?"}`];
-                if (e.sessionMistakes?.filter(m=>m!=="No Mistakes — Executed the Plan ✓").length) lines.push(`  Flagged: ${e.sessionMistakes.filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(" | ")}`);
-                const nf = [["Market notes",e.marketNotes],["Rules",e.rules],["Lessons",e.lessonsLearned],["Mistakes note",e.mistakes],["Improvements",e.improvements],["Best trade",e.bestTrade],["Worst trade",e.worstTrade],["Reinforce",e.reinforceRule],["Tomorrow plan",e.tomorrow]];
+                const dGross = t.reduce((s,tr)=>s+tr.pnl,0);
+                const dComm  = t.reduce((s,tr)=>s+(tr.commission||0),0);
+                const tradeLines = t.map((tr,i)=>{
+                  const net=(tr.pnl-(tr.commission||0)).toFixed(2);
+                  const exitT=tr.direction==="short"?(tr.buyTime||tr.sellTime):(tr.sellTime||tr.buyTime);
+                  const hhmm=exitT?exitT.replace(/^\d{8}\s/,"").slice(0,4):"?";
+                  const carry=tr.notes==="overnight-carry"?" [carry]":"";
+                  return `    T${i+1} ${(tr.direction||"long").toUpperCase()} @${hhmm} gross $${tr.pnl.toFixed(2)} net $${net}${carry}`;
+                }).join("\n");
+                const lines = [`[${e.date}] Net:$${calcNetPnl(e).toFixed(0)} Gross:$${dGross.toFixed(0)} Fees:-$${dComm.toFixed(0)} | ${t.filter(x=>x.pnl>0).length}W/${t.filter(x=>x.pnl<0).length}L | Grade:${e.grade||"?"} | Mood:${(e.moods?.length?e.moods:e.mood?[e.mood]:[]).join(",")||"?"}`];
+                if (tradeLines) lines.push(tradeLines);
+                if (e.sessionMistakes?.filter(m=>m!=="No Mistakes — Executed the Plan ✓").length) lines.push(`  Mistakes: ${e.sessionMistakes.filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(" | ")}`);
+                const nf=[["Market notes",e.marketNotes],["Rules",e.rules],["Lessons",e.lessonsLearned],["Mistakes note",e.mistakes],["Improvements",e.improvements],["Best trade",e.bestTrade],["Worst trade",e.worstTrade],["Reinforce",e.reinforceRule],["Tomorrow plan",e.tomorrow]];
                 for (const [lbl,val] of nf) if (val?.trim()) lines.push(`  ${lbl}: ${val.trim()}`);
                 return lines.join("\n");
               }).join("\n\n");
 
-              const prompt = `You are a professional trading coach. A futures trader has shared their complete journal for: ${weekLabel}
+              const prompt = `You are a professional futures trading coach. A trader has shared their complete journal for: ${weekLabel}
 
-PERIOD DATA
-Days: ${sorted.length} | ${winDays}W / ${lossDays}L | Net: $${totalPnl.toFixed(0)} | Avg/day: $${(totalPnl/sorted.length).toFixed(0)}
-Trades: ${allT.length} | WR: ${wr}% | PF: ${fmtPF(pfv)} | Avg win: +$${avgW} | Avg loss: -$${avgL} | Fees: $${fees.toFixed(0)}
+Be direct and specific — cite exact dates, dollar amounts, and quote their own words. Sharp mentor, not a cheerleader.
+
+PERIOD OVERVIEW
+Days: ${sorted.length} | ${winDays}W / ${lossDays}L | Gross: $${grossPnlW.toFixed(0)} | Fees: -$${fees.toFixed(0)} | Net: $${totalPnl.toFixed(0)} | Avg/day: $${(totalPnl/sorted.length).toFixed(0)}
+Trades: ${allT.length} | WR: ${wr}% | PF: ${fmtPF(pfv)} | Avg win: +$${avgW} | Avg loss: -$${avgL}
+Commission drag: $${fees.toFixed(0)} = ${commDragW}% of gross${parseFloat(commDragW)>30?" ⚠ HIGH":""}
+${carryW>0?`Overnight carry-forwards: ${carryW} trade(s)\n`:""}DIRECTION: ${wDirLine}
+SESSION (exit time ET): ${wSessLine}
+${wBestSess?`Best session: ${wBestSess[0]} net $${(wBestSess[1].pnl-wBestSess[1].comm).toFixed(0)}`:""}${wWorstSess&&wWorstSess[0]!==wBestSess?.[0]?` | Worst: ${wWorstSess[0]} net $${(wWorstSess[1].pnl-wWorstSess[1].comm).toFixed(0)}`:""}
 Grades: ${grades}
 Mistakes flagged: ${mistakeLine}${cDays>0?` | ${cDays} clean days`:""}
-${planLines.length ? `\nPLAN vs ACTUAL\n${planLines.join("\n")}` : ""}
+${planLines.length?`\nPLAN vs ACTUAL\n${planLines.join("\n")}`:""}
 
-FULL JOURNAL — every word the trader wrote, day by day:
+FULL JOURNAL — per-trade detail + every written note, day by day:
 ${dayBlocks}
 
 ---
 
-Write a complete coaching review with each section below. Use bullet points. Every bullet must cite a specific date, quote, or number.
+BEFORE WRITING: Check the DIRECTION and SESSION data. If one direction is net-negative while the other is profitable, that is the headline. If commission drag > 30%, name it.
+
+**📊 HEADLINE INSIGHTS**
+3-4 punchy one-liners from the actual data, format: [Pattern]: [numbers] → [what it means]
 
 **📓 NOTES ANALYSIS**
-Read every word written across all days. Find recurring themes (quote each with date), contradictions between intentions and next-day behavior, and unrealized plans. This is the most important section.
+Read every written word:
+• Recurring themes (quote each with date)
+• Contradictions between written intentions and what trades show
+• Unrealized plans that never appeared in subsequent behavior
+• One observation worth reinforcing
 
-**📊 PERFORMANCE PATTERNS**
-3-4 bullets: which session helps vs hurts P&L, whether mistakes cluster on specific day types, hold time or order type edges, commission drag if >10% of gross.
+**📈 PERFORMANCE PATTERNS**
+3-4 bullets: direction/session edge vs drag, mistakes on specific day types, commission drag if material, any hold-time pattern.
 
 **🚩 PLAN vs REALITY**
-For every Tomorrow Plan written: quote it, describe what happened next day (grade, mistakes, P&L), label HONORED ✓ or VIOLATED ✗. Skip if no plans exist.
+Quote each Tomorrow Plan → what happened next day → HONORED ✓ or VIOLATED ✗. Skip if none.
 
 **💡 STRENGTHS**
-2-3 specific positives with exact data.
+2-3 specific strengths with dates and dollar figures.
 
 **🎯 ACTION PLAN FOR NEXT WEEK**
-Exactly 3 rules rooted in findings above. Format: [Root cause] → [Measurable rule with threshold]`;
+Exactly 3 rules. Format: [Root cause from this review] → [Specific measurable rule with threshold]`;
 
               const txt = await aiRequestText(ai, {
                 max_tokens: 8192,
@@ -5555,11 +5670,47 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
 
 function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMode = "weekly", ai, activeJournal, propStatus }) {
   const calcNetPnl = calcNetPnlProp;
-  const [recapMode, setRecapMode] = useState(initMode);
+  const journalId  = activeJournal?.id || "default";
+  const RECAP_KEY  = `ai-recaps-v2-${journalId}`;
+
+  const [recapMode, setRecapMode]         = useState(initMode);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
-  const [summary, setSummary] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [generated, setGenerated] = useState({});
+  const [summary, setSummary]             = useState("");
+  const [loading, setLoading]             = useState(false);
+  const [generated, setGenerated]         = useState({});
+  const [savedAt, setSavedAt]             = useState({});   // { [period]: ISO string }
+  const [savedHashes, setSavedHashes]     = useState({});   // { [period]: notesHash string } — for staleness detection
+  const [taglineId, setTaglineId]         = useState(() => loadTagline());
+  const [showTaglinePicker, setShowTaglinePicker] = useState(false);
+  const [storageReady, setStorageReady]   = useState(false);
+
+  // ── Load persisted recaps from storage on mount ────────────────────────────
+  useEffect(() => {
+    setStorageReady(false);
+    setGenerated({});
+    setSavedAt({});
+    setSavedHashes({});
+    (async () => {
+      try {
+        const r = await storage.get(RECAP_KEY);
+        if (r?.value) {
+          const parsed = JSON.parse(r.value);
+          setGenerated(parsed.texts  || {});
+          setSavedAt(parsed.meta     || {});
+          setSavedHashes(parsed.hashes || {});
+        }
+      } catch {}
+      setStorageReady(true);
+    })();
+  }, [journalId]);
+
+  // ── Persist recaps to storage whenever generated changes (after initial load) ─
+  useEffect(() => {
+    if (!storageReady) return;
+    const keys = Object.keys(generated);
+    if (keys.length === 0) return;
+    storage.set(RECAP_KEY, JSON.stringify({ texts: generated, meta: savedAt, hashes: savedHashes })).catch(() => {});
+  }, [generated, storageReady]);
 
   // Group entries into ISO weeks (Mon–Sun)
   const getWeekKey = (dateStr) => {
@@ -5790,13 +5941,14 @@ Exactly 3 rules rooted in findings above.
 Format: [Root cause from this review] → [Specific measurable rule with threshold]`;
   };
 
-  const generateSummary = async (period) => {
+  const generateSummary = async (period, forceRerun = false) => {
     const periodEntries = grouped[period] || [];
     const label = periodLabel(period);
     setSelectedPeriod(period);
     setSummary("");
 
-    if (generated[period]) { setSummary(generated[period]); return; }
+    // If already saved and not forcing rerun, just display it
+    if (generated[period] && !forceRerun) { setSummary(generated[period]); return; }
 
     const hasNotes = periodEntries.some(e =>
       e.lessonsLearned || e.mistakes || e.improvements || e.marketNotes ||
@@ -5811,10 +5963,9 @@ Format: [Root cause from this review] → [Specific measurable rule with thresho
       let prompt = buildPrompt(periodEntries, label);
 
       // Guard: if prompt is very large, strip per-trade detail lines (keep all written notes)
-      // This prevents 400 errors from exceeding input context limits
       if (prompt.length > 18000) {
         const lines = prompt.split('\n');
-        const trimmed = lines.filter(l => !l.match(/^\s+T\d+:/)); // remove compact trade lines
+        const trimmed = lines.filter(l => !l.match(/^\s+T\d+:/));
         prompt = trimmed.join('\n');
       }
 
@@ -5824,8 +5975,12 @@ Format: [Root cause from this review] → [Specific measurable rule with thresho
         thinkingBudget: 0,
         messages: [{ role: 'user', content: prompt }],
       });
+      const now  = new Date().toISOString();
+      const hash = calcNotesHash(periodEntries);
+      setGenerated(prev   => ({ ...prev, [period]: txt  }));
+      setSavedAt(prev     => ({ ...prev, [period]: now  }));
+      setSavedHashes(prev => ({ ...prev, [period]: hash }));
       setSummary(txt);
-      setGenerated(prev => ({ ...prev, [period]: txt }));
     } catch (err) {
       const f = friendlyAiError(err);
       console.warn('Recap failed:', f.code, f.message, err);
@@ -5833,6 +5988,13 @@ Format: [Root cause from this review] → [Specific measurable rule with thresho
       setSummary(`ERROR:${f.code}:${f.message}`);
     }
     setLoading(false);
+  };
+
+  const deleteRecap = async (period) => {
+    setGenerated(prev   => { const n = {...prev}; delete n[period]; return n; });
+    setSavedAt(prev     => { const n = {...prev}; delete n[period]; return n; });
+    setSavedHashes(prev => { const n = {...prev}; delete n[period]; return n; });
+    if (selectedPeriod === period) setSummary("");
   };
 
   const renderSummary = (text) => {
@@ -5877,8 +6039,25 @@ Format: [Root cause from this review] → [Specific measurable rule with thresho
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 26 }}>🤖</span>
           <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, letterSpacing: "0.1em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>AI RECAP</span>
-          <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.15em" }}>ANALYSE · REFLECT · IMPROVE</span>
+          <button
+            onClick={() => setShowTaglinePicker(p => !p)}
+            title="Change tagline"
+            style={{ fontSize: 9, color: showTaglinePicker ? "#93c5fd" : "#475569", letterSpacing: "0.15em", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit", padding: "2px 4px", transition: "color .15s" }}>
+            {getTaglineText(taglineId)}
+          </button>
         </div>
+        {/* Tagline picker dropdown */}
+        {showTaglinePicker && (
+          <div style={{ marginTop: 8, background: "#060b18", border: "1px solid #1e293b", borderRadius: 6, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6, animation: "formSlide 0.18s ease" }}>
+            <div style={{ fontSize: 9, color: "#3b82f6", letterSpacing: "0.12em", marginBottom: 4 }}>CHOOSE YOUR TAGLINE</div>
+            {AI_TAGLINES.map(t => (
+              <button key={t.id} onClick={() => { setTaglineId(t.id); saveTagline(t.id); setShowTaglinePicker(false); }}
+                style={{ textAlign: "left", background: taglineId === t.id ? "rgba(129,140,248,0.1)" : "transparent", border: `1px solid ${taglineId === t.id ? "rgba(129,140,248,0.35)" : "#0f1729"}`, borderRadius: 4, padding: "7px 12px", fontFamily: "inherit", fontSize: 10, color: taglineId === t.id ? "#93c5fd" : "#64748b", cursor: "pointer", letterSpacing: "0.08em", transition: "all .12s" }}>
+                {taglineId === t.id && <span style={{ color: "#818cf8", marginRight: 6 }}>✓</span>}{t.text}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {entries.length === 0 ? (
@@ -5909,30 +6088,71 @@ Format: [Root cause from this review] → [Specific measurable rule with thresho
                 const es = grouped[p] || [];
                 const pnl = es.reduce((s, e) => s + netPnl(e), 0);
                 const wins = es.filter(e => netPnl(e) > 0).length;
-                const hasNotes = es.some(e => e.lessonsLearned || e.mistakes || e.improvements || e.marketNotes);
+                const hasNotes = es.some(e => e.lessonsLearned || e.mistakes || e.improvements || e.marketNotes || e.parsedTrades?.length > 0);
                 const isSelected = selectedPeriod === p;
                 const isGenerated = !!generated[p];
                 const isLoading = loading && selectedPeriod === p;
+                const ts = savedAt[p] ? new Date(savedAt[p]).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : null;
+                // Staleness: compare current notes hash against what was hashed when recap was generated
+                const currentHash = isGenerated ? calcNotesHash(es) : null;
+                const isStale = isGenerated && savedHashes[p] && currentHash !== savedHashes[p];
                 return (
                   <div key={p}
                     style={{ padding: "12px 14px", borderBottom: "1px solid #0f1729", background: isSelected ? "#0a1628" : "transparent", borderLeft: isSelected ? "2px solid transparent" : "2px solid transparent", borderImage: isSelected ? "linear-gradient(180deg,#38bdf8,#818cf8,#c084fc) 1" : "none", transition: "all .15s" }}
                     onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = "#0d1526"; }}
                     onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isSelected ? "#0a1628" : "transparent"; }}>
-                    <div style={{ fontSize: 10, color: isSelected ? "#93c5fd" : "#94a3b8", marginBottom: 4, letterSpacing: "0.05em" }}>{periodLabel(p)}</div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 3 }}>
+                      <div style={{ fontSize: 10, color: isSelected ? "#93c5fd" : "#94a3b8", letterSpacing: "0.05em" }}>{periodLabel(p)}</div>
+                      {isGenerated && (
+                        <button onClick={e => { e.stopPropagation(); deleteRecap(p); }}
+                          title="Clear saved recap"
+                          style={{ background: "transparent", border: "none", color: "#1e3a5f", fontSize: 10, cursor: "pointer", padding: "0 2px", lineHeight: 1, fontFamily: "inherit", transition: "color .12s" }}
+                          onMouseEnter={e => e.currentTarget.style.color = "#f87171"}
+                          onMouseLeave={e => e.currentTarget.style.color = "#1e3a5f"}>✕</button>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: isGenerated ? 6 : 8 }}>
                       <span style={{ fontSize: 12, fontWeight: 600, color: pnl >= 0 ? "#4ade80" : "#f87171" }}>{pnl >= 0 ? "+" : ""}${Math.abs(pnl).toLocaleString("en-US", { maximumFractionDigits: 0 })}</span>
                       <span style={{ fontSize: 9, letterSpacing: 0 }}><span style={{ color: "#4ade80" }}>{wins}</span><span style={{ color: "#94a3b8" }}>/</span><span style={{ color: "#f87171" }}>{es.length - wins}</span></span>
                     </div>
-                    {!hasNotes && <div style={{ fontSize: 9, color: "#1e3a5f", marginBottom: 6 }}>no notes</div>}
-                    <button
-                      onClick={() => generateSummary(p)}
-                      disabled={isLoading}
-                      style={{ width: "100%", padding: "7px 10px", borderRadius: 4, fontFamily: "inherit", fontSize: 10, letterSpacing: "0.06em", cursor: isLoading ? "not-allowed" : "pointer", transition: "all .15s",
-                        background: isLoading ? "transparent" : isGenerated ? "transparent" : "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)",
-                        border: isLoading ? "1px solid #1e293b" : isGenerated ? "1px solid #1e293b" : "none",
-                        color: isLoading ? "#475569" : isGenerated ? "#94a3b8" : "#070d1a", fontWeight: isGenerated ? 400 : 700 }}>
-                      {isLoading ? "ANALYSING..." : isGenerated ? "↺ REGENERATE" : `ANALYSE ${recapMode === "weekly" ? "WEEK" : "MONTH"} →`}
-                    </button>
+                    {/* Saved indicator + staleness warning */}
+                    {isGenerated && ts && (
+                      <div style={{ fontSize: 8, letterSpacing: "0.06em", marginBottom: 7, display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ color: isStale ? "#f59e0b" : "#166534" }}>●</span>
+                        <span style={{ color: isStale ? "#f59e0b" : "#334155" }}>
+                          {isStale ? "⚠ NOTES CHANGED · " : "SAVED · "}{ts}
+                        </span>
+                      </div>
+                    )}
+                    {!hasNotes && !isGenerated && <div style={{ fontSize: 9, color: "#1e3a5f", marginBottom: 6 }}>no notes</div>}
+                    {/* Action buttons */}
+                    {isGenerated ? (
+                      <div style={{ display: "flex", gap: 5 }}>
+                        <button
+                          onClick={() => generateSummary(p)}
+                          disabled={isLoading}
+                          style={{ flex: 2, padding: "6px 8px", borderRadius: 4, fontFamily: "inherit", fontSize: 9, letterSpacing: "0.06em", cursor: isLoading ? "not-allowed" : "pointer", background: isSelected ? "rgba(56,189,248,0.08)" : "transparent", border: `1px solid ${isSelected ? "rgba(56,189,248,0.2)" : "#1e293b"}`, color: isSelected ? "#93c5fd" : "#64748b", transition: "all .12s" }}>
+                          {isLoading ? "LOADING…" : "VIEW →"}
+                        </button>
+                        <button
+                          onClick={() => generateSummary(p, true)}
+                          disabled={isLoading}
+                          title="Re-run AI analysis"
+                          style={{ flex: 1, padding: "6px 8px", borderRadius: 4, fontFamily: "inherit", fontSize: 9, letterSpacing: "0.06em", cursor: isLoading ? "not-allowed" : "pointer", background: "transparent", border: "1px solid #1e293b", color: "#475569", transition: "all .12s" }}>
+                          ↺
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => generateSummary(p)}
+                        disabled={isLoading}
+                        style={{ width: "100%", padding: "7px 10px", borderRadius: 4, fontFamily: "inherit", fontSize: 10, letterSpacing: "0.06em", cursor: isLoading ? "not-allowed" : "pointer", transition: "all .15s",
+                          background: isLoading ? "transparent" : "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)",
+                          border: isLoading ? "1px solid #1e293b" : "none",
+                          color: isLoading ? "#475569" : "#070d1a", fontWeight: 700 }}>
+                        {isLoading ? "ANALYSING..." : `ANALYSE ${recapMode === "weekly" ? "WEEK" : "MONTH"} →`}
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -5943,9 +6163,9 @@ Format: [Root cause from this review] → [Specific measurable rule with thresho
           <div style={{ background: "#0f1729", border: "1px solid #1e293b", borderRadius: 6, minHeight: 400 }}>
             {!selectedPeriod ? (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 400, gap: 12, color: "#64748b" }}>
-                <div style={{ fontSize: 28 }}>✦</div>
-                <div style={{ fontSize: 12, letterSpacing: "0.1em" }}>SELECT A PERIOD TO GENERATE YOUR RECAP</div>
-                <div style={{ fontSize: 11, color: "#1e3a5f" }}>Powered by Claude AI</div>
+                <div style={{ fontSize: 28, opacity: 0.3 }}>✦</div>
+                <div style={{ fontSize: 12, letterSpacing: "0.1em" }}>SELECT A PERIOD TO VIEW OR GENERATE YOUR RECAP</div>
+                <div style={{ fontSize: 10, color: "#1e3a5f", letterSpacing: "0.1em" }}>{getTaglineText(taglineId)}</div>
               </div>
             ) : (
               <div style={{ padding: "20px 24px" }}>
@@ -5954,6 +6174,20 @@ Format: [Root cause from this review] → [Specific measurable rule with thresho
                   <div>
                     <div style={{ fontSize: 10, color: "#3b82f6", letterSpacing: "0.1em", marginBottom: 4 }}>{recapMode.toUpperCase()} RECAP</div>
                     <div style={{ fontSize: 15, color: "#e2e8f0", fontWeight: 600 }}>{periodLabel(selectedPeriod)}</div>
+                    {savedAt[selectedPeriod] && (() => {
+                      const selectedEs = grouped[selectedPeriod] || [];
+                      const panelHash = calcNotesHash(selectedEs);
+                      const panelStale = savedHashes[selectedPeriod] && panelHash !== savedHashes[selectedPeriod];
+                      return (
+                        <div style={{ fontSize: 8, letterSpacing: "0.08em", marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}>
+                          <span style={{ color: panelStale ? "#f59e0b" : "#166534" }}>●</span>
+                          <span style={{ color: panelStale ? "#f59e0b" : "#334155" }}>
+                            {panelStale ? "⚠ NOTES CHANGED — consider re-running · " : "SAVED "}
+                            {new Date(savedAt[selectedPeriod]).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                   {(() => {
                     const es = grouped[selectedPeriod] || [];
@@ -5974,18 +6208,33 @@ Format: [Root cause from this review] → [Specific measurable rule with thresho
                 {loading ? (
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 300, gap: 16 }}>
                     <div style={{ fontSize: 11, color: "#3b82f6", letterSpacing: "0.15em", animation: "pulse 1.5s infinite" }}>✦ GENERATING YOUR RECAP...</div>
-                    <div style={{ fontSize: 10, color: "#64748b" }}>Claude is analyzing your journal notes</div>
+                    <div style={{ fontSize: 10, color: "#64748b" }}>Analysing your journal data & notes…</div>
                     <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
                   </div>
                 ) : renderSummary(summary)}
 
-                {/* Regenerate */}
-                {summary && summary !== "NO_NOTES" && summary !== "ERROR" && !loading && (
-                  <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #1e293b", display: "flex", justifyContent: "flex-end" }}>
-                    <button onClick={() => { setGenerated(prev => { const n = {...prev}; delete n[selectedPeriod]; return n; }); generateSummary(selectedPeriod); }}
-                      style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em" }}>↺ REGENERATE</button>
-          </div>
-          )}
+                {/* Bottom actions */}
+                {summary && !summary.startsWith("ERROR:") && summary !== "NO_NOTES" && summary !== "AI_NOT_CONFIGURED" && !loading && (
+                  <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontSize: 9, color: "#1e3a5f", letterSpacing: "0.08em" }}>
+                      {savedAt[selectedPeriod] ? `● SAVED ${new Date(savedAt[selectedPeriod]).toLocaleDateString("en-US",{month:"short",day:"numeric"})}` : ""}
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => deleteRecap(selectedPeriod)}
+                        style={{ background: "transparent", border: "1px solid #1e293b", color: "#475569", padding: "8px 14px", borderRadius: 4, fontFamily: "inherit", fontSize: 10, cursor: "pointer", letterSpacing: "0.06em", transition: "all .12s" }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "#7f1d1d"; e.currentTarget.style.color = "#f87171"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#475569"; }}>
+                        ✕ CLEAR
+                      </button>
+                      <button onClick={() => generateSummary(selectedPeriod, true)}
+                        style={{ background: "transparent", border: "1px solid #1e293b", color: "#94a3b8", padding: "8px 18px", borderRadius: 4, fontFamily: "inherit", fontSize: 11, cursor: "pointer", letterSpacing: "0.06em", transition: "all .12s" }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "#3b82f6"; e.currentTarget.style.color = "#93c5fd"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e293b"; e.currentTarget.style.color = "#94a3b8"; }}>
+                        ↺ RE-RUN
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -10232,8 +10481,11 @@ export default function TradingJournal() {
                       <div style={{ position:"absolute", bottom:-1, right:-1, width:20, height:3, background:"linear-gradient(90deg,transparent,#c084fc)" }} />
                       <div style={{ position:"absolute", bottom:-1, right:-1, width:3, height:20, background:"linear-gradient(180deg,transparent,#c084fc)" }} />
                       <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
-                        <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, letterSpacing:"0.28em", background:"linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>
-                          {j.type === JOURNAL_TYPES.PROP ? "🏆 PROP" : "💼 PERSONAL"}
+                        <div style={{ fontFamily:"'DM Mono',monospace", fontSize:7, letterSpacing:"0.28em", display:"flex", alignItems:"center", gap:2 }}>
+                          <span style={{ fontSize:9 }}>{j.type === JOURNAL_TYPES.PROP ? "🏆" : "💼"}</span>
+                          <span style={{ background:"linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>
+                            {j.type === JOURNAL_TYPES.PROP ? "PROP" : "PERSONAL"}
+                          </span>
                         </div>
                         <div style={{ fontFamily:"'Cinzel',serif", fontWeight:900, fontSize:20, letterSpacing:"0.08em",
                           background:"linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)",
@@ -10558,7 +10810,7 @@ export default function TradingJournal() {
                   <button onClick={() => { const [y, m] = calMonth.split("-").map(Number); const d = new Date(y, m - 2, 1); setCalMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); }}
                     style={{ display:"block", background:"#070d1a", color:"#64748b", border:"none", padding:"10px 15px", borderRadius:4, fontFamily:"inherit", fontSize:13, cursor:"pointer" }}>‹</button>
                 </span>
-                <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, letterSpacing: "0.12em", minWidth: 150, textAlign: "center", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1 }}>
+                <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, letterSpacing: "0.12em", minWidth: 160, textAlign: "center", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text", lineHeight: 1 }}>
                   {(() => { const [y, m] = calMonth.split("-").map(Number); return new Date(y, m - 1, 1).toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase(); })()}
                 </span>
                 <span style={{ display:"inline-block", padding:1, borderRadius:5, background:"linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))" }}>
@@ -10614,7 +10866,7 @@ export default function TradingJournal() {
   </div>
   <div className="helper-text" style={{ marginTop: 4 }}>WEEK BY WEEK PROGRESS · SPOT YOUR PATTERNS</div>
 </div>
-              <WeeklyPerformance entries={entries} netPnl={netPnl} fmtPnl={fmtPnl} pnlColor={pnlColor} calcAnalytics={calcAnalytics} ai={aiCfg} />
+              <WeeklyPerformance entries={entries} netPnl={netPnl} fmtPnl={fmtPnl} pnlColor={pnlColor} calcAnalytics={calcAnalytics} ai={aiCfg} activeJournal={activeJournal} />
             </>
           ) : listMode === "performance" ? (
             <>
