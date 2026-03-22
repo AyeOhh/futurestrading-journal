@@ -5746,12 +5746,15 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
   }, [generated, storageReady]);
 
   // Group entries into ISO weeks (Mon–Sun)
+  // ISO 8601 week key — must match WeeklyPerformance's getISOWeek exactly
   const getWeekKey = (dateStr) => {
     const d = new Date(dateStr + "T12:00:00");
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    const mon = new Date(d.setDate(diff));
-    return `${mon.getFullYear()}-W${String(Math.ceil((mon.getDate() + new Date(mon.getFullYear(), 0, 1).getDay() - 1) / 7)).padStart(2, "0")}`;
+    const jan4 = new Date(d.getFullYear(), 0, 4);
+    const startOfWeek1 = new Date(jan4);
+    startOfWeek1.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7));
+    const diff = d - startOfWeek1;
+    const week = Math.floor(diff / (7 * 24 * 60 * 60 * 1000)) + 1;
+    return `${d.getFullYear()}-W${String(week).padStart(2, "0")}`;
   };
 
   const getWeekLabel = (dateStr) => {
