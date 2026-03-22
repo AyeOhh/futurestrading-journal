@@ -4683,7 +4683,17 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
               const planLines = [];
               for (let i=1;i<sorted.length;i++) {
                 const prev=sorted[i-1], curr=sorted[i];
-                if (prev.tomorrow?.trim()) planLines.push(`  ${prev.date}: "${prev.tomorrow.slice(0,150)}" → ${curr.date}: grade ${curr.grade||"?"} $${calcNetPnl(curr).toFixed(0)} mistakes:${(curr.sessionMistakes||[]).filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(", ")||"none"}`);
+                if (prev.tomorrow?.trim()) {
+                  const currClean = curr.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓");
+                  const nextNotes = [curr.marketNotes, curr.lessonsLearned, curr.mistakes, curr.rules, curr.bestTrade, curr.worstTrade].filter(Boolean).map(n=>n.trim()).join(' | ').slice(0,300);
+                  const tags = (curr.sessionMistakes||[]).filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(", ")||"none";
+                  planLines.push(
+                    `  ${prev.date} plan: "${prev.tomorrow.slice(0,200)}"\n` +
+                    `  ${curr.date} outcome: grade ${curr.grade||"?"} | net $${calcNetPnl(curr).toFixed(0)}${currClean?" | CLEAN EXECUTION DAY":""}\n` +
+                    `  ${curr.date} notes: ${nextNotes||"(none written)"}\n` +
+                    `  ${curr.date} tagged: ${tags}`
+                  );
+                }
               }
               // Direction breakdown
               const wByDir = { long:{t:0,w:0,pnl:0,comm:0}, short:{t:0,w:0,pnl:0,comm:0} };
@@ -4774,7 +4784,11 @@ Read every written word:
 3-4 bullets: direction/session edge vs drag, mistakes on specific day types, commission drag if material, any hold-time pattern.
 
 **🚩 PLAN vs REALITY**
-Quote each Tomorrow Plan → what happened next day → HONORED ✓ or VIOLATED ✗. Skip if none.
+For every Tomorrow Plan written, use this format:
+• **[Date] Plan:** Quote the specific intention (exact words, under 30 words)
+• **What happened:** Actual P&L, grade, and key trades — specific, not just a label
+• **Verdict:** "Plan held — [what they did right]" OR "Plan slipped — [the specific rule that broke, with evidence from trades or notes]"
+Never use ✓ or ✗ as the lead word. Cite trade times, dollar figures, or quotes from notes as evidence. Skip if no plans exist.
 
 **💡 STRENGTHS**
 2-3 specific strengths with dates and dollar figures.
@@ -5928,7 +5942,17 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
       const prev=sorted[i-1], curr=sorted[i];
       if (prev.tomorrow?.trim()) {
         const currClean = curr.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓");
-        planLines.push(`  ${prev.date} wrote: "${prev.tomorrow.slice(0,150)}"\n  ${curr.date} actual: grade ${curr.grade||"?"} $${netPnl(curr).toFixed(0)}${currClean ? " ✓ CLEAN EXECUTION DAY" : ` | mistakes: ${(curr.sessionMistakes||[]).filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(", ")||"none"}`}`);
+        const nextDayNotes = [
+          curr.marketNotes, curr.lessonsLearned, curr.mistakes,
+          curr.rules, curr.bestTrade, curr.worstTrade
+        ].filter(Boolean).map(n => n.trim()).join(' | ').slice(0, 300);
+        const mistakeTags = (curr.sessionMistakes||[]).filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(", ")||"none";
+        planLines.push(
+          `  ${prev.date} plan: "${prev.tomorrow.slice(0,200)}"\n` +
+          `  ${curr.date} outcome: grade ${curr.grade||"?"} | net $${netPnl(curr).toFixed(0)}${currClean ? " | CLEAN EXECUTION DAY" : ""}\n` +
+          `  ${curr.date} notes: ${nextDayNotes || "(none written)"}\n` +
+          `  ${curr.date} tagged: ${mistakeTags}`
+        );
       }
     }
 
@@ -5999,10 +6023,12 @@ One bullet per finding. Quote their exact words. Mistake dropdown tags can appea
 • Any hold-time or order-type edge visible in the data
 
 **\ud83d\udea9 PLAN vs REALITY**
-For every "Tomorrow plan" written, analyze the next trading day:
-• Quote the exact plan → what happened (grade, P&L, mistakes flagged) → HONORED ✓ or VIOLATED ✗
-A plan fully honored deserves explicit acknowledgment — use HONORED ✓ and note what the trader did right.
-Skip if no plans were written.
+For every "Tomorrow plan" written, cover it in this exact format — no headers, just flowing bullets:
+• **[Date] Plan:** Quote the specific intention the trader wrote (exact words, under 30 words)
+• **What happened:** State the actual outcome — P&L, grade, key trades. Be specific, not just the label.
+• **Verdict:** One sentence starting with either "Plan held — [what they did right]" or "Plan slipped — [the specific rule that broke, with evidence from trades or notes, not just the mistake tags]"
+
+If a plan was honored, name what specifically worked. If it slipped, explain in plain language what the gap was between the intention and the reality — cite a trade time, a P&L figure, or a quote from the day's notes. Never use ✓ or ✗ as the lead word of a sentence. Skip this section entirely if no Tomorrow plans were written.
 
 **\ud83d\udca1 STRENGTHS**
 2-3 specific strengths backed by trade data or direct quotes from written notes. Be genuine — if the morning session consistently delivered, say so with exact figures. If the trader wrote something insightful and the data confirms it, reinforce it. No filler praise.
