@@ -289,9 +289,7 @@ const AI_TAGLINE_KEY = 'tj-ai-tagline-v1';
 const loadTagline = () => { try { return localStorage.getItem(AI_TAGLINE_KEY) || 'analyse'; } catch { return 'analyse'; } };
 const saveTagline = (id) => { try { localStorage.setItem(AI_TAGLINE_KEY, id); } catch {} };
 const getTaglineText = (id) => AI_TAGLINES.find(t => t.id === id)?.text || AI_TAGLINES[0].text;
-
-// ── Shared notes hash — identical algorithm used by both WeeklyPerformance and AIRecapView ──
-// Used to detect staleness: if notes changed since the recap was generated, flag it.
+// ── Shared notes hash — identical algorithm used by WeeklyPerformance and AIRecapView ──
 const calcNotesHash = (periodEntries) => {
   const str = periodEntries.map(e =>
     [e.lessonsLearned, e.mistakes, e.improvements, e.rules, e.reinforceRule,
@@ -302,6 +300,9 @@ const calcNotesHash = (periodEntries) => {
   for (let i = 0; i < str.length; i++) { h = ((h << 5) - h) + str.charCodeAt(i); h |= 0; }
   return String(h);
 };
+
+// ── Note sanitiser — strips invisible Unicode, normalises quotes/dashes ──────
+// Called before saving any freeform text field to prevent AI prompt corruption.
 
 const BROKER_PRESETS = {
   none:        { label: 'Generic / Other',   hint: '' },
@@ -2302,12 +2303,12 @@ function TopFindings({ entry, a, ai }) {
       return `${k.toUpperCase()}: ${d.trades}t ${wr}%WR gross $${d.pnl.toFixed(2)} net ~$${net} PF ${pf}`;
     }).join(" | ") : "none";
 
-    const prompt = `You are an expert futures trading analyst. Analyze this trader's full day of data and surface exactly 3 findings — the most insightful, non-obvious patterns that will directly improve their profitability. Each finding must be data-backed with specific numbers. No fluff, no generic advice.
+    const prompt = `You are an expert futures trading analyst. Analyze this trader's full day of data and surface exactly 3 findings — the most insightful, non-obvious patterns that will directly improve their profitability. Each finding must be grounded in trade data or the trader's own written words. No fluff, no generic advice.
 
 DATE: ${entry.date} (${new Date(entry.date+"T12:00:00").toLocaleDateString("en-US",{weekday:"long"})})
 INSTRUMENTS: ${(entry.instruments?.length ? entry.instruments : [entry.instrument||"?"]).join(", ")}
 GRADE: ${entry.grade||"?"} | BIAS: ${entry.bias||"?"} | MOOD: ${(entry.moods||[entry.mood]).filter(Boolean).join(", ")||"?"}
-SESSION MISTAKES: ${(entry.sessionMistakes||[]).join(", ")||"none"}
+MISTAKES TAGGED (light reference only — use these to corroborate patterns in the written notes, not as the primary focus): ${(entry.sessionMistakes||[]).filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(", ")||"none"}
 GROSS P&L: $${entry.pnl||0} | NET P&L: $${(parseFloat(entry.pnl||0)-parseFloat(entry.commissions||0)).toFixed(2)} | FEES: $${entry.commissions||0} (${commDragPct}% of gross)
 TOTAL TRADES: ${trades.length} | WINNERS: ${winners.length} | LOSERS: ${losers.length}${carryTrades.length > 0 ? ` | CARRY-FORWARD: ${carryTrades.length}` : ""}
 WIN RATE: ${trades.length ? ((winners.length/trades.length)*100).toFixed(1) : 0}%
@@ -2326,27 +2327,34 @@ BIAS: ${entry.bias||"none"}
 ${noteSummary ? `JOURNAL NARRATIVE (AI-consolidated from all notes):\n${noteSummary}\n` : ""}MARKET NOTES: ${note("marketNotes")}
 RULES FOLLOWED/BROKEN: ${note("rules")}
 LESSONS LEARNED: ${note("lessonsLearned")}
-MISTAKES (freeform): ${note("mistakes")}
-SESSION MISTAKES FLAGGED: ${(entry.sessionMistakes||[]).join(", ")||"none"}
+MISTAKES (freeform, own words): ${note("mistakes")}
 AREAS FOR IMPROVEMENT: ${note("improvements")}
 BEST TRADE (own words): ${note("bestTrade")}
 WORST TRADE (own words): ${note("worstTrade")}
 RULE TO REINFORCE: ${note("reinforceRule")}
 PLAN FOR TOMORROW: ${note("tomorrow")}
-${(() => { const costs = entry.mistakeCosts||{}; const rows = Object.entries(costs).filter(([,v])=>v!=null&&Number(v)>0); if(!rows.length) return "MISTAKE COSTS: none attributed"; const total = rows.reduce((s,[,v])=>s+Number(v),0); return `MISTAKE COST BREAKDOWN: ${rows.map(([tag,v])=>`${tag}: $${Number(v).toFixed(0)}`).join(", ")} — total $${total.toFixed(0)}${entry.mistakeCostNotes?" · Notes: "+entry.mistakeCostNotes:""}`;})()}
+${(() => { const costs = entry.mistakeCosts||{}; const rows = Object.entries(costs).filter(([,v])=>v!=null&&Number(v)>0); if(!rows.length) return ""; const total = rows.reduce((s,[,v])=>s+Number(v),0); return `MISTAKE COST BREAKDOWN: ${rows.map(([tag,v])=>`${tag}: $${Number(v).toFixed(0)}`).join(", ")} — total $${total.toFixed(0)}${entry.mistakeCostNotes?" · Notes: "+entry.mistakeCostNotes:""}`;})()}
 
 FULL TRADE LOG:
 ${tradeLog||"No trade data imported"}
 
-CRITICAL INSTRUCTION: Before generating findings, check these in order: (1) Is one direction (long/short) net-negative while the other is profitable? That is finding-worthy. (2) Is commission drag above 25% of gross? Name the exact % and dollar amount. (3) Which session window had the worst net P&L — and is it concentrated in a specific time window? Then cross-reference the trader's OWN WRITTEN NOTES against the trade data. Look for: contradictions between stated intentions and actual trades, patterns visible in the log but absent from notes, and cost of flagged mistakes. At least one finding must reference something from their written notes directly.
+PRIORITY ORDER for finding sources:
+1. TRADE DATA — sequence patterns, direction/session edge, commission drag, hold-time, sizing
+2. WRITTEN NOTES — what the trader actually said in market notes, lessons, rules, best/worst trade descriptions
+3. TAGGED MISTAKES — only use as light corroboration of something already visible in #1 or #2, not as the primary finding
+
+Before writing: (1) Is one direction net-negative while the other is profitable? (2) Is commission drag above 25%? (3) Which session had the worst net P&L? (4) What pattern in the WRITTEN NOTES contradicts or confirms what the trade log shows?
 
 Return EXACTLY this format, nothing else:
 
 **FINDING 1: [short punchy title]**
-[2-3 sentences. Specific data point → what it means → one concrete action to fix or reinforce it]
+[2-3 sentences. Specific data point or own written words → what it means → one concrete action to fix or reinforce it]
 
 **FINDING 2: [short punchy title]**
-[2-3 sentences. Specific data point → what it means → one concrete action to fix or reinforce it]
+[2-3 sentences. Specific data point or own written words → what it means → one concrete action to fix or reinforce it]
+
+**FINDING 3: [short punchy title]**
+[2-3 sentences. Specific data point or own written words → what it means → one concrete action to fix or reinforce it]
 
 **FINDING 3: [short punchy title]**
 [2-3 sentences. Specific data point → what it means → one concrete action to fix or reinforce it]`;
@@ -2482,10 +2490,9 @@ function DailyAIAnalysis({ entry, a, ai, priorPlan = null }) {
 
 DATE: ${entry.date}
 INSTRUMENT: ${(entry.instruments?.length ? entry.instruments : entry.instrument ? [entry.instrument] : ["Unknown"]).join(", ")}
-MOOD: ${(entry.moods?.length ? entry.moods : entry.mood ? [entry.mood] : ["Not logged"]).join(", ")}
-SESSION MISTAKES FLAGGED: ${(entry.sessionMistakes?.length ? entry.sessionMistakes : ["None flagged"]).join(", ")}
 GRADE: ${entry.grade || "Not logged"}${entry.executionScore != null || entry.decisionScore != null ? ` (Execution: ${entry.executionScore != null ? entry.executionScore + "/10" : "—"}, Decision: ${entry.decisionScore != null ? entry.decisionScore + "/10" : "—"})` : ""}
-BIAS: ${entry.bias || "Not logged"}
+BIAS: ${entry.bias || "Not logged"} | MOOD: ${(entry.moods?.length ? entry.moods : entry.mood ? [entry.mood] : ["Not logged"]).join(", ")}
+MISTAKES TAGGED (light context — corroborate written notes, not primary source): ${(entry.sessionMistakes||[]).filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(", ")||"none"}
 ${(() => {
   const costs = entry.mistakeCosts || {};
   const rows = Object.entries(costs).filter(([, v]) => v != null && v > 0);
@@ -2531,12 +2538,11 @@ ${flaggedTrades}
 FULL TRADE LOG (chronological — use this to detect sequencing, sizing, and revenge patterns):
 ${tradeLog}
 
-TRADER'S OWN NOTES:
+TRADER'S WRITTEN NOTES (primary source — mine these for patterns, themes, self-assessments):
 ${noteSummary ? `  JOURNAL NARRATIVE (AI-consolidated):\n  ${noteSummary}\n` : ""}  Market notes: ${note("marketNotes")}
   Rules followed/broken: ${note("rules")}
   Lessons learned: ${note("lessonsLearned")}
-  Mistakes (freeform): ${note("mistakes")}
-  Session mistakes flagged: ${(entry.sessionMistakes?.length ? entry.sessionMistakes : ["None"]).join(", ")}
+  Mistakes (own words): ${note("mistakes")}
   Improvements: ${note("improvements")}
   Best trade: ${note("bestTrade")}
   Worst trade: ${note("worstTrade")}
@@ -2550,28 +2556,28 @@ PREVIOUS SESSION'S PLAN (written ${priorPlan.date}, for today):
 
 CRITICAL CROSS-REFERENCE REQUIRED: Compare the previous plan above against today's actual trades and notes. Were the stated intentions followed? Look for direct contradictions between what was planned and what was executed. If the plan said "no trades after 11am" and trades occurred at 1pm, that is a violation. If the plan said "size down" and contract sizes increased, name it.` : ""}
 
-Provide a deep, data-driven daily analysis with exactly these sections. Use specific numbers from the data. Be like a sharp trading coach, not a cheerleader. Cross-reference the trade log with stated notes — call out discrepancies.
+Provide a deep, data-driven daily analysis with exactly these sections. Use specific numbers from the data. Be a balanced coaching mentor — honest about weaknesses, genuine about strengths. Primary sources: trade data and written notes. Mistake tags are light context only.
 
 **🔬 DATA SNAPSHOT**
-3-4 sentences on what the raw numbers reveal. Mandatory checks: (1) Is one direction (long/short) net-negative while the other is profitable? Name it with exact figures. (2) Which session window drove the most P&L — and which drained it? (3) Commission drag: if fees exceed 20% of gross, name the exact % and dollar impact. (4) Lead with the single most important stat (profit factor, expectancy, or a direction/session edge). If execution/decision scores were logged, note whether they align with actual performance. Be specific — cite numbers, not generalities.
+3-4 sentences on what the raw numbers reveal. Mandatory checks: (1) Is one direction (long/short) net-negative while the other is profitable? Name it with exact figures. (2) Which session window drove the most P&L — and which drained it? (3) Commission drag: if fees exceed 20% of gross, name the exact % and dollar impact. (4) Lead with the single most important stat (profit factor, expectancy, or a direction/session edge). Be specific — cite numbers, not generalities.
+
 **✅ WHAT WORKED TODAY**
-2-3 specific things backed by the data. Reference actual trades by number, time window, or price. If a session window dominated, name it. If the R-ratio was strong, say so. Be concrete — no generic praise.
+2-3 specific things backed by the data. Reference actual trades by number, time window, or price. If a session window dominated, name it. If the trader wrote something in their notes that aligns with what the data shows — reinforce it explicitly and genuinely. A plan followed deserves recognition as much as a mistake deserves correction. No generic praise, only concrete specifics.
 
 **⚠️ WHAT NEEDS WORK**
-2-3 specific weaknesses from the data AND flagged mistakes. Directly cross-reference: if "Cut winner early" was flagged and avg winner < avg loser, say exactly that and quantify the gap. If trades after a losing trade show a pattern (bigger size, quicker exit, worse entry), name it. Don't soften.
+2-3 specific weaknesses sourced primarily from TRADE DATA and the trader's OWN WRITTEN NOTES — not the mistake dropdown tags. Look at: trade sequence patterns (sizing changes, re-entry timing after losses, session timing drift), what the trader wrote in lessons/market notes vs. what the trades actually show. Tagged mistakes can corroborate but should not be the headline. Quantify the gap where possible (e.g. avg loss after 3pm = 2× avg loss before 3pm).
 
 **🧠 BEHAVIORAL INSIGHTS**
-Two-part analysis: (A) TRADE SEQUENCE — scan the log for revenge trading (losses followed by bigger size/faster re-entry), FOMO (late entries into fast moves), discipline failures (dead zone trades, overtrading after a win), emotional escalation, or size inconsistency. Name each pattern with specific trade numbers as evidence. (B) NOTES VS. REALITY — read every word the trader wrote today (market notes, lessons learned, mistakes, rules, best/worst trade descriptions). Find contradictions between what they wrote and what the trades show. If they wrote "I was disciplined" but the log shows a revenge trade, name it. If they identified a lesson but the same pattern appeared earlier in the day, flag it. If mood logged correlates with a known behavioral pattern in today's data, call it out explicitly.
+Two-part analysis: (A) TRADE SEQUENCE — scan the log for patterns in sequence and timing: losses followed by faster re-entry, trades well outside normal windows, escalating size after wins or losses, size inconsistency. Name each pattern with specific trade numbers as evidence. (B) NOTES VS. REALITY — read every word the trader wrote today (market notes, lessons, rules, best/worst trade). Where their written words contradict what the trades show, name it precisely. Where their written words accurately capture what the data confirms, reinforce it — self-awareness that matches reality is a real edge.
 ${priorPlan && (priorPlan.plan || priorPlan.reinforceRule) ? `
 **🚩 RED FLAGS — PLAN VS. EXECUTION**
-Cross-reference today's trades directly against the previous session's stated plan. For each contradiction found: (1) quote what was planned, (2) describe what actually happened with specific trade evidence, (3) label the violation type (e.g. rule break, timing violation, sizing violation, setup deviation). If no violations were found, state that explicitly and note which parts of the plan were honored. This section is non-negotiable if prior plan data exists.
+Cross-reference today's trades directly against the previous session's stated plan. For each contradiction: (1) quote what was planned, (2) describe what actually happened with specific trade evidence, (3) label the violation type. If no violations were found, state that explicitly and note which parts of the plan were honored — a clean execution day deserves acknowledgment.
 ` : ""}
-
-**📈 MISTAKE TREND WATCH**
-For each flagged session mistake AND each mistake mentioned in freeform notes: (1) find the specific trade(s) where it occurred — trade number, time, and P&L impact, (2) classify root cause as emotional / mechanical / situational, (3) calculate the dollar cost if quantifiable (e.g. "held loser 4 extra minutes = -$X vs avg loss"), (4) write one precise rule to prevent it tomorrow with a measurable threshold. If no mistakes were flagged in any notes field, scan the trade log independently for patterns the trader missed — unacknowledged mistakes are the most dangerous ones. If mistake cost data was provided, cross-reference it: does the trader's dollar attribution match what the trade data actually shows?
+**📈 PATTERN WATCH**
+Look at the trade log and written notes together. Identify 1-2 patterns the trader may not have fully named — something visible in the sequence or timing of trades that their notes hint at but don't explicitly state. If a positive pattern is present (e.g. morning trades consistently profitable, limit orders outperform market orders), name it with data. Use specific trade numbers, times, and P&L figures.
 
 **🎯 TOMORROW'S EDGE**
-3 concrete, measurable action points. At least one must directly address a flagged session mistake with a specific rule (time, size, setup condition). Make them actionable: "Max 2 contracts until first profitable trade confirmed" not "size down."
+3 concrete, measurable action points rooted in what the TRADE DATA and WRITTEN NOTES revealed today. At least one should reinforce something the trader is already doing well. Make them specific and actionable: "Max 2 contracts until first profitable trade confirmed" not "size down."
 
 Keep each section tight. No filler. Maximum value per word. Total response should be 400-600 words.`;
   };
@@ -3223,7 +3229,20 @@ Rewritten summary:` }],
   );
 }
 
-function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, netPnl: calcNetPnlProp, gradeColor, calcAnalytics, calendarNotes = {}, saveCalNote = () => {} }) {
+function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, netPnl: calcNetPnlProp, gradeColor, calcAnalytics }) {
+
+  // ── Calendar notes: state lives HERE, not in parent ─────────────────────
+  // This prevents full-app re-renders on every keystroke.
+  const [calendarNotes, setCalendarNotes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("tj-cal-notes-v1") || "{}"); } catch { return {}; }
+  });
+  const saveCalNote = (dateStr, text) => {
+    setCalendarNotes(prev => {
+      const updated = { ...prev, [dateStr]: text };
+      try { localStorage.setItem("tj-cal-notes-v1", JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  };
   const calcNetPnl = calcNetPnlProp;
   const [year, mon] = month.split("-").map(Number);
   const [collapsed, setCollapsed] = useState(() => {
@@ -3546,34 +3565,34 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               ) : !isWeekend && (isPast || dateStr === today) ? (
                 <div style={{ fontSize: 10, color: "#334155", marginTop: 6, textAlign: "center", letterSpacing: "0.08em" }}>+ add</div>
               ) : null}
-              {/* Note area — auto-resize driven by live value via scrollHeight */}
+              {/* Note area — weekend plans / quick notes */}
               <div style={{ marginTop: "auto", paddingTop: 8, marginTop: 8, borderTop: calendarNotes[dateStr] ? "1px solid #1e293b" : "1px solid transparent" }}
                 onClick={e => e.stopPropagation()}>
                 <textarea
                   value={calendarNotes[dateStr] || ""}
-                  ref={el => { if (el) el.style.setProperty('color', '#fbbf24', 'important'); }}
                   onChange={e => {
                     e.stopPropagation();
                     saveCalNote(dateStr, e.target.value);
-                    e.target.style.height = "20px";
-                    e.target.style.height = e.target.scrollHeight + "px";
+                    // Height managed purely by the field-sizing CSS — no imperative DOM resize
                     e.target.parentNode.style.borderTopColor = e.target.value ? "#1e293b" : "transparent";
                   }}
                   onClick={e => e.stopPropagation()}
                   placeholder={isWeekend ? "weekend plan…" : "notes…"}
-                  style={{ width: "100%", fontSize: 12, background: "transparent", border: "none", resize: "none", fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5, display: "block", overflow: "hidden", height: calendarNotes[dateStr] ? "auto" : "20px", minHeight: "20px", textAlign: "center" }}
-                  className="no-autoresize cal-note"
+                  style={{ width: "100%", fontSize: 12, background: "transparent", border: "none", resize: "none",
+                    fontFamily: "DM Mono,monospace", outline: "none", padding: "3px 0 0 0", lineHeight: 1.5,
+                    display: "block", overflow: "hidden", minHeight: "20px",
+                    // Don't control height via React style — let field-sizing: content handle it.
+                    // This prevents the collapse-then-expand flicker on every re-render.
+                    textAlign: "center" }}
+                  className="cal-note"
                   onFocus={e => {
                     e.currentTarget.style.setProperty('color', '#fde68a', 'important');
                     e.currentTarget.parentNode.style.borderTopColor = "rgba(251,191,36,0.4)";
-                    e.currentTarget.style.height = "20px";
-                    e.currentTarget.style.height = e.currentTarget.scrollHeight + "px";
                   }}
                   onBlur={e => {
                     e.currentTarget.style.setProperty('color', '#fbbf24', 'important');
                     const val = e.currentTarget.value;
                     e.currentTarget.parentNode.style.borderTopColor = val ? "#1e293b" : "transparent";
-                    if (!val) { e.currentTarget.style.height = "20px"; }
                   }}
                 />
               </div>
@@ -4731,7 +4750,7 @@ ${carryW>0?`Overnight carry-forwards: ${carryW} trade(s)\n`:""}DIRECTION: ${wDir
 SESSION (exit time ET): ${wSessLine}
 ${wBestSess?`Best session: ${wBestSess[0]} net $${(wBestSess[1].pnl-wBestSess[1].comm).toFixed(0)}`:""}${wWorstSess&&wWorstSess[0]!==wBestSess?.[0]?` | Worst: ${wWorstSess[0]} net $${(wWorstSess[1].pnl-wWorstSess[1].comm).toFixed(0)}`:""}
 Grades: ${grades}
-Mistakes flagged: ${mistakeLine}${cDays>0?` | ${cDays} clean days`:""}
+Mistakes tagged (light context): ${mistakeLine}${cDays>0?` | ${cDays} clean days`:""}
 ${planLines.length?`\nPLAN vs ACTUAL\n${planLines.join("\n")}`:""}
 
 FULL JOURNAL — per-trade detail + every written note, day by day:
@@ -5763,7 +5782,7 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
     return sample ? getWeekLabel(sample) : p;
   };
 
-  const buildPrompt = (periodEntries, label) => {
+  const buildPrompt = (periodEntries, label, period = null) => {
     const sorted = [...periodEntries].sort((a,b) => a.date.localeCompare(b.date));
 
     // ── Aggregate stats ──────────────────────────────────────────────────────
@@ -5844,7 +5863,31 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
 
     const grades = sorted.filter(e=>e.grade).map(e=>`${e.date.slice(5)}:${e.grade}`).join(", ")||"none";
 
-    // ── Per-day summary with per-trade lines ────────────────────────────────
+    // ── Improvement #1: Best/worst day explicit ──────────────────────────────
+    const dayNets = sorted.map(e => ({ date: e.date, net: netPnl(e) }));
+    const bestDay  = dayNets.length ? dayNets.reduce((a,b) => b.net > a.net ? b : a) : null;
+    const worstDay = dayNets.length ? dayNets.reduce((a,b) => b.net < a.net ? b : a) : null;
+
+    // ── Improvement #2: Avg win/loss ratio ───────────────────────────────────
+    const rrRatioLine = allLosers.length && allWinners.length
+      ? `W:L ratio: ${(allWinners.reduce((s,t)=>s+t.pnl,0)/allWinners.length / Math.abs(allLosers.reduce((s,t)=>s+t.pnl,0)/allLosers.length)).toFixed(2)}x`
+      : "";
+
+    // ── Improvement #3: Equity curve shape (first-half vs second-half) ───────
+    const halfIdx = Math.floor(sorted.length / 2);
+    const firstHalfNet = sorted.slice(0, halfIdx).reduce((s,e) => s + netPnl(e), 0);
+    const secondHalfNet = sorted.slice(halfIdx).reduce((s,e) => s + netPnl(e), 0);
+    const curveTrend = secondHalfNet > firstHalfNet ? "improving" : secondHalfNet < firstHalfNet ? "fading" : "flat";
+    const curveDesc = sorted.length >= 2
+      ? `First half: $${firstHalfNet.toFixed(0)} | Second half: $${secondHalfNet.toFixed(0)} | Trend: ${curveTrend.toUpperCase()}`
+      : "Not enough days for curve analysis";
+
+    // ── Improvement #4: Clean execution days — flag for special treatment ────
+    const cleanExecDays = sorted.filter(e =>
+      e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓") && netPnl(e) > 0
+    );
+
+    // ── Per-day summary with per-trade lines ──────────────────────────────────
     const dayBlocks = sorted.map(e => {
       const trades = e.parsedTrades || [];
       const dWins  = trades.filter(t=>t.pnl>0).length;
@@ -5852,16 +5895,20 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
       const dComm  = trades.reduce((s,t)=>s+(t.commission||0),0);
       const dNet   = netPnl(e).toFixed(0);
       const moods  = (e.moods?.length ? e.moods : e.mood ? [e.mood] : []).join(", ");
+      const isClean = e.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓");
+      // Prefix each trade with its date so the AI can place trades in context
       const tradeLines = trades.map((t,i) => {
         const net = (t.pnl-(t.commission||0)).toFixed(2);
         const exitT = t.direction==="short" ? (t.buyTime||t.sellTime) : (t.sellTime||t.buyTime);
         const exitHHMM = exitT ? exitT.replace(/^\d{8}\s/,"").slice(0,4) : "?";
         const carry = t.notes==="overnight-carry" ? " [carry-forward]" : "";
-        return `    T${i+1} ${(t.direction||"long").toUpperCase()} @${exitHHMM} gross $${t.pnl.toFixed(2)} net $${net}${carry}`;
+        return `    ${e.date} T${i+1} ${(t.direction||"long").toUpperCase()} @${exitHHMM} gross $${t.pnl.toFixed(2)} net $${net}${carry}`;
       }).join("\n");
+      const cleanFlag = isClean ? "  ✓ CLEAN EXECUTION DAY — executed the plan" : "";
       const lines = [`[${e.date}] Net:$${dNet} Gross:$${dGross.toFixed(0)} Fees:-$${dComm.toFixed(0)} | ${dWins}W/${trades.length-dWins}L | Grade:${e.grade||"?"} | Mood:${moods||"?"}`];
+      if (cleanFlag) lines.push(cleanFlag);
       if (tradeLines) lines.push(tradeLines);
-      if (e.sessionMistakes?.length) lines.push(`  Mistakes: ${e.sessionMistakes.filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(" | ")||"none"}`);
+      if (!isClean && e.sessionMistakes?.length) lines.push(`  Mistakes: ${e.sessionMistakes.filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(" | ")||"none"}`);
       const noteFields = [
         ["Market notes",  e.marketNotes],  ["Rules",        e.rules],
         ["Lessons",       e.lessonsLearned],["Mistakes note",e.mistakes],
@@ -5875,70 +5922,93 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
       return lines.join("\n");
     }).join("\n\n");
 
-    // ── Plan vs actual ───────────────────────────────────────────────────────
+    // ── Plan vs actual ────────────────────────────────────────────────────────
     const planLines = [];
     for (let i=1;i<sorted.length;i++) {
       const prev=sorted[i-1], curr=sorted[i];
       if (prev.tomorrow?.trim()) {
-        planLines.push(`  ${prev.date} wrote: "${prev.tomorrow.slice(0,150)}"\n  ${curr.date} actual: grade ${curr.grade||"?"} $${netPnl(curr).toFixed(0)} | mistakes: ${(curr.sessionMistakes||[]).filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(", ")||"none"}`);
+        const currClean = curr.sessionMistakes?.includes("No Mistakes — Executed the Plan ✓");
+        planLines.push(`  ${prev.date} wrote: "${prev.tomorrow.slice(0,150)}"\n  ${curr.date} actual: grade ${curr.grade||"?"} $${netPnl(curr).toFixed(0)}${currClean ? " ✓ CLEAN EXECUTION DAY" : ` | mistakes: ${(curr.sessionMistakes||[]).filter(m=>m!=="No Mistakes — Executed the Plan ✓").join(", ")||"none"}`}`);
       }
     }
+
+    // ── Improvement #5: Prior period action plan (continuity) ─────────────────
+    const priorPeriodKey = (() => {
+      if (!recapMode || periods.length < 2) return null;
+      const currentIdx = periods.indexOf(period);
+      if (currentIdx === -1) return null;
+      return periods[currentIdx + 1] || null; // periods sorted descending, so +1 = prior
+    })();
+    const priorRecapText = priorPeriodKey ? generated[priorPeriodKey] : null;
+    const priorActionPlan = (() => {
+      if (!priorRecapText) return null;
+      // Extract ACTION PLAN section using string split — avoids regex literal newline issue
+      const marker = priorRecapText.split('\n').findIndex(l => l.includes('ACTION PLAN'));
+      if (marker === -1) return null;
+      const lines = priorRecapText.split('\n').slice(marker + 1);
+      const endIdx = lines.findIndex((l, i) => i > 0 && l.startsWith('**'));
+      const planLines = endIdx === -1 ? lines : lines.slice(0, endIdx);
+      return planLines.join('\n').trim().slice(0, 800) || null;
+    })();
 
     const isMonthly = recapMode === "monthly";
 
     return `You are a professional futures trading coach. A trader has shared their complete journal for: ${label}
 
-Your job is to write a thorough, honest coaching review. Be direct and specific — cite exact dates, dollar amounts, and quote the trader\'s own words. Speak like a sharp mentor, not a cheerleader.
+Your job is to write a thorough, honest coaching review. Be direct and specific — cite exact dates, dollar amounts, and quote the trader\'s own words. Be balanced: name what\'s working as clearly as what needs fixing.
 
 PERIOD OVERVIEW
-Days: ${sorted.length} | ${winDays}W / ${lossDays}L | Gross: $${grossPnl.toFixed(0)} | Fees: -$${totalFees.toFixed(0)} | Net: $${totalPnl.toFixed(0)} | Avg/day net: $${(totalPnl/sorted.length).toFixed(0)}
-Trades: ${allTrades.length} | WR: ${overallWR}% | PF: ${fmtPF(overallPF)} | Avg win: +$${avgWin} | Avg loss: -$${avgLoss}
+Days: ${sorted.length} | ${winDays}W green / ${lossDays}L red | Gross: $${grossPnl.toFixed(0)} | Fees: -$${totalFees.toFixed(0)} | Net: $${totalPnl.toFixed(0)} | Avg/day net: $${(totalPnl/sorted.length).toFixed(0)}
+Trades: ${allTrades.length} | WR: ${overallWR}% | PF: ${fmtPF(overallPF)} | Avg win: +$${avgWin} | Avg loss: -$${avgLoss} | ${rrRatioLine}
 Commission drag: $${totalFees.toFixed(0)} = ${commDragPct}% of gross P&L${parseFloat(commDragPct)>30?" \u26a0 HIGH":""}
 ${carryCount > 0 ? `Overnight carry-forwards: ${carryCount} trade(s) — opened prior session, closed next\n` : ""}DIRECTION: ${dirLine}
 SESSION (by exit time ET): ${sessLine}
 ${bestSess ? `Best session: ${bestSess[0]} net $${(bestSess[1].pnl-bestSess[1].comm).toFixed(0)}` : ""}${worstSess && worstSess[0]!==bestSess?.[0] ? ` | Worst: ${worstSess[0]} net $${(worstSess[1].pnl-worstSess[1].comm).toFixed(0)}` : ""}
-Grades: ${grades}
-Mistakes flagged: ${mistakeLine}${cleanDays>0?` | ${cleanDays} clean days`:""}
-${planLines.length ? `\nPLAN vs ACTUAL CROSSCHECK\n${planLines.join("\n\n")}` : ""}
+${bestDay ? `Best day: ${bestDay.date} net $${bestDay.net.toFixed(0)} | Worst day: ${worstDay.date} net $${worstDay.net.toFixed(0)}` : ""}
+EQUITY CURVE SHAPE: ${curveDesc}
+${cleanExecDays.length > 0 ? `CLEAN EXECUTION DAYS (✓ executed the plan, positive result): ${cleanExecDays.map(e=>e.date).join(", ")} — treat these as a template\n` : ""}Grades: ${grades}
+Mistakes tagged (light context): ${mistakeLine}${cleanDays>0?` | ${cleanDays} clean days`:""}
+${planLines.length ? `\nPLAN vs ACTUAL CROSSCHECK\n${planLines.join("\n\n")}` : ""}${priorActionPlan ? `\n\nLAST ${isMonthly?"MONTH":"WEEK"}\'S ACTION PLAN (committed rules — check if they were followed this period):\n${priorActionPlan}` : ""}
 
-FULL JOURNAL — per-trade detail + every written note, day by day:
+FULL JOURNAL — per-trade detail (date-prefixed) + every written note, day by day:
 ${dayBlocks}
 
 ---
 
-BEFORE WRITING: Scan the DIRECTION and SESSION breakdowns first. If one direction is net-negative while the other is profitable, that is a headline insight. If commission drag exceeds 30% of gross, that is structural. Surface these facts explicitly.
+BEFORE WRITING: Scan the DIRECTION and SESSION breakdowns first. If one direction is net-negative while the other is profitable, that is a headline insight. If commission drag exceeds 30% of gross, that is structural. Then read every word of the written journal notes — those are the primary source for themes and coaching insights. Mistake tags are light supporting context only.
 
 **\ud83d\udcca HEADLINE INSIGHTS**
-Write 3-4 punchy one-line insights derived from the actual data above, in this format:
-• [Pattern]: [specific numbers] → [what it means for the trader]
-Example style (use real data): "Shorts carrying the book: +$354 gross 82%WR vs longs -$37 gross — long edge needs a filter"
+Write 3-4 punchy one-line insights derived from the actual trade data and written notes. Balance: surface what's working as clearly as what isn't.
+• [Pattern from data or notes]: [specific numbers or quote] → [what it means]
+Example style (use real data): "Shorts carrying the book: +$354 gross 82%WR vs longs -$37 — long edge needs a filter"
+If a session or direction is genuinely strong, that belongs here too: "NY Morning is the edge: 86% WR, +$296 net — the problem is what happens after noon"
 
 **\ud83d\udcd3 NOTES ANALYSIS**
-Read every word written across all days:
-• Recurring themes — same lesson/mistake/intention on 2+ days (quote each with date)
-• Contradictions — rule written one day, broken the next
-• Unrealized intentions — plans written but not reflected in subsequent behavior
-• One observation worth reinforcing
-One bullet per finding. Quote exact words.
+This is the most important section. Read every word written across all days — market notes, lessons, rules, improvements, best/worst trade descriptions, plans. Find:
+• Recurring themes — same insight, intention, or observation written on 2+ days (quote each with date)
+• Contradictions — something written one day that the next day's notes or trades contradict
+• Unrealized intentions — a plan or lesson written but not reflected in subsequent behavior
+• Self-awareness worth reinforcing — something the trader accurately identified that the data confirms
+One bullet per finding. Quote their exact words. Mistake dropdown tags can appear here only as corroboration of something already visible in the prose — not as the primary finding.
 
 **\ud83d\udcc8 PERFORMANCE PATTERNS**
-3-4 bullets on what the numbers reveal:
+3-4 bullets on what the numbers reveal — sourced from trade data, not from mistake tags:
 • Which session/direction is helping vs hurting NET P&L (use net figures, not just gross)
-• Whether mistakes cluster on specific day types
+• Sequence patterns visible in the trade log — time-of-day drift, sizing changes, re-entry timing
 • Commission drag impact if fees exceed 15% of gross — quantify the structural cost
-• Any hold-time or order-type edge
+• Any hold-time or order-type edge visible in the data
 
 **\ud83d\udea9 PLAN vs REALITY**
 For every "Tomorrow plan" written, analyze the next trading day:
-• Quote the exact plan → what happened → HONORED ✓ or VIOLATED ✗
+• Quote the exact plan → what happened (grade, P&L, mistakes flagged) → HONORED ✓ or VIOLATED ✗
+A plan fully honored deserves explicit acknowledgment — use HONORED ✓ and note what the trader did right.
 Skip if no plans were written.
 
 **\ud83d\udca1 STRENGTHS**
-2-3 specific strengths backed by data with dates and dollar figures.
+2-3 specific strengths backed by trade data or direct quotes from written notes. Be genuine — if the morning session consistently delivered, say so with exact figures. If the trader wrote something insightful and the data confirms it, reinforce it. No filler praise.
 
 **\ud83c\udfaf ACTION PLAN FOR NEXT ${isMonthly ? "MONTH" : "WEEK"}**
-Exactly 3 rules rooted in findings above.
-Format: [Root cause from this review] → [Specific measurable rule with threshold]`;
+Exactly 3 rules rooted in TRADE DATA and WRITTEN NOTES from this review — not from the mistake dropdown tags. At least one rule should build on a strength or a correct self-observation the trader already made. Format: [Root cause from data/notes] → [Specific measurable rule with threshold]`;
   };
 
   const generateSummary = async (period, forceRerun = false) => {
@@ -5960,7 +6030,7 @@ Format: [Root cause from this review] → [Specific measurable rule with thresho
 
     setLoading(true);
     try {
-      let prompt = buildPrompt(periodEntries, label);
+      let prompt = buildPrompt(periodEntries, label, period);
 
       // Guard: if prompt is very large, strip per-trade detail lines (keep all written notes)
       if (prompt.length > 18000) {
@@ -9164,14 +9234,8 @@ export default function TradingJournal() {
   const [analyticsTab, setAnalyticsTab] = useState("overview");
   const [listMode, setListMode] = useState("calendar");
   const [calMonth, setCalMonth] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
-  const [calendarNotes, setCalendarNotes] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("tj-cal-notes-v1") || "{}"); } catch { return {}; }
-  });
-  const saveCalNote = (dateStr, text) => {
-    const updated = { ...calendarNotes, [dateStr]: text };
-    setCalendarNotes(updated);
-    try { localStorage.setItem("tj-cal-notes-v1", JSON.stringify(updated)); } catch {}
-  };
+  // calendarNotes state is now managed inside CalendarView to avoid
+  // full-app re-renders on every keystroke
   const [headerQuotes, setHeaderQuotes] = useState(() => { const s=[...SEED_QUOTES].sort(()=>Math.random()-0.5); return [s[0],s[1],s[2]].filter(Boolean); });
 
   // AI settings (local only)
@@ -9886,7 +9950,7 @@ export default function TradingJournal() {
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0a0e1a}::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px}
         textarea,input,select{background:#0f1729!important;color:#e2e8f0!important;border:1px solid #1e3a5f!important;border-radius:4px;padding:10px 12px;font-family:'DM Mono',monospace;font-size:13px;width:100%;outline:none;transition:border-color .2s;resize:none;overflow:hidden;field-sizing:content}
         textarea:focus,input:focus,select:focus{border-color:#3b82f6!important}
-        textarea.cal-note{color:#fbbf24!important;background:transparent!important;border:none!important;padding:0!important}
+        textarea.cal-note{color:#fbbf24!important;background:transparent!important;border:none!important;padding:0!important;field-sizing:content!important;resize:none!important;overflow:hidden!important;min-height:20px}
         textarea.cal-note:focus{color:#fde68a!important;border:none!important;outline:none!important}
         textarea::placeholder,input::placeholder{color:#1e3a5f}
         select option{background:#0f1729}
@@ -10853,8 +10917,6 @@ export default function TradingJournal() {
               netPnl={netPnl}
               gradeColor={gradeColor}
               calcAnalytics={calcAnalytics}
-              calendarNotes={calendarNotes}
-              saveCalNote={saveCalNote}
             />
             </>
           ) : listMode === "weekly" ? (
