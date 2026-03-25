@@ -784,12 +784,17 @@ const parseIbkrCsv = (raw) => {
         // PNL from FifoPnlRealized is still accurate; entry price/time are unknown for this file.
         const isCarry = !entry;
         const dur = isCarry ? { str: 'prior-session', secs: 86400 } : getDuration(entry.dt, r.dt);
+        // FIX: Store GROSS p&l so calcNetPnl (gross - commission) yields the correct net.
+        // FifoPnlRealized is already net — using it directly caused double-deduction.
+        // For carry-forwards (no entry data) we must use FifoPnlRealized as-is and zero commission.
+        const grossPnlL = isCarry ? r.pnl : Math.round((r.price - entry.price) * r.mult * Math.abs(r.qty) * 100) / 100;
+        const commL     = isCarry ? 0     : Math.round((Math.abs(r.comm) + Math.abs(entry.comm)) * 100) / 100;
         trades.push({
           symbol: r.sym, qty: Math.abs(r.qty), direction: 'long',
           buyPrice: entry ? entry.price : 0,
           buyTime: entry ? entry.dt : '',          // empty = entry was in prior session's CSV
           sellPrice: r.price, sellTime: r.dt,
-          pnl: r.pnl, commission: Math.round((Math.abs(r.comm) + Math.abs(entry ? entry.comm : 0)) * 100) / 100,
+          pnl: grossPnlL, commission: commL,
           orderType: r.ot === 'LMT' || r.ot === 'LIMIT' ? 'LMT' : r.ot === 'STP' || r.ot === 'STOP' ? 'STP' : 'MKT',
           multiplier: r.mult,
           notes: isCarry ? 'overnight-carry' : '',
@@ -803,12 +808,15 @@ const parseIbkrCsv = (raw) => {
         // PNL from FifoPnlRealized is still accurate; entry price/time are unknown for this file.
         const isCarry = !entry;
         const dur = isCarry ? { str: 'prior-session', secs: 86400 } : getDuration(entry.dt, r.dt);
+        // FIX: Store GROSS p&l so calcNetPnl (gross - commission) yields the correct net.
+        const grossPnlS = isCarry ? r.pnl : Math.round(((entry ? entry.price : r.price) - r.price) * r.mult * Math.abs(r.qty) * 100) / 100;
+        const commS     = isCarry ? 0     : Math.round((Math.abs(r.comm) + Math.abs(entry.comm)) * 100) / 100;
         trades.push({
           symbol: r.sym, qty: Math.abs(r.qty), direction: 'short',
           buyPrice: r.price, buyTime: r.dt,
           sellPrice: entry ? entry.price : 0,
           sellTime: entry ? entry.dt : '',     // empty = entry was in prior session's CSV
-          pnl: r.pnl, commission: Math.round((Math.abs(r.comm) + Math.abs(entry ? entry.comm : 0)) * 100) / 100,
+          pnl: grossPnlS, commission: commS,
           orderType: r.ot === 'LMT' || r.ot === 'LIMIT' ? 'LMT' : r.ot === 'STP' || r.ot === 'STOP' ? 'STP' : 'MKT',
           multiplier: r.mult,
           notes: isCarry ? 'overnight-carry' : '',
@@ -1031,19 +1039,25 @@ const normalizeSymbol = (sym) => {
 
 const calcAnalytics = (trades, tzLock = false) => {
   if (!trades || trades.length === 0) return null;
-  const winners = trades.filter(t => t.pnl > 0);
-  const losers = trades.filter(t => t.pnl < 0);
-  const totalPnL = trades.reduce((s, t) => s + t.pnl, 0);
-  const avgWin = winners.length ? winners.reduce((s, t) => s + t.pnl, 0) / winners.length : 0;
-  const avgLoss = losers.length ? losers.reduce((s, t) => s + t.pnl, 0) / losers.length : 0;
+  // FIX: tNet computes net P&L per trade (gross minus per-trade commission).
+  // All win/loss classification, equity curve, and breakdowns use net so that
+  // a trade costing more in fees than it made is correctly classified as a loser.
+  const tNet = (t) => t.pnl - (t.commission || 0);
+  const winners = trades.filter(t => tNet(t) > 0);
+  const losers  = trades.filter(t => tNet(t) < 0);
+  const totalPnL    = trades.reduce((s, t) => s + t.pnl, 0);          // gross — for GROSS P&L display tile
+  const totalNetPnL = trades.reduce((s, t) => s + tNet(t), 0);        // net  — for NET P&L display tile
+  const avgWin  = winners.length ? winners.reduce((s, t) => s + tNet(t), 0) / winners.length : 0;
+  const avgLoss = losers.length  ? losers.reduce((s, t)  => s + tNet(t), 0) / losers.length  : 0;
   const winRate = trades.length ? (winners.length / trades.length) * 100 : 0;
-  const grossWin = winners.reduce((s, t) => s + t.pnl, 0);
-  const grossLoss = Math.abs(losers.reduce((s, t) => s + t.pnl, 0));
+  const grossWin  = winners.reduce((s, t) => s + tNet(t), 0);
+  const grossLoss = Math.abs(losers.reduce((s, t) => s + tNet(t), 0));
   const profitFactor = grossLoss > 0 ? grossWin / grossLoss : grossWin > 0 ? Infinity : null;
   const avgQty = trades.reduce((s, t) => s + t.qty, 0) / trades.length;
 
   let running = 0;
-  const equityCurve = trades.map((t) => { running += t.pnl; return { pnl: running, trade: t }; });
+  // FIX: equity curve uses net P&L so the chart matches what the trader actually kept
+  const equityCurve = trades.map((t) => { running += tNet(t); return { pnl: running, trade: t }; });
 
   // maxDD: peak-to-trough drawdown on the equity curve.
   // Initialise runPeak to the first curve point so sessions that open negative
@@ -1061,8 +1075,8 @@ const calcAnalytics = (trades, tzLock = false) => {
     const sym = normalizeSymbol(t.symbol);
     if (!bySymbol[sym]) bySymbol[sym] = { trades: 0, pnl: 0, wins: 0 };
     bySymbol[sym].trades++;
-    bySymbol[sym].pnl += t.pnl;
-    if (t.pnl > 0) bySymbol[sym].wins++;
+    bySymbol[sym].pnl += tNet(t);
+    if (tNet(t) > 0) bySymbol[sym].wins++;
   }
 
   const bySession = {};
@@ -1076,14 +1090,14 @@ const calcAnalytics = (trades, tzLock = false) => {
     const sess = getSession(exitTime, tzLock);
     if (!bySession[sess]) bySession[sess] = { trades: 0, pnl: 0, wins: 0 };
     bySession[sess].trades++;
-    bySession[sess].pnl += t.pnl;
-    if (t.pnl > 0) bySession[sess].wins++;
+    bySession[sess].pnl += tNet(t);
+    if (tNet(t) > 0) bySession[sess].wins++;
   }
 
   let maxConsecWins = 0, maxConsecLoss = 0, curW = 0, curL = 0;
   for (const t of trades) {
-    if (t.pnl > 0) { curW++; curL = 0; maxConsecWins = Math.max(maxConsecWins, curW); }
-    else if (t.pnl < 0) { curL++; curW = 0; maxConsecLoss = Math.max(maxConsecLoss, curL); }
+    if (tNet(t) > 0) { curW++; curL = 0; maxConsecWins = Math.max(maxConsecWins, curW); }
+    else if (tNet(t) < 0) { curL++; curW = 0; maxConsecLoss = Math.max(maxConsecLoss, curL); }
     else { curW = 0; curL = 0; }
   }
 
@@ -1091,10 +1105,11 @@ const calcAnalytics = (trades, tzLock = false) => {
   const byDirection = { long: { trades: 0, pnl: 0, wins: 0, losses: 0, grossWin: 0, grossLoss: 0 }, short: { trades: 0, pnl: 0, wins: 0, losses: 0, grossWin: 0, grossLoss: 0 } };
   for (const t of trades) {
     const dir = t.direction === "short" ? "short" : "long";
+    const nt = tNet(t);
     byDirection[dir].trades++;
-    byDirection[dir].pnl += t.pnl;
-    if (t.pnl > 0) { byDirection[dir].wins++; byDirection[dir].grossWin += t.pnl; }
-    else if (t.pnl < 0) { byDirection[dir].losses++; byDirection[dir].grossLoss += Math.abs(t.pnl); }
+    byDirection[dir].pnl += nt;
+    if (nt > 0) { byDirection[dir].wins++; byDirection[dir].grossWin += nt; }
+    else if (nt < 0) { byDirection[dir].losses++; byDirection[dir].grossLoss += Math.abs(nt); }
   }
 
   // Duration analysis — bucket trades into time ranges
@@ -1121,9 +1136,10 @@ const calcAnalytics = (trades, tzLock = false) => {
     const bucket = DURATION_BUCKETS.find(b => b.test(secs));
     if (!bucket) continue;
     const b = byDuration[bucket.key];
-    b.trades++; b.pnl += t.pnl; b.totalSecs += secs;
-    if (t.pnl > 0) { b.wins++; b.grossWin += t.pnl; }
-    else if (t.pnl < 0) { b.losses++; b.grossLoss += Math.abs(t.pnl); }
+    const nt = tNet(t);
+    b.trades++; b.pnl += nt; b.totalSecs += secs;
+    if (nt > 0) { b.wins++; b.grossWin += nt; }
+    else if (nt < 0) { b.losses++; b.grossLoss += Math.abs(nt); }
   }
   for (const b of DURATION_BUCKETS) {
     if (byDuration[b.key].trades > 0) byDuration[b.key].avgSecs = byDuration[b.key].totalSecs / byDuration[b.key].trades;
@@ -1147,16 +1163,16 @@ const calcAnalytics = (trades, tzLock = false) => {
 
   const sliceStats = (arr) => {
     const total = arr.length;
-    const wins = arr.filter(t => t.pnl > 0);
-    const pnl = arr.reduce((s, t) => s + (t.pnl || 0), 0);
+    const wins = arr.filter(t => tNet(t) > 0);
+    const pnl = arr.reduce((s, t) => s + tNet(t), 0);
     const avgPnl = total ? pnl / total : 0;
     const avgQty = total ? arr.reduce((s, t) => s + (Number(t.qty) || 0), 0) / total : 0;
     const winRate = total ? (wins.length / total) * 100 : 0;
     return { total, wins: wins.length, pnl, avgPnl, avgQty, winRate };
   };
 
-  const afterLossTrades = ordered.filter((t, i) => i > 0 && (ordered[i - 1]?.pnl || 0) < 0);
-  const afterWinTrades  = ordered.filter((t, i) => i > 0 && (ordered[i - 1]?.pnl || 0) > 0);
+  const afterLossTrades = ordered.filter((t, i) => i > 0 && tNet(ordered[i - 1]) < 0);
+  const afterWinTrades  = ordered.filter((t, i) => i > 0 && tNet(ordered[i - 1]) > 0);
   const first3Trades = ordered.slice(0, 3);
   const restTrades = ordered.slice(3);
 
@@ -1169,30 +1185,31 @@ const calcAnalytics = (trades, tzLock = false) => {
   const byOrderType = { MKT: { trades:0, pnl:0, wins:0, grossWin:0, grossLoss:0 }, LMT: { trades:0, pnl:0, wins:0, grossWin:0, grossLoss:0 }, STP: { trades:0, pnl:0, wins:0, grossWin:0, grossLoss:0 } };
   for (const t of trades) {
     const ot = (t.orderType === 'LMT' || t.orderType === 'STP') ? t.orderType : 'MKT';
+    const nt = tNet(t);
     byOrderType[ot].trades++;
-    byOrderType[ot].pnl += t.pnl;
-    if (t.pnl > 0) { byOrderType[ot].wins++; byOrderType[ot].grossWin += t.pnl; }
-    else if (t.pnl < 0) { byOrderType[ot].grossLoss += Math.abs(t.pnl); }
+    byOrderType[ot].pnl += nt;
+    if (nt > 0) { byOrderType[ot].wins++; byOrderType[ot].grossWin += nt; }
+    else if (nt < 0) { byOrderType[ot].grossLoss += Math.abs(nt); }
   }
 
   // Commission totals
   const totalCommission = trades.reduce((s, t) => s + (t.commission || 0), 0);
 
   return {
-    total: trades.length, winners: winners.length, losers: losers.length, breakeven: trades.filter(t => t.pnl === 0).length,
-    totalPnL, avgWin, avgLoss, winRate, profitFactor,
-    largestWin: winners.length ? Math.max(...winners.map(t => t.pnl)) : 0,
-    largestLoss: losers.length ? Math.min(...losers.map(t => t.pnl)) : 0,
+    total: trades.length, winners: winners.length, losers: losers.length, breakeven: trades.filter(t => tNet(t) === 0).length,
+    totalPnL, totalNetPnL, avgWin, avgLoss, winRate, profitFactor,
+    largestWin:  winners.length ? Math.max(...winners.map(t => tNet(t))) : 0,
+    largestLoss: losers.length  ? Math.min(...losers.map(t  => tNet(t))) : 0,
     equityCurve, maxDD, bySymbol, bySession,
     maxConsecWins, maxConsecLoss, avgQty,
     byDirection, byDuration, DURATION_BUCKETS,
     avgWinDuration, avgLossDuration,
     afterLoss, afterWin, first3, rest,
     byOrderType, totalCommission,
-    // R-based metrics — use avg loss as 1R baseline
-    avgWinR: (avgLoss !== 0 && winners.length) ? avgWin / Math.abs(avgLoss) : null,
-    avgLossR: (avgLoss !== 0 && losers.length) ? avgLoss / Math.abs(avgLoss) : null,
-    netR: avgLoss !== 0 ? totalPnL / Math.abs(avgLoss) : null,
+    // R-based metrics — use avg loss as 1R baseline (all net-based)
+    avgWinR:  (avgLoss !== 0 && winners.length) ? avgWin / Math.abs(avgLoss) : null,
+    avgLossR: (avgLoss !== 0 && losers.length)  ? avgLoss / Math.abs(avgLoss) : null,
+    netR: avgLoss !== 0 ? totalNetPnL / Math.abs(avgLoss) : null,
     expectancy: avgLoss !== 0 ? ((winners.length / trades.length) * (avgWin / Math.abs(avgLoss))) + ((losers.length / trades.length) * -1) : null,
   };
 };
@@ -1678,7 +1695,11 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
   const ATABS = ["overview", "by session", "trade log"];
   const [expandedTrade, setExpandedTrade] = useState(null);
   const [ecCollapsed, setEcCollapsed] = useState(false);
-  const netTotal = a.totalPnL - totalFees;
+  // FIX: Use a.totalNetPnL (computed inside calcAnalytics from per-trade net) as the single
+  // source of truth. Fall back to a.totalPnL - a.totalCommission for backward compatibility
+  // with any entries saved before this fix.
+  const netTotal = a.totalNetPnL != null ? a.totalNetPnL : (a.totalPnL - (a.totalCommission || 0));
+  const feesDisplay = a.totalCommission > 0 ? a.totalCommission : totalFees;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -1697,7 +1718,7 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
             {[
               { l: "GROSS P&L", v: fmtPnl(a.totalPnL), c: pnlColor(a.totalPnL) },
-              { l: "TOTAL FEES", v: totalFees > 0 ? `-$${totalFees.toFixed(2)}` : "—", c: "#475569", small: true },
+              { l: "TOTAL FEES", v: feesDisplay > 0 ? `-$${feesDisplay.toFixed(2)}` : "—", c: "#475569", small: true },
               { l: "NET P&L", v: fmtPnl(netTotal), c: pnlColor(netTotal), highlight: true },
               { l: "LARGEST WIN", v: a.largestWin ? fmtPnl(a.largestWin) : "—", c: "#4ade80" },
               { l: "LARGEST LOSS", v: a.largestLoss ? fmtPnl(a.largestLoss) : "—", c: "#f87171" },
@@ -1764,15 +1785,15 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
               ))}
             </div>
 
-            {totalFees > 0 && (
+            {feesDisplay > 0 && (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 }}>
                 <div>
                   <div style={{ fontSize: 9, color: '#94a3b8', letterSpacing: '0.1em', marginBottom: 4 }}>FEES IMPACT</div>
-                  <div style={{ fontSize: 12, color: '#e2e8f0' }}>${(totalFees / Math.max(a.total || 1, 1)).toFixed(2)} per trade</div>
+                  <div style={{ fontSize: 12, color: '#e2e8f0' }}>${(feesDisplay / Math.max(a.total || 1, 1)).toFixed(2)} per trade</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: 12, color: netTotal >= 0 ? '#4ade80' : '#f87171', fontWeight: 600 }}>{fmtPnl(netTotal)} net</div>
-                  <div style={{ fontSize: 10, color: '#64748b' }}>{a.totalPnL !== 0 ? `${Math.min(100, Math.abs(totalFees / a.totalPnL) * 100).toFixed(1)}% of gross P&L` : ''}</div>
+                  <div style={{ fontSize: 10, color: '#64748b' }}>{a.totalPnL !== 0 ? `${Math.min(100, Math.abs(feesDisplay / a.totalPnL) * 100).toFixed(1)}% of gross P&L` : ''}</div>
                 </div>
               </div>
             )}
@@ -2053,15 +2074,15 @@ function AnalyticsPanel({ a, trades, pnlColor, fmtPnl, analyticsTab, setAnalytic
         </div>
       )}
       {analyticsTab === "trade log" && (() => {
-        const wins       = trades.filter(t => Number.isFinite(t.pnl) && t.pnl > 0);
-        const losses     = trades.filter(t => Number.isFinite(t.pnl) && t.pnl < 0);
-        const netPnls    = trades.map(t => Number.isFinite(t.pnl) ? (t.pnl - (t.commission||0)) : 0);
-        const totalNet   = netPnls.reduce((s,v) => s+v, 0);
-        const avgWin     = wins.length  ? wins.reduce((s,t)=>s+t.pnl,0)/wins.length   : 0;
-        const avgLoss    = losses.length? losses.reduce((s,t)=>s+t.pnl,0)/losses.length: 0;
-        const bestTrade  = wins.length  ? Math.max(...wins.map(t=>t.pnl))   : 0;
-        const worstTrade = losses.length? Math.min(...losses.map(t=>t.pnl)) : 0;
-        const winRate    = trades.length? Math.round(wins.length/trades.length*100) : 0;
+        const tNetL      = (t) => Number.isFinite(t.pnl) ? (t.pnl - (t.commission||0)) : 0;
+        const wins       = trades.filter(t => tNetL(t) > 0);
+        const losses     = trades.filter(t => tNetL(t) < 0);
+        const totalNet   = trades.reduce((s,t) => s + tNetL(t), 0);
+        const avgWin     = wins.length   ? wins.reduce((s,t)=>s+tNetL(t),0)/wins.length   : 0;
+        const avgLoss    = losses.length ? losses.reduce((s,t)=>s+tNetL(t),0)/losses.length: 0;
+        const bestTrade  = wins.length   ? Math.max(...wins.map(t=>tNetL(t)))   : 0;
+        const worstTrade = losses.length ? Math.min(...losses.map(t=>tNetL(t))) : 0;
+        const winRate    = trades.length ? Math.round(wins.length/trades.length*100) : 0;
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
@@ -2262,12 +2283,13 @@ function TopFindings({ entry, a, ai }) {
     setFindings("");
     setError("");
     const trades = entry.parsedTrades || [];
-    const winners = trades.filter(t => t.pnl > 0);
-    const losers = trades.filter(t => t.pnl < 0);
-    const avgWin = winners.length ? (winners.reduce((s,t) => s+t.pnl, 0)/winners.length).toFixed(2) : 0;
-    const avgLoss = losers.length ? Math.abs(losers.reduce((s,t) => s+t.pnl, 0)/losers.length).toFixed(2) : 0;
-    const biggestWin = winners.length ? Math.max(...winners.map(t=>t.pnl)).toFixed(2) : 0;
-    const biggestLoss = losers.length ? Math.min(...losers.map(t=>t.pnl)).toFixed(2) : 0;
+    const tNTF = (t) => t.pnl - (t.commission||0);
+    const winners = trades.filter(t => tNTF(t) > 0);
+    const losers = trades.filter(t => tNTF(t) < 0);
+    const avgWin = winners.length ? (winners.reduce((s,t) => s+tNTF(t), 0)/winners.length).toFixed(2) : 0;
+    const avgLoss = losers.length ? Math.abs(losers.reduce((s,t) => s+tNTF(t), 0)/losers.length).toFixed(2) : 0;
+    const biggestWin = winners.length ? Math.max(...winners.map(t=>tNTF(t))).toFixed(2) : 0;
+    const biggestLoss = losers.length ? Math.min(...losers.map(t=>tNTF(t))).toFixed(2) : 0;
     // Use AI-polished rewrites where available, fall back to raw original
     const rw = entry.aiRewrites || {};
     const note = (key) => (rw[key]?.trim() || entry[key] || "none");
@@ -2436,10 +2458,11 @@ function DailyAIAnalysis({ entry, a, ai, priorPlan = null }) {
 
   const buildPrompt = () => {
     const trades = entry.parsedTrades || [];
-    const winners = trades.filter(t => t.pnl > 0);
-    const losers = trades.filter(t => t.pnl < 0);
-    const avgWin = winners.length ? winners.reduce((s, t) => s + t.pnl, 0) / winners.length : 0;
-    const avgLoss = losers.length ? Math.abs(losers.reduce((s, t) => s + t.pnl, 0) / losers.length) : 0;
+    const tNDA = (t) => t.pnl - (t.commission||0);
+    const winners = trades.filter(t => tNDA(t) > 0);
+    const losers = trades.filter(t => tNDA(t) < 0);
+    const avgWin = winners.length ? winners.reduce((s, t) => s + tNDA(t), 0) / winners.length : 0;
+    const avgLoss = losers.length ? Math.abs(losers.reduce((s, t) => s + tNDA(t), 0) / losers.length) : 0;
     const rrRatio = avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : "N/A";
     const winRate = trades.length ? ((winners.length / trades.length) * 100).toFixed(1) : 0;
     const profitFactor = fmtPF(a?.profitFactor);
@@ -2449,25 +2472,18 @@ function DailyAIAnalysis({ entry, a, ai, priorPlan = null }) {
     const note = (key) => (rw[key]?.trim() || entry[key] || "None");
     const noteSummary = entry.aiNoteSummary || "";
 
-    // Session breakdown — net P&L (not just gross) to expose commission drag per session
+    // Session breakdown — already net-based from calcAnalytics fix
     const sessionBreakdown = a?.bySession ? Object.entries(a.bySession).map(([s, d]) => {
-      const net = d.pnl - (d.pnl > 0
-        ? trades.filter(t2 => {
-            const et = t2.direction==="short"?(t2.buyTime||t2.sellTime):(t2.sellTime||t2.buyTime);
-            return et && (()=>{const m=et.match(/^\d{8}\s(\d{2})(\d{2})/);if(!m)return false;const h=parseInt(m[1])+parseInt(m[2])/60;if(h>=20)return s==="Asian";if(h<4)return s==="London Overnight";if(h<9.5)return s==="Pre-Market";if(h<12)return s==="NY Morning";if(h<16)return s==="NY Afternoon";return s==="After Hours";})();
-          }).reduce((acc,t2)=>acc+(t2.commission||0),0) : 0);
       const wr = d.trades ? Math.round(d.wins/d.trades*100) : 0;
-      return `  ${s}: ${d.trades} trades, ${wr}% WR, gross $${d.pnl.toFixed(2)}, net ~$${d.pnl.toFixed(2)} P&L`;
+      return `  ${s}: ${d.trades} trades, ${wr}% WR, net $${d.pnl.toFixed(2)}`;
     }).join("\n") : "No session data";
 
-    // Direction breakdown — reveals long vs short edge asymmetry
+    // Direction breakdown — already net-based from calcAnalytics fix
     const dirBreakdown = a?.byDirection ? ["long","short"].filter(k=>a.byDirection[k].trades>0).map(k => {
       const d = a.byDirection[k];
       const wr = d.trades ? Math.round(d.wins/d.trades*100) : 0;
-      const commEst = trades.filter(t2=>(t2.direction||"long")===k).reduce((s,t2)=>s+(t2.commission||0),0);
-      const net = (d.pnl - commEst).toFixed(2);
       const pf = d.grossLoss > 0 ? (d.grossWin/d.grossLoss).toFixed(2) : d.grossWin > 0 ? "∞" : "0.00";
-      return `  ${k.toUpperCase()}: ${d.trades} trades | ${wr}% WR | gross $${d.pnl.toFixed(2)} | net ~$${net} | PF ${pf}`;
+      return `  ${k.toUpperCase()}: ${d.trades} trades | ${wr}% WR | net $${d.pnl.toFixed(2)} | PF ${pf}`;
     }).join("\n") : "No direction data";
 
     const tradeLog = trades.map((t, i) => {
@@ -3282,7 +3298,7 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
   const monthWins = monthEntries.filter(e => netPnl(e) > 0).length;
   const monthLoss = monthEntries.filter(e => netPnl(e) < 0).length;
   const allMonthTrades = monthEntries.flatMap(e => e.parsedTrades || []);
-  const allMonthWinningTrades = allMonthTrades.filter(t => t.pnl > 0);
+  const allMonthWinningTrades = allMonthTrades.filter(t => (t.pnl - (t.commission||0)) > 0);
   const tradeWinRate = allMonthTrades.length ? Math.round(allMonthWinningTrades.length / allMonthTrades.length * 100) : null;
 
   // Full monthly analytics
@@ -3529,10 +3545,11 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                   </div>
                   {/* Trades + Win Rate */}
                   {entry.parsedTrades?.length > 0 && (() => {
-                    const wins = entry.parsedTrades.filter(t => t.pnl > 0).length;
-                    const losses = entry.parsedTrades.filter(t => t.pnl < 0).length;
-                    const gross = entry.parsedTrades.reduce((s,t) => t.pnl>0?s+t.pnl:s, 0);
-                    const grossLoss = entry.parsedTrades.reduce((s,t) => t.pnl<0?s+Math.abs(t.pnl):s, 0);
+                    const tN = (t) => t.pnl - (t.commission||0);
+                    const wins = entry.parsedTrades.filter(t => tN(t) > 0).length;
+                    const losses = entry.parsedTrades.filter(t => tN(t) < 0).length;
+                    const gross = entry.parsedTrades.reduce((s,t) => tN(t)>0?s+tN(t):s, 0);
+                    const grossLoss = entry.parsedTrades.reduce((s,t) => tN(t)<0?s+Math.abs(tN(t)):s, 0);
                     const pf = grossLoss > 0 ? (gross/grossLoss) : gross > 0 ? Infinity : null;
                     return (
                       <>
@@ -3655,8 +3672,8 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                 if (np > 0) dowStats[day].wins++;
                 const trades = e.parsedTrades || [];
                 dowStats[day].trades += trades.length;
-                dowStats[day].tradeWins += trades.filter(t => t.pnl > 0).length;
-                dowStats[day].tradeLosses += trades.filter(t => t.pnl < 0).length;
+                dowStats[day].tradeWins += trades.filter(t => (t.pnl-(t.commission||0)) > 0).length;
+                dowStats[day].tradeLosses += trades.filter(t => (t.pnl-(t.commission||0)) < 0).length;
               }
               const activeDays = DOW.filter(d => dowStats[d].days > 0);
               if (!activeDays.length) return null;
@@ -4665,13 +4682,14 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
               const winDays  = sorted.filter(e => calcNetPnl(e) > 0).length;
               const lossDays = sorted.filter(e => calcNetPnl(e) < 0).length;
               const allT = sorted.flatMap(e => e.parsedTrades || []);
-              const allW = allT.filter(t => t.pnl > 0);
-              const allL = allT.filter(t => t.pnl < 0);
+              const tN2  = (t) => t.pnl - (t.commission||0);
+              const allW = allT.filter(t => tN2(t) > 0);
+              const allL = allT.filter(t => tN2(t) < 0);
               const wr   = allT.length ? ((allW.length/allT.length)*100).toFixed(1) : "0";
-              const pfv  = allL.length ? allW.reduce((s,t)=>s+t.pnl,0)/Math.abs(allL.reduce((s,t)=>s+t.pnl,0)) : allW.length > 0 ? Infinity : null;
+              const pfv  = allL.length ? allW.reduce((s,t)=>s+tN2(t),0)/Math.abs(allL.reduce((s,t)=>s+tN2(t),0)) : allW.length > 0 ? Infinity : null;
               const fees = allT.reduce((s,t)=>s+(t.commission||0),0);
-              const avgW = allW.length ? (allW.reduce((s,t)=>s+t.pnl,0)/allW.length).toFixed(0) : "0";
-              const avgL = allL.length ? Math.abs(allL.reduce((s,t)=>s+t.pnl,0)/allL.length).toFixed(0) : "0";
+              const avgW = allW.length ? (allW.reduce((s,t)=>s+tN2(t),0)/allW.length).toFixed(0) : "0";
+              const avgL = allL.length ? Math.abs(allL.reduce((s,t)=>s+tN2(t),0)/allL.length).toFixed(0) : "0";
               const mCounts = {};
               let cDays = 0;
               for (const e of sorted) {
@@ -4699,12 +4717,13 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
               const wByDir = { long:{t:0,w:0,pnl:0,comm:0}, short:{t:0,w:0,pnl:0,comm:0} };
               for (const t of allT) {
                 const d = wByDir[t.direction==="short"?"short":"long"];
-                d.t++; d.pnl+=t.pnl; d.comm+=(t.commission||0); if(t.pnl>0)d.w++;
+                const nt = tN2(t);
+                d.t++; d.pnl+=nt; d.comm+=(t.commission||0); if(nt>0)d.w++;
               }
               const wDirLine = ["long","short"].filter(k=>wByDir[k].t>0).map(k=>{
                 const d=wByDir[k]; const wr2=d.t?Math.round(d.w/d.t*100):0;
-                const net=(d.pnl-d.comm).toFixed(0); const sign=d.pnl>=0?"+":"";
-                return `${k.toUpperCase()}: ${d.t}t ${wr2}%WR gross ${sign}$${d.pnl.toFixed(0)} net ${sign}$${net}`;
+                const sign=d.pnl>=0?"+":"";
+                return `${k.toUpperCase()}: ${d.t}t ${wr2}%WR net ${sign}$${d.pnl.toFixed(0)}`;
               }).join(" | ")||"none";
               // Session breakdown with ET buckets
               const wSessMap={};
@@ -4714,13 +4733,14 @@ function WeeklyPerformance({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, 
                 const h = m2 ? parseInt(m2[1])+parseInt(m2[2])/60 : -1;
                 const k = h>=20?"Asian":h<4?"London Overnight":h<9.5?"Pre-Market":h<12?"NY Morning":h<16?"NY Afternoon":h>=16?"After Hours":"Unknown";
                 if(!wSessMap[k])wSessMap[k]={pnl:0,t:0,w:0,comm:0};
-                wSessMap[k].pnl+=t.pnl;wSessMap[k].t++;wSessMap[k].comm+=(t.commission||0);if(t.pnl>0)wSessMap[k].w++;
+                const nt = tN2(t);
+                wSessMap[k].pnl+=nt;wSessMap[k].t++;wSessMap[k].comm+=(t.commission||0);if(nt>0)wSessMap[k].w++;
               }
               const sessOrderW=["Asian","London Overnight","Pre-Market","NY Morning","NY Afternoon","After Hours","Unknown"];
               const wSessLine=sessOrderW.filter(k=>wSessMap[k]).map(k=>{
                 const d=wSessMap[k]; const wr2=Math.round(d.w/d.t*100);
-                const net=(d.pnl-d.comm).toFixed(0); const sign=d.pnl>=0?"+":"";
-                return `${k}: ${d.t}t ${wr2}%WR gross ${sign}$${d.pnl.toFixed(0)} net ${sign}$${net}`;
+                const sign=d.pnl>=0?"+":"";
+                return `${k}: ${d.t}t ${wr2}%WR net ${sign}$${d.pnl.toFixed(0)}`;
               }).join(" | ")||"none";
               const wSessEntries=Object.entries(wSessMap).filter(([,d])=>d.t>0);
               const wBestSess=wSessEntries.length?wSessEntries.reduce((a,b)=>(b[1].pnl-b[1].comm)>(a[1].pnl-a[1].comm)?b:a):null;
@@ -5275,8 +5295,8 @@ function PerformanceOverview({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor
           if (np > 0) dowStats[day].wins++;
           const trades = e.parsedTrades || [];
           dowStats[day].trades += trades.length;
-          dowStats[day].tradeWins += trades.filter(t => t.pnl > 0).length;
-          dowStats[day].tradeLosses += trades.filter(t => t.pnl < 0).length;
+          dowStats[day].tradeWins += trades.filter(t => (t.pnl-(t.commission||0)) > 0).length;
+          dowStats[day].tradeLosses += trades.filter(t => (t.pnl-(t.commission||0)) < 0).length;
         }
         const activeDays = DOW.filter(d => dowStats[d].days > 0);
         if (activeDays.length === 0) return null;
@@ -5807,31 +5827,32 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
     const winDays  = sorted.filter(e => netPnl(e) > 0).length;
     const lossDays = sorted.filter(e => netPnl(e) < 0).length;
     const allTrades   = sorted.flatMap(e => e.parsedTrades || []);
-    const allWinners  = allTrades.filter(t => t.pnl > 0);
-    const allLosers   = allTrades.filter(t => t.pnl < 0);
+    const tNR = (t) => t.pnl - (t.commission||0);        // net per trade — single source of truth
+    const allWinners  = allTrades.filter(t => tNR(t) > 0);
+    const allLosers   = allTrades.filter(t => tNR(t) < 0);
     const overallWR   = allTrades.length ? ((allWinners.length/allTrades.length)*100).toFixed(1) : "0";
     const overallPF   = allLosers.length
-      ? allWinners.reduce((s,t)=>s+t.pnl,0)/Math.abs(allLosers.reduce((s,t)=>s+t.pnl,0))
+      ? allWinners.reduce((s,t)=>s+tNR(t),0)/Math.abs(allLosers.reduce((s,t)=>s+tNR(t),0))
       : allWinners.length > 0 ? Infinity : null;
     const grossPnl  = allTrades.reduce((s,t) => s + t.pnl, 0);
     const totalFees = allTrades.reduce((s,t)=>s+(t.commission||0),0);
     const commDragPct = Math.abs(grossPnl) > 0 ? (totalFees / Math.abs(grossPnl) * 100).toFixed(1) : "0";
-    const avgWin  = allWinners.length ? (allWinners.reduce((s,t)=>s+t.pnl,0)/allWinners.length).toFixed(0) : "0";
-    const avgLoss = allLosers.length  ? Math.abs(allLosers.reduce((s,t)=>s+t.pnl,0)/allLosers.length).toFixed(0) : "0";
+    const avgWin  = allWinners.length ? (allWinners.reduce((s,t)=>s+tNR(t),0)/allWinners.length).toFixed(0) : "0";
+    const avgLoss = allLosers.length  ? Math.abs(allLosers.reduce((s,t)=>s+tNR(t),0)/allLosers.length).toFixed(0) : "0";
 
     // Direction breakdown (long vs short) — key edge signal
     const byDir = { long: { t:0, w:0, pnl:0, comm:0 }, short: { t:0, w:0, pnl:0, comm:0 } };
     for (const t of allTrades) {
       const d = byDir[t.direction === "short" ? "short" : "long"];
-      d.t++; d.pnl += t.pnl; d.comm += (t.commission||0);
-      if (t.pnl > 0) d.w++;
+      const nt = tNR(t);
+      d.t++; d.pnl += nt; d.comm += (t.commission||0);
+      if (nt > 0) d.w++;
     }
     const dirLine = ["long","short"].filter(k=>byDir[k].t>0).map(k => {
       const d = byDir[k];
       const wr = d.t ? Math.round(d.w/d.t*100) : 0;
-      const net = (d.pnl - d.comm).toFixed(0);
       const sign = d.pnl >= 0 ? "+" : "";
-      return `${k.toUpperCase()}: ${d.t} trades ${wr}% WR gross ${sign}$${d.pnl.toFixed(0)} net ${sign}$${net}`;
+      return `${k.toUpperCase()}: ${d.t} trades ${wr}% WR net ${sign}$${d.pnl.toFixed(0)}`;
     }).join(" | ") || "none";
 
     // Session breakdown — proper ET hour buckets matching journal getSession logic
@@ -5852,22 +5873,22 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
     for (const t of allTrades) {
       const k = getSessET(t);
       if (!sessMap[k]) sessMap[k] = { pnl:0, t:0, w:0, comm:0 };
-      sessMap[k].pnl  += t.pnl;
+      const nt = tNR(t);
+      sessMap[k].pnl  += nt;
       sessMap[k].t++;
       sessMap[k].comm += (t.commission||0);
-      if (t.pnl > 0) sessMap[k].w++;
+      if (nt > 0) sessMap[k].w++;
     }
     const sessOrder = ["Asian","London Overnight","Pre-Market","NY Morning","NY Afternoon","After Hours","Unknown"];
     const sessLine = sessOrder.filter(k=>sessMap[k]).map(k => {
       const d = sessMap[k];
       const wr = Math.round(d.w/d.t*100);
-      const net = (d.pnl - d.comm).toFixed(0);
       const sign = d.pnl >= 0 ? "+" : "";
-      return `${k}: ${d.t}t ${wr}%WR gross ${sign}$${d.pnl.toFixed(0)} net ${sign}$${net}`;
+      return `${k}: ${d.t}t ${wr}%WR net ${sign}$${d.pnl.toFixed(0)}`;
     }).join(" | ") || "none";
     const sessEntries = Object.entries(sessMap).filter(([,d])=>d.t>0);
-    const bestSess  = sessEntries.length ? sessEntries.reduce((a,b) => (b[1].pnl-b[1].comm) > (a[1].pnl-a[1].comm) ? b : a) : null;
-    const worstSess = sessEntries.length ? sessEntries.reduce((a,b) => (b[1].pnl-b[1].comm) < (a[1].pnl-a[1].comm) ? b : a) : null;
+    const bestSess  = sessEntries.length ? sessEntries.reduce((a,b) => b[1].pnl > a[1].pnl ? b : a) : null;
+    const worstSess = sessEntries.length ? sessEntries.reduce((a,b) => b[1].pnl < a[1].pnl ? b : a) : null;
 
     // Carry-forward count
     const carryCount = allTrades.filter(t=>t.notes==="overnight-carry").length;
@@ -5887,7 +5908,7 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
 
     // ── Improvement #2: Avg win/loss ratio ───────────────────────────────────
     const rrRatioLine = allLosers.length && allWinners.length
-      ? `W:L ratio: ${(allWinners.reduce((s,t)=>s+t.pnl,0)/allWinners.length / Math.abs(allLosers.reduce((s,t)=>s+t.pnl,0)/allLosers.length)).toFixed(2)}x`
+      ? `W:L ratio: ${(allWinners.reduce((s,t)=>s+tNR(t),0)/allWinners.length / Math.abs(allLosers.reduce((s,t)=>s+tNR(t),0)/allLosers.length)).toFixed(2)}x`
       : "";
 
     // ── Improvement #3: Equity curve shape (first-half vs second-half) ───────
@@ -5907,7 +5928,7 @@ function AIRecapView({ entries, netPnl: calcNetPnlProp, fmtPnl, pnlColor, initMo
     // ── Per-day summary with per-trade lines ──────────────────────────────────
     const dayBlocks = sorted.map(e => {
       const trades = e.parsedTrades || [];
-      const dWins  = trades.filter(t=>t.pnl>0).length;
+      const dWins  = trades.filter(t=>(t.pnl-(t.commission||0))>0).length;
       const dGross = trades.reduce((s,t)=>s+t.pnl,0);
       const dComm  = trades.reduce((s,t)=>s+(t.commission||0),0);
       const dNet   = netPnl(e).toFixed(0);
@@ -7624,13 +7645,14 @@ function PropDashInner({ journals, entries, activeJournalId, activeJournal, prop
             const jEntries = allPropEntriesMap[j.id] || (j.id === activeJournalId ? entries : []);
             const jPs = j.config ? calcPropStatus(jEntries, j.config) : null;
             const allTrades = jEntries.flatMap(e => e.parsedTrades || []);
-            const winners = allTrades.filter(t => t.pnl > 0);
-            const losers = allTrades.filter(t => t.pnl < 0);
+            const tNP = (t) => t.pnl - (t.commission||0);
+            const winners = allTrades.filter(t => tNP(t) > 0);
+            const losers = allTrades.filter(t => tNP(t) < 0);
             const winRate = allTrades.length ? (winners.length / allTrades.length * 100) : 0;
             const netPnl = jPs ? (jPs.totalCumPnl ?? 0) : jEntries.reduce((s, e) => s + (parseFloat(e.pnl) || 0) - (parseFloat(e.commissions) || 0), 0);
             const fees = jEntries.reduce((s, e) => s + (parseFloat(e.commissions) || 0), 0);
-            const avgWin = winners.length ? winners.reduce((s, t) => s + t.pnl, 0) / winners.length : 0;
-            const avgLoss = losers.length ? Math.abs(losers.reduce((s, t) => s + t.pnl, 0) / losers.length) : 0;
+            const avgWin = winners.length ? winners.reduce((s, t) => s + tNP(t), 0) / winners.length : 0;
+            const avgLoss = losers.length ? Math.abs(losers.reduce((s, t) => s + tNP(t), 0) / losers.length) : 0;
             // Lifetime mistake cost for this account
             const mistakeCostByTag = {};
             for (const e of jEntries) {
@@ -9530,9 +9552,11 @@ export default function TradingJournal() {
       }
       const dates = Object.keys(dateCounts);
       if (!dates.length) return null;
-      // The trading day is the date that appears most across all timestamps.
-      // Even in heavy overnight sessions the actual calendar trading day dominates.
-      return dates.reduce((best, d) => dateCounts[d] >= dateCounts[best] ? d : best);
+      // FIX: Use the LATEST date in the file as the trading day.
+      // IBKR overnight sessions start at 6 PM the prior evening, so the MODE
+      // (most-frequent date) incorrectly picks the prior calendar day.
+      // The latest date is always the actual trading session date.
+      return dates.sort().reverse()[0];
     })();
 
     // Use local date (not UTC) for today comparison to avoid timezone issues
@@ -9556,8 +9580,10 @@ export default function TradingJournal() {
       parsedTrades: trades,
       // Auto-fill date: set if field is empty OR still showing today's placeholder date
       date:        autoDate && (!prev.date || prev.date === localTodayStr) ? autoDate : prev.date,
-      pnl:         !prev.pnl ? totalPnL.toFixed(2) : prev.pnl,
-      commissions: !prev.commissions && totalComm > 0 ? totalComm.toFixed(2) : prev.commissions,
+      // FIX: Always overwrite pnl and commissions on import — stale values from a
+      // previous import would otherwise persist even after re-parsing corrected data.
+      pnl:         totalPnL.toFixed(2),
+      commissions: totalComm.toFixed(2),
       instruments: prev.instruments?.length ? prev.instruments : autoInstrs,
       parseValidationLog: [...(prev.parseValidationLog || []).slice(-4), { ts: Date.now(), ...logEntry }],
     }));
@@ -11027,8 +11053,9 @@ export default function TradingJournal() {
                 if (fromDate) allTrades = allTrades.filter(t => (t._entryDate || "") >= fromDate);
                 if (toDate)   allTrades = allTrades.filter(t => (t._entryDate || "") <= toDate);
                 allTrades = allTrades.sort((a, b) => (b._entryDate || "").localeCompare(a._entryDate || ""));
-                const totalPnL = allTrades.reduce((s,t) => s + (Number.isFinite(t.pnl) ? t.pnl : 0), 0);
-                const wins = allTrades.filter(t => Number.isFinite(t.pnl) && t.pnl > 0).length;
+                const tNCSV = (t) => Number.isFinite(t.pnl) ? t.pnl - (t.commission||0) : 0;
+                const totalPnL = allTrades.reduce((s,t) => s + tNCSV(t), 0);
+                const wins = allTrades.filter(t => tNCSV(t) > 0).length;
                 const wr = allTrades.length ? Math.round(wins/allTrades.length*100) : 0;
                 return (
                   <div>
