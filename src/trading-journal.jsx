@@ -3320,26 +3320,6 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
 
   return (
     <div>
-      {/* Future month — plan ahead banner */}
-      {monthEntries.length === 0 && (() => {
-        const [y, m] = month.split("-").map(Number);
-        const monthLabel = new Date(y, m - 1, 1).toLocaleString("default", { month: "long", year: "numeric" }).toUpperCase();
-        const isFutureMonth = month > today.slice(0, 7);
-        if (!isFutureMonth) return null;
-        return (
-          <div style={{ marginBottom: 20, background: "#0a0e1a", border: "1px solid #1e3a5f", borderRadius: 6, overflow: "hidden", position: "relative" }}>
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)" }} />
-            <div style={{ padding: "16px 20px", display: "flex", alignItems: "center", gap: 16 }}>
-              <div style={{ fontSize: 28, opacity: 0.6 }}>📋</div>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: "0.08em", background: "linear-gradient(135deg,#38bdf8,#818cf8,#c084fc)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>PLAN AHEAD — {monthLabel}</div>
-                <div style={{ fontSize: 11, color: "#475569", marginTop: 3, letterSpacing: "0.04em" }}>No entries yet · Click any weekday to create a plan · Type directly in cells for quick notes</div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Full Monthly Stats Panel */}
       {monthEntries.length > 0 && (
         <div style={{ marginBottom: 20, background: "#0a0e1a", border: "1px solid #1e293b", borderRadius: 6, overflow: "hidden" }}>
@@ -3521,10 +3501,8 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
           } else if (isWeekend) {
             bgColor = "#060810";
             borderColor = "#0d1018";
-          } else if (isFuture) {
-            bgColor = "#060810";
-            borderColor = "#0f1420";
           }
+          // Future weekday cells use the same default styling as any empty current-month cell
           // isToday gets gradient outline instead of blue border — applied inline below
 
           return (
