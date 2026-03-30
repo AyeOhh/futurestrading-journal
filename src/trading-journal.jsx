@@ -3452,6 +3452,10 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
               )}
             </div>
 
+          </div>
+        </div>
+      )}
+
       {/* Calendar grid header */}
       <div style={{ marginBottom: 14, position: "relative" }}>
         {/* Accent top line */}
