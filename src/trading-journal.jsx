@@ -3451,7 +3451,6 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                 </div>
               )}
             </div>
-
           </div>
         </div>
       )}
@@ -3506,7 +3505,6 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
             bgColor = "#060810";
             borderColor = "#0d1018";
           }
-          // Future weekday cells use the same default styling as any empty current-month cell
           // isToday gets gradient outline instead of blue border — applied inline below
 
           return (
@@ -4250,11 +4248,6 @@ function CalendarView({ month, entries, onDayClick, onNewDay, pnlColor, fmtPnl, 
                 );
               })()}
 
-
-
-          </div>
-        </div>
-      )}
 
 
     </div>
@@ -10903,7 +10896,7 @@ export default function TradingJournal() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
               {[["calendar","📅 MONTHLY PERFORMANCE"],["list","📋 TRADE LIST"],["weekly","📈 WEEKLY PERFORMANCE"],["performance","📊 ANNUAL/QUARTERLY PERFORMANCE"]].map(([m, label]) => (
                 listMode === m ? (
-                  <button key={m} onClick={() => setListMode(m)}
+                  <button key={m} onClick={() => { if (m === "calendar") { const now = new Date(); setCalMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`); } setListMode(m); }}
                     style={{ position: "relative", padding: "11px 20px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", whiteSpace: "nowrap", overflow: "hidden",
                       background: "rgba(10,18,32,0.95)", border: "1px solid #1e3a5f", color: "#e2e8f0" }}>
                     <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#38bdf8,#818cf8,#c084fc)", borderRadius: "0 0 5px 5px" }} />
@@ -10911,7 +10904,7 @@ export default function TradingJournal() {
                   </button>
                 ) : (
                   <span key={m} style={{ display: "inline-block", padding: 1, borderRadius: 7, background: "linear-gradient(135deg,rgba(56,189,248,0.45),rgba(129,140,248,0.45),rgba(192,132,252,0.45))", flexShrink: 0 }}>
-                    <button onClick={() => setListMode(m)}
+                    <button onClick={() => { if (m === "calendar") { const now = new Date(); setCalMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`); } setListMode(m); }}
                       style={{ display: "block", background: "#070d1a", color: "#64748b", border: "none", padding: "10px 19px", borderRadius: 6, fontFamily: "inherit", fontSize: 13, cursor: "pointer", letterSpacing: "0.06em", transition: "all .15s", whiteSpace: "nowrap" }}>
                       {label}
                     </button>
